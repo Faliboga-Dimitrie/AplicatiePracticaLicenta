@@ -20,9 +20,6 @@ set -euo pipefail
 
 # 1) Reorient to standard
 fslreorient2std "/in/$inputf" "/reo/${basename}_reo.nii.gz"
-
-# 2) Run FAST on the reoriented image (outputs will be: _seg, _pve_0/1/2, _bias, _restore, etc.)
-fast -t 1 -n 3 -o "/seg/${basename}_reo" "/reo/${basename}_reo.nii.gz"
 '@ -replace "`r",""
 
 foreach ($file in $files) {
