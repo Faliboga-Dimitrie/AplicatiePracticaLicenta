@@ -7,6 +7,7 @@ from pathlib import Path
 from .config import Settings
 from .input_checks import OrientationStatus, check_input_orientation
 from .models import MRICase, CasePaths
+from .qc import maybe_save_reorientation_qc
 
 
 def _copy_to_reoriented(case: MRICase, paths: CasePaths) -> Path:
@@ -102,7 +103,9 @@ def run_reorientation(case: MRICase, paths: CasePaths, settings: Settings) -> Pa
     result = check_input_orientation(case, settings)
 
     if result.status == OrientationStatus.ALREADY_STANDARD:
-        return _copy_to_reoriented(case, paths)
+        out_path = _copy_to_reoriented(case, paths)
+        maybe_save_reorientation_qc(case, paths, settings)
+        return out_path
 
     if result.status == OrientationStatus.CAN_REORIENT:
         _run_reorient_script(case, paths, settings)
@@ -113,6 +116,7 @@ def run_reorientation(case: MRICase, paths: CasePaths, settings: Settings) -> Pa
             )
 
         _check_output_is_standard(case, paths, settings)
+        maybe_save_reorientation_qc(case, paths, settings)
         return output_path
 
     raise RuntimeError(

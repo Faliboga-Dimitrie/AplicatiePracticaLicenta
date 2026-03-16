@@ -41,6 +41,8 @@ class Settings:
     overwrite: bool = False
     skip_existing: bool = True
     hd_bet_device: str = "cuda"
+    hd_bet_verbose: bool = True
+    fast_verbose: bool = True
 
     # --- naming suffixes ---
     reoriented_suffix: str = "_reo"
@@ -51,6 +53,10 @@ class Settings:
     mni_to_t1_warp_suffix: str = "_MNI_to_T1_warp.nii.gz"
     ho_cort_suffix: str = "_HO_cort_thr25_in_T1.nii.gz"
     ho_sub_suffix: str = "_HO_sub_thr25_in_T1.nii.gz"
+
+    # --- QC parameters ---
+    generate_qc: bool = True
+    fail_on_qc_error: bool = False
 
 
 def build_settings() -> Settings:
