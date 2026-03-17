@@ -13,9 +13,7 @@ param(
 
     [string]$ContainerInputDir = "/data/in",
 
-    [string]$ContainerOutputDir = "/data/out",
-
-    [bool]$VerboseMode = $true
+    [string]$ContainerOutputDir = "/data/out"
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,22 +31,11 @@ if (-not (Test-Path -LiteralPath $outputDir)) {
     New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 }
 
-# ---------- FAST inside container ----------
-$fastVerboseFlag = ""
-if ($VerboseMode) {
-    $fastVerboseFlag = "-v"
-}
-
-$bash = @"
+# ---------- bash payload inside container ----------
+$bash = @'
 set -euo pipefail
-
-fast \
-  -t "$IMAGE_TYPE" \
-  -n "$FAST_CLASSES" \
-  $fastVerboseFlag \
-  -o "$CONTAINER_OUTPUT_DIR/$OUTPUT_BASENAME" \
-  "$CONTAINER_INPUT_DIR/$INPUT_NAME"
-"@ -replace "`r",""
+fast -t "$IMAGE_TYPE" -n "$FAST_CLASSES" -o "$CONTAINER_OUTPUT_DIR/$OUTPUT_BASENAME" "$CONTAINER_INPUT_DIR/$INPUT_NAME"
+'@ -replace "`r",""
 
 Write-Host "Running FAST segmentation:"
 Write-Host "  Input file     : $inputFile"
@@ -56,7 +43,6 @@ Write-Host "  Output prefix  : $OutputPrefix"
 Write-Host "  Docker image   : $DockerImage"
 Write-Host "  Classes        : $Classes"
 Write-Host "  Image type     : $ImageType"
-Write-Host "  Verbose        : $VerboseMode"
 
 docker run --rm `
     -e INPUT_NAME="$inputName" `
@@ -80,7 +66,7 @@ $expected = @(
     "${OutputPrefix}_pve_0.nii.gz",
     "${OutputPrefix}_pve_1.nii.gz",
     "${OutputPrefix}_pve_2.nii.gz",
-    "${OutputPrefix}_pve_seg.nii.gz",
+    "${OutputPrefix}_pveseg.nii.gz",
     "${OutputPrefix}_seg.nii.gz"
 )
 

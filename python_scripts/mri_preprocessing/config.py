@@ -32,11 +32,12 @@ class Settings:
 
     # --- processing parameters ---
     fast_classes: int = 3
-    overwrite: bool = False
+    overwrite: bool = True
     skip_existing: bool = True
     hd_bet_device: str = "cuda"
     hd_bet_verbose: bool = True
     fast_verbose: bool = True
+    hd_bet_executable: str | None = None
 
     # --- naming suffixes ---
     reoriented_suffix: str = "_reo"

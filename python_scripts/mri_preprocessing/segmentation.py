@@ -139,8 +139,6 @@ def run_segmentation(case: MRICase, paths: CasePaths, settings: Settings) -> Pat
         str(settings.container_input_dir),
         "-ContainerOutputDir",
         str(settings.container_output_dir),
-        "-VerboseMode",
-        str(settings.fast_verbose),
     ]
 
     proc = subprocess.run(

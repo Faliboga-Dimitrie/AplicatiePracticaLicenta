@@ -109,7 +109,7 @@ class CasePaths:
 
     @property
     def fast_pve_seg_path(self) -> Path:
-        return self.fast_dir / f"{self.subject_id}_pve_seg.nii.gz"
+        return self.fast_dir / f"{self.subject_id}_pveseg.nii.gz"
 
     @property
     def fast_seg_path(self) -> Path:

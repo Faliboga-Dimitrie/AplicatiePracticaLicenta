@@ -1,28 +1,59 @@
 from __future__ import annotations
 
+import os
 import shutil
+import sys
 import subprocess
 from pathlib import Path
 
 import nibabel as nib
 
 from .config import Settings
-from .models import MRICase, CasePaths
+from .models import MRICase, CasePaths, strip_nii_suffix
 from .qc import maybe_save_bet_qc
 
 
-def _ensure_hd_bet_available() -> str:
+def _ensure_hd_bet_available(settings: Settings) -> str:
     """
-    Make sure the hd-bet executable is available in PATH.
-    Return its resolved executable path.
+    Resolve the HD-BET executable in a debugger-friendly way.
+    Priority:
+      1. explicit settings.hd_bet_executable
+      2. same environment as sys.executable
+      3. PATH lookup
     """
-    exe = shutil.which("hd-bet")
-    if exe is None:
-        raise FileNotFoundError(
-            "Could not find 'hd-bet' in PATH. "
-            "Activate the correct environment or install HD-BET first."
-        )
-    return exe
+    candidates: list[Path] = []
+
+    if settings.hd_bet_executable:
+        candidates.append(Path(settings.hd_bet_executable))
+
+    py_dir = Path(sys.executable).resolve().parent
+
+    # Common layouts:
+    # - conda on Windows: <env>/python.exe, scripts in <env>/Scripts/
+    # - venv on Windows:  <env>/Scripts/python.exe, scripts in same folder
+    # - Linux/macOS:      <env>/bin/python, scripts in same folder
+    candidates.extend([
+        py_dir / "hd-bet",
+        py_dir / "hd-bet.exe",
+        py_dir / "Scripts" / "hd-bet",
+        py_dir / "Scripts" / "hd-bet.exe",
+        py_dir.parent / "Scripts" / "hd-bet",
+        py_dir.parent / "Scripts" / "hd-bet.exe",
+    ])
+
+    which_path = shutil.which("hd-bet")
+    if which_path:
+        candidates.append(Path(which_path))
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate.resolve())
+
+    raise FileNotFoundError(
+        "Could not find HD-BET. Checked explicit setting, the active Python "
+        "environment, and PATH. "
+        f"sys.executable={sys.executable}"
+    )
 
 
 def _validate_hd_bet_input(input_path: Path) -> None:
@@ -60,6 +91,47 @@ def _supports_flag(help_text: str, flag: str) -> bool:
 def _remove_if_exists(path: Path) -> None:
     if path.exists():
         path.unlink()
+
+def _hd_bet_native_mask_path(output_path: Path) -> Path:
+    """
+    HD-BET derives the mask name from the output image name.
+
+    Example:
+        output_path = subject_bet.nii.gz
+        native mask = subject_bet_bet.nii.gz
+    """
+    base = strip_nii_suffix(output_path)
+    return output_path.parent / f"{base}_bet.nii.gz"
+
+def _normalize_hd_bet_mask_output(
+    output_path: Path,
+    desired_mask_path: Path,
+    expects_mask: bool,
+) -> None:
+    """
+    If HD-BET saved its native mask name, rename it to the pipeline name.
+    """
+    if not expects_mask:
+        return
+
+    native_mask_path = _hd_bet_native_mask_path(output_path)
+
+    # Best case: HD-BET made the native mask, we rename it.
+    if native_mask_path.exists():
+        if desired_mask_path.exists() and desired_mask_path != native_mask_path:
+            desired_mask_path.unlink()
+        native_mask_path.replace(desired_mask_path)
+        return
+
+    # Also allow the case where the desired path already exists.
+    if desired_mask_path.exists():
+        return
+
+    raise RuntimeError(
+        "HD-BET was asked to save a mask, but no mask file was found.\n"
+        f"Expected pipeline mask: {desired_mask_path}\n"
+        f"Expected HD-BET native mask: {native_mask_path}"
+    )
 
 
 def _build_hd_bet_command(
@@ -124,11 +196,12 @@ def run_skull_strip(case: MRICase, paths: CasePaths, settings: Settings) -> Path
         - if overwrite=False and output exists, raise
         - if overwrite=True, delete old outputs and rerun
     """
-    exe = _ensure_hd_bet_available()
+    exe = _ensure_hd_bet_available(settings)
 
     input_path = paths.reoriented_path
     output_path = paths.skull_stripped_path
     mask_path = paths.skull_stripped_mask_path
+    native_mask_path = _hd_bet_native_mask_path(output_path)
 
     paths.hd_bet_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,20 +214,28 @@ def run_skull_strip(case: MRICase, paths: CasePaths, settings: Settings) -> Path
     )
 
     # Existing-output handling
-    if output_path.exists():
-        outputs_complete = output_path.exists() and (mask_path.exists() if expects_mask else True)
+    if output_path.exists() or mask_path.exists() or native_mask_path.exists():
+        outputs_complete = output_path.exists() and (
+            (mask_path.exists() or native_mask_path.exists()) if expects_mask else True
+        )
 
         if settings.skip_existing and outputs_complete:
+            _normalize_hd_bet_mask_output(
+                output_path=output_path,
+                desired_mask_path=mask_path,
+                expects_mask=expects_mask,
+            )
             return output_path
 
         if not settings.overwrite:
             raise FileExistsError(
-                f"HD-BET output already exists: {output_path}. "
-                "Set overwrite=True or remove the file manually."
+                f"HD-BET output already exists in {paths.hd_bet_dir}. "
+                "Set overwrite=True or remove the files manually."
             )
 
         _remove_if_exists(output_path)
         _remove_if_exists(mask_path)
+        _remove_if_exists(native_mask_path)
 
     _validate_hd_bet_input(input_path)
 
@@ -178,10 +259,10 @@ def run_skull_strip(case: MRICase, paths: CasePaths, settings: Settings) -> Path
             f"HD-BET reported success, but the skull-stripped output was not created: {output_path}"
         )
 
-    if expects_mask and not mask_path.exists():
-        raise RuntimeError(
-            f"HD-BET was asked to save a mask, but the mask file was not created: {mask_path}"
-        )
+    _normalize_hd_bet_mask_output(
+    output_path=output_path,
+    desired_mask_path=mask_path,
+    expects_mask=expects_mask,)
 
     maybe_save_bet_qc(case, paths, settings)
     return output_path

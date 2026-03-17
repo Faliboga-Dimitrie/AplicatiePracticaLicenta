@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MRI preprocessing pipeline (project root)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mri_preprocessing.run",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/python_scripts"
+      },
+      "cwd": "${workspaceFolder}",
+      "args": ["--subject", "IXI012-HH-1211-T1"],
+      "justMyCode": true
+    }
+  ]
+}
