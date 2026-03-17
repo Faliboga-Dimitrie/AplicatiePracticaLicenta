@@ -48,8 +48,6 @@ class CasePaths:
     reoriented_dir: Path
     hd_bet_dir: Path
     fast_dir: Path
-    registration_dir: Path
-    atlas_mapping_dir: Path
     qc_dir: Path
 
     # ---------- directories ----------
@@ -59,8 +57,6 @@ class CasePaths:
             self.reoriented_dir,
             self.hd_bet_dir,
             self.fast_dir,
-            self.registration_dir,
-            self.atlas_mapping_dir,
             self.qc_dir,
         ]
 
@@ -119,32 +115,6 @@ class CasePaths:
     def fast_seg_path(self) -> Path:
         return self.fast_dir / f"{self.subject_id}_seg.nii.gz"
 
-    # ---------- registration ----------
-    @property
-    def t1_to_mni_affine_path(self) -> Path:
-        return self.registration_dir / f"{self.subject_id}_T1_to_MNI_aff.mat"
-
-    @property
-    def t1_to_mni_warpcoef_path(self) -> Path:
-        return self.registration_dir / f"{self.subject_id}_T1_to_MNI_warpcoef.nii.gz"
-
-    @property
-    def t1_in_mni_path(self) -> Path:
-        return self.registration_dir / f"{self.subject_id}_T1_in_MNI.nii.gz"
-
-    @property
-    def mni_to_t1_warp_path(self) -> Path:
-        return self.registration_dir / f"{self.subject_id}_MNI_to_T1_warp.nii.gz"
-
-    # ---------- atlas mapping ----------
-    @property
-    def ho_cort_path(self) -> Path:
-        return self.atlas_mapping_dir / f"{self.subject_id}_HO_cort_thr25_in_T1.nii.gz"
-
-    @property
-    def ho_sub_path(self) -> Path:
-        return self.atlas_mapping_dir / f"{self.subject_id}_HO_sub_thr25_in_T1.nii.gz"
-
     # ---------- QC ----------
     @property
     def qc_reorientation_png(self) -> Path:
@@ -186,24 +156,6 @@ class CasePaths:
             self.fast_seg_path,
         ]
         return all(path.exists() for path in required)
-
-    @property
-    def has_registration_outputs(self) -> bool:
-        required = [
-            self.t1_to_mni_affine_path,
-            self.t1_to_mni_warpcoef_path,
-            self.t1_in_mni_path,
-            self.mni_to_t1_warp_path,
-        ]
-        return all(path.exists() for path in required)
-
-    @property
-    def has_atlas_outputs(self) -> bool:
-        required = [
-            self.ho_cort_path,
-            self.ho_sub_path,
-        ]
-        return all(path.exists() for path in required)
     
     @property
     def fast_input_path(self) -> Path:
@@ -218,8 +170,6 @@ def build_case_paths(case: MRICase, settings: Any) -> CasePaths:
         - reoriented_dir
         - hd_bet_dir
         - fast_dir
-        - registration_dir
-        - atlas_mapping_dir
         - qc_dir
     """
     subject_id = case.subject_id
@@ -231,7 +181,5 @@ def build_case_paths(case: MRICase, settings: Any) -> CasePaths:
         reoriented_dir=Path(settings.reoriented_dir) / subject_id,
         hd_bet_dir=Path(settings.hd_bet_dir) / subject_id,
         fast_dir=Path(settings.fast_dir) / subject_id,
-        registration_dir=Path(settings.registration_dir) / subject_id,
-        atlas_mapping_dir=Path(settings.atlas_mapping_dir) / subject_id,
         qc_dir=Path(settings.qc_dir) / subject_id,
     )

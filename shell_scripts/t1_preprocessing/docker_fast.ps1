@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputPrefix,
 
-    [string]$DockerImage = "fsl-local:latest",
+    [string]$DockerImage = "brainlife/fsl:latest",
 
     [int]$Classes = 3,
 
