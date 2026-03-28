@@ -8,8 +8,8 @@ from pathlib import Path
 
 import nibabel as nib
 
-from .config import Settings
-from .models import MRICase, CasePaths, strip_nii_suffix
+from ..project_core import Settings
+from ..project_core import MRICase, CasePaths, strip_nii_suffix
 from .qc import maybe_save_bet_qc
 
 
@@ -202,8 +202,6 @@ def run_skull_strip(case: MRICase, paths: CasePaths, settings: Settings) -> Path
     output_path = paths.skull_stripped_path
     mask_path = paths.skull_stripped_mask_path
     native_mask_path = _hd_bet_native_mask_path(output_path)
-
-    paths.hd_bet_dir.mkdir(parents=True, exist_ok=True)
 
     cmd, expects_mask = _build_hd_bet_command(
         exe=exe,

@@ -4,9 +4,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .config import Settings
+from ..project_core import Settings
 from .input_checks import OrientationStatus, check_input_orientation
-from .models import MRICase, CasePaths
+from ..project_core import MRICase, CasePaths
 from .qc import maybe_save_reorientation_qc
 
 
@@ -82,12 +82,9 @@ def run_reorientation(case: MRICase, paths: CasePaths, settings: Settings) -> Pa
     4. Otherwise:
        - stop and require manual review
     """
-    paths.reoriented_dir.mkdir(parents=True, exist_ok=True)
-
     output_path = paths.reoriented_path
 
-    # Existing output policy
-    if output_path.exists():
+    if paths.has_reoriented:
         if settings.skip_existing:
             return output_path
 

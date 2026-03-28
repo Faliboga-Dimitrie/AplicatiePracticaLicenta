@@ -4,11 +4,8 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Settings:
     # --- project roots ---
-    project_root: Path
     input_mri_dir: Path
     processed_mri_dir: Path
-    python_scripts_dir: Path
-    shell_scripts_dir: Path
     mni_template_dir: Path
 
     # --- processed stage folders ---
@@ -16,6 +13,7 @@ class Settings:
     hd_bet_dir: Path
     fast_dir: Path
     qc_dir: Path
+    mesh_dir: Path
 
     # --- shell script paths ---
     reorient_script: Path
@@ -28,7 +26,6 @@ class Settings:
     fsl_docker_image: str
     container_input_dir: str
     container_output_dir: str
-    container_mni_path: str
 
     # --- processing parameters ---
     fast_classes: int = 3
@@ -36,13 +33,7 @@ class Settings:
     skip_existing: bool = True
     hd_bet_device: str = "cuda"
     hd_bet_verbose: bool = True
-    fast_verbose: bool = True
     hd_bet_executable: str | None = None
-
-    # --- naming suffixes ---
-    reoriented_suffix: str = "_reo"
-    bet_suffix: str = "_bet"
-    bet_mask_suffix: str = "_bet_mask"
 
     # --- QC parameters ---
     generate_qc: bool = True
@@ -61,17 +52,15 @@ def build_settings() -> Settings:
     mni_template_dir = project_root / "mni_template"
 
     return Settings(
-        project_root=project_root,
         input_mri_dir=input_mri_dir,
         processed_mri_dir=processed_mri_dir,
-        python_scripts_dir=python_scripts_dir,
-        shell_scripts_dir=shell_scripts_dir,
         mni_template_dir=mni_template_dir,
 
         reoriented_dir=processed_mri_dir / "reoriented",
         hd_bet_dir=processed_mri_dir / "hd_bet",
         fast_dir=processed_mri_dir / "fast",
         qc_dir=processed_mri_dir / "qc",
+        mesh_dir=processed_mri_dir / "meshes",
 
         reorient_script=shell_scripts_dir / "t1_preprocessing" / "docker_reorient.ps1",
         fast_script=shell_scripts_dir / "t1_preprocessing" / "docker_fast.ps1",
@@ -81,7 +70,6 @@ def build_settings() -> Settings:
         fsl_docker_image="brainlife/fsl:latest",
         container_input_dir="/data/in",
         container_output_dir="/data/out",
-        container_mni_path="/usr/share/fsl/data/standard/MNI152_T1_1mm.nii.gz",
     )
 
 
@@ -96,5 +84,6 @@ def ensure_main_directories(settings: Settings) -> None:
         settings.fast_dir,
         settings.qc_dir,
         settings.mni_template_dir,
+        settings.mesh_dir,
     ]:
         path.mkdir(parents=True, exist_ok=True)

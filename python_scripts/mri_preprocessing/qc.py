@@ -9,9 +9,9 @@ from matplotlib.colors import ListedColormap
 from nibabel.processing import resample_from_to
 from typing import Optional
 
-from .config import Settings
+from ..project_core import Settings
 
-from .models import MRICase, CasePaths
+from ..project_core import MRICase, CasePaths
 
 
 def _load_canonical_data(path: Path, like: nib.Nifti1Image | None = None, order: int = 1) -> tuple[nib.Nifti1Image, np.ndarray]:

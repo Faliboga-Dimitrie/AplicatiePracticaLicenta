@@ -10,7 +10,7 @@
         "PYTHONPATH": "${workspaceFolder}/python_scripts"
       },
       "cwd": "${workspaceFolder}",
-      "args": ["--subject", "IXI012-HH-1211-T1"],
+      "args": ["--subject", "IXI013-HH-1212-T1"],
       "justMyCode": true
     }
   ]

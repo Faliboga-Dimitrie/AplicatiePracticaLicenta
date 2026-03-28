@@ -5,9 +5,9 @@ from pathlib import Path
 
 import nibabel as nib
 
-from .config import Settings
+from ..project_core import Settings
 from .input_checks import OrientationStatus, check_input_orientation
-from .models import MRICase, CasePaths
+from ..project_core import MRICase, CasePaths
 from .qc import maybe_save_fast_qc
 
 
@@ -90,8 +90,6 @@ def run_segmentation(case: MRICase, paths: CasePaths, settings: Settings) -> Pat
     """
     input_path = paths.fast_input_path
     output_prefix = paths.fast_prefix
-
-    paths.fast_dir.mkdir(parents=True, exist_ok=True)
 
     full_outputs_exist = paths.has_fast_outputs
     partial_outputs_exist = any(paths.fast_dir.glob(f"{paths.subject_id}*"))

@@ -5,8 +5,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import Settings, ensure_main_directories, settings
-from .models import MRICase, build_case_paths
+from ..project_core import Settings, ensure_main_directories, settings
+from ..project_core import MRICase, build_case_paths
 from .reorient import run_reorientation
 from .segmentation import run_segmentation
 from .skull_strip import run_skull_strip

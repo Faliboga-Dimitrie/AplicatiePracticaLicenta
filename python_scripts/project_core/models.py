@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..project_core import Settings
+
 
 def strip_nii_suffix(path: Path) -> str:
     """
@@ -36,7 +38,7 @@ class MRICase:
 @dataclass(frozen=True)
 class CasePaths:
     """
-    Stores all expected paths for one MRI case across the preprocessing pipeline.
+    Stores all expected paths for one MRI case across the project pipeline.
 
     Important:
     - This class stores paths only, not loaded MRI objects.
@@ -49,6 +51,7 @@ class CasePaths:
     hd_bet_dir: Path
     fast_dir: Path
     qc_dir: Path
+    mesh_dir: Path
 
     # ---------- directories ----------
     @property
@@ -58,6 +61,7 @@ class CasePaths:
             self.hd_bet_dir,
             self.fast_dir,
             self.qc_dir,
+            self.mesh_dir,
         ]
 
     def ensure_stage_dirs(self) -> None:
@@ -127,23 +131,40 @@ class CasePaths:
     @property
     def qc_fast_png(self) -> Path:
         return self.qc_dir / f"{self.subject_id}_fast_qc.png"
-
+    
+    # ---------- meshes ----------
     @property
-    def qc_atlas_png(self) -> Path:
-        return self.qc_dir / f"{self.subject_id}_atlas_qc.png"
+    def mesh_csf_mask_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_csf_mask.nii.gz"
+    
+    @property
+    def mesh_gm_mask_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_gm_mask.nii.gz"
+    
+    @property
+    def mesh_wm_mask_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_wm_mask.nii.gz"
+    
+    @property
+    def mesh_csf_mesh_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_csf_mesh.glb"
+    
+    @property
+    def mesh_gm_mesh_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_gm_mesh.glb"
+    
+    @property
+    def mesh_wm_mesh_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_wm_mesh.glb"
+    
+    @property
+    def mesh_metrics_json_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_metrics.json"
 
     # ---------- existence helpers ----------
     @property
     def has_reoriented(self) -> bool:
         return self.reoriented_path.exists()
-
-    @property
-    def has_skull_stripped(self) -> bool:
-        return self.skull_stripped_path.exists()
-
-    @property
-    def has_skull_mask(self) -> bool:
-        return self.skull_stripped_mask_path.exists()
 
     @property
     def has_fast_outputs(self) -> bool:
@@ -160,9 +181,35 @@ class CasePaths:
     @property
     def fast_input_path(self) -> Path:
         return self.skull_stripped_path
+    
+    @property
+    def has_mesh_masks(self) -> bool:
+        return all([
+            self.mesh_csf_mask_path.exists(),
+            self.mesh_gm_mask_path.exists(),
+            self.mesh_wm_mask_path.exists(),
+        ])
+
+    @property
+    def has_mesh_outputs(self) -> bool:
+        return all([
+            self.mesh_csf_mesh_path.exists(),
+            self.mesh_gm_mesh_path.exists(),
+            self.mesh_wm_mesh_path.exists(),
+            self.mesh_metrics_json_path.exists(),
+        ])
+    
+    # ---------- utility methods ----------
+    @property
+    def fast_pve_paths(self) -> dict[str, Path]:
+        return {
+            "csf": self.fast_pve_csf_path,
+            "gm": self.fast_pve_gm_path,
+            "wm": self.fast_pve_wm_path,
+        }
 
 
-def build_case_paths(case: MRICase, settings: Any) -> CasePaths:
+def build_case_paths(case: MRICase, settings: Settings) -> CasePaths:
     """
     Build all per-subject output paths from a global settings object.
 
@@ -171,6 +218,7 @@ def build_case_paths(case: MRICase, settings: Any) -> CasePaths:
         - hd_bet_dir
         - fast_dir
         - qc_dir
+        - mesh_dir
     """
     subject_id = case.subject_id
 
@@ -182,4 +230,5 @@ def build_case_paths(case: MRICase, settings: Any) -> CasePaths:
         hd_bet_dir=Path(settings.hd_bet_dir) / subject_id,
         fast_dir=Path(settings.fast_dir) / subject_id,
         qc_dir=Path(settings.qc_dir) / subject_id,
+        mesh_dir=Path(settings.mesh_dir) / subject_id,
     )
