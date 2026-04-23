@@ -1,4 +1,5 @@
 *.nii
 *.nii.gz
 *.png
+*.glb
 **/__pycache__/

@@ -12,6 +12,18 @@
       "cwd": "${workspaceFolder}",
       "args": ["--subject", "IXI013-HH-1212-T1"],
       "justMyCode": true
+    },
+    {
+      "name": "MRI mesh analysis pipeline (python_scripts)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mesh_analysis",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/python_scripts"
+      },
+      "cwd": "${workspaceFolder}/python_scripts",
+      "args": ["--subject", "IXI013-HH-1212-T1"],
+      "justMyCode": true
     }
   ]
 }
