@@ -198,6 +198,14 @@ class CasePaths:
             self.mesh_wm_mesh_path.exists(),
             self.mesh_metrics_json_path.exists(),
         ])
+
+    @property
+    def has_complete_mesh_outputs(self) -> bool:
+        return self.has_mesh_masks and self.has_mesh_outputs
+
+    @property
+    def has_any_mesh_outputs(self) -> bool:
+        return any(path.exists() for path in self.mesh_output_paths)
     
     # ---------- utility methods ----------
     @property
@@ -207,6 +215,38 @@ class CasePaths:
             "gm": self.fast_pve_gm_path,
             "wm": self.fast_pve_wm_path,
         }
+
+    @property
+    def has_fast_pve_outputs(self) -> bool:
+        return all(path.exists() for path in self.fast_pve_paths.values())
+
+    @property
+    def missing_fast_pve_paths(self) -> list[Path]:
+        return [path for path in self.fast_pve_paths.values() if not path.exists()]
+
+    @property
+    def mesh_mask_paths(self) -> dict[str, Path]:
+        return {
+            "csf": self.mesh_csf_mask_path,
+            "gm": self.mesh_gm_mask_path,
+            "wm": self.mesh_wm_mask_path,
+        }
+
+    @property
+    def mesh_paths(self) -> dict[str, Path]:
+        return {
+            "csf": self.mesh_csf_mesh_path,
+            "gm": self.mesh_gm_mesh_path,
+            "wm": self.mesh_wm_mesh_path,
+        }
+
+    @property
+    def mesh_output_paths(self) -> list[Path]:
+        return [
+            *self.mesh_mask_paths.values(),
+            *self.mesh_paths.values(),
+            self.mesh_metrics_json_path,
+        ]
 
 
 def build_case_paths(case: MRICase, settings: Settings) -> CasePaths:

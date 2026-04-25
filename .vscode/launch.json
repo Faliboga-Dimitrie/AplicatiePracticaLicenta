@@ -2,28 +2,30 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "MRI preprocessing pipeline (project root)",
+      "name": "MRI preprocessing pipeline",
       "type": "debugpy",
       "request": "launch",
-      "module": "mri_preprocessing.run",
+      "module": "python_scripts.mri_preprocessing.pipeline",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/python_scripts"
+        "PYTHONPATH": "${workspaceFolder}"
       },
       "cwd": "${workspaceFolder}",
       "args": ["--subject", "IXI013-HH-1212-T1"],
-      "justMyCode": true
+      "justMyCode": true,
+      "logToFile": false
     },
     {
-      "name": "MRI mesh analysis pipeline (python_scripts)",
+      "name": "MRI mesh analysis pipeline",
       "type": "debugpy",
       "request": "launch",
-      "module": "mesh_analysis",
+      "module": "python_scripts.mesh_analysis.pipeline",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/python_scripts"
+        "PYTHONPATH": "${workspaceFolder}"
       },
-      "cwd": "${workspaceFolder}/python_scripts",
-      "args": ["--subject", "IXI013-HH-1212-T1"],
-      "justMyCode": true
+      "cwd": "${workspaceFolder}",
+      "args": ["--subject", "IXI012-HH-1211-T1"],
+      "justMyCode": true,
+      "logToFile": false
     }
   ]
 }

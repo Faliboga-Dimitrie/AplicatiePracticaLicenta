@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import argparse
 import json
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 import nibabel as nib
 from nibabel.affines import apply_affine
@@ -13,7 +10,8 @@ import trimesh
 from skimage.measure import marching_cubes, mesh_surface_area
 
 from ..project_core import Settings, ensure_main_directories, settings
-from ..project_core import MRICase, CasePaths, build_case_paths
+from ..project_core import MRICase, CasePaths
+from ..project_core import build_prepared_case_paths, run_pipeline_cli
 from .io import load_fast_pves
 from .models import (
     MeshAnalysisResult,
@@ -22,7 +20,6 @@ from .models import (
     TissueSurfaces,
     TissueVolumes,
 )
-
 
 @dataclass
 class CaseRunResult:
@@ -36,15 +33,18 @@ class MeshAnalysisPipeline:
     """
     Mesh-analysis stage for one MRI case.
 
-    Current policy:
-    - volumes are computed from FAST PVE maps
-    - masks / meshes are built from FAST pveseg
-    - mask files, mesh files, and metrics JSON are written to paths from CasePaths
+    This class now focuses only on the actual mesh-analysis work:
+    - load FAST PVE images
+    - compute tissue volumes
+    - threshold PVE images into tissue masks
+    - convert masks to meshes
+    - compute surface areas
+    - write masks, meshes, and metrics
 
-    Existing-output policy:
-    - if all expected outputs exist and skip_existing=True, load metrics.json and return it
-    - if partial outputs exist and overwrite=False, raise
-    - if overwrite=True, remove old outputs and rerun
+    Path and existence knowledge is delegated to CasePaths.
+    Directory creation is expected to be handled before this class runs:
+    - ensure_main_directories(settings) for global project folders
+    - paths.ensure_stage_dirs() for per-case folders
     """
 
     def __init__(self, paths: CasePaths, settings: Settings):
@@ -56,7 +56,6 @@ class MeshAnalysisPipeline:
         self._meshes: TissueMeshes | None = None
 
     def run(self) -> MeshAnalysisResult:
-        self.paths.mesh_dir.mkdir(parents=True, exist_ok=True)
         self._validate_inputs()
 
         existing = self._handle_existing_outputs()
@@ -70,7 +69,6 @@ class MeshAnalysisPipeline:
 
         meshes = self._build_tissue_meshes(masks)
         surfaces = self._compute_surface_areas_from_meshes(meshes)
-
         self._export_meshes(meshes)
 
         result = MeshAnalysisResult(
@@ -86,10 +84,7 @@ class MeshAnalysisPipeline:
     # -------------------------------------------------------------------------
 
     def _handle_existing_outputs(self) -> MeshAnalysisResult | None:
-        full_outputs_exist = self.paths.has_mesh_masks and self.paths.has_mesh_outputs
-        partial_outputs_exist = self._has_any_mesh_outputs()
-
-        if full_outputs_exist:
+        if self.paths.has_complete_mesh_outputs:
             if self.settings.skip_existing:
                 return self._load_existing_result()
 
@@ -102,7 +97,7 @@ class MeshAnalysisPipeline:
             self._remove_existing_mesh_outputs()
             return None
 
-        if partial_outputs_exist:
+        if self.paths.has_any_mesh_outputs:
             if not self.settings.overwrite:
                 raise FileExistsError(
                     f"Partial mesh-analysis outputs already exist for {self.paths.subject_id} in "
@@ -113,33 +108,13 @@ class MeshAnalysisPipeline:
 
         return None
 
-    def _has_any_mesh_outputs(self) -> bool:
-        return any(path.exists() for path in self._all_mesh_output_paths())
-
     def _remove_existing_mesh_outputs(self) -> None:
-        for path in self._all_mesh_output_paths():
+        for path in self.paths.mesh_output_paths:
             if path.exists():
                 path.unlink()
 
-    def _all_mesh_output_paths(self) -> list[Path]:
-        return [
-            self.paths.mesh_csf_mask_path,
-            self.paths.mesh_gm_mask_path,
-            self.paths.mesh_wm_mask_path,
-            self.paths.mesh_csf_mesh_path,
-            self.paths.mesh_gm_mesh_path,
-            self.paths.mesh_wm_mesh_path,
-            self.paths.mesh_metrics_json_path,
-        ]
-
     def _load_existing_result(self) -> MeshAnalysisResult:
         metrics_path = self.paths.mesh_metrics_json_path
-
-        if not metrics_path.exists():
-            raise FileNotFoundError(
-                "skip_existing=True was requested, but metrics.json is missing: "
-                f"{metrics_path}"
-            )
 
         with metrics_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
@@ -162,23 +137,17 @@ class MeshAnalysisPipeline:
         )
 
     # -------------------------------------------------------------------------
-    # validation
+    # validation / loading
     # -------------------------------------------------------------------------
 
     def _validate_inputs(self) -> None:
-        required = list(self.paths.fast_pve_paths.values())
-
-        missing = [path for path in required if not path.exists()]
+        missing = self.paths.missing_fast_pve_paths
         if missing:
             missing_str = "\n".join(str(path) for path in missing)
             raise FileNotFoundError(
                 "Mesh analysis requires FAST PVE outputs, but some files are missing:\n"
                 f"{missing_str}"
             )
-
-    # -------------------------------------------------------------------------
-    # loading
-    # -------------------------------------------------------------------------
 
     def _load_pves(self) -> dict[str, nib.Nifti1Image]:
         if self._pves is None:
@@ -214,26 +183,12 @@ class MeshAnalysisPipeline:
 
         pves = self._load_pves()
 
-        csf_img = self._make_threshold_mask_image(
-            pve_img=pves["csf"],
-            threshold=0.5,
-        )
-        gm_img = self._make_threshold_mask_image(
-            pve_img=pves["gm"],
-            threshold=0.5,
-        )
-        wm_img = self._make_threshold_mask_image(
-            pve_img=pves["wm"],
-            threshold=0.5,
-        )
-
         self._masks = TissueMasks(
-            csf_img=csf_img,
-            gm_img=gm_img,
-            wm_img=wm_img,
+            csf_img=self._make_threshold_mask_image(pves["csf"]),
+            gm_img=self._make_threshold_mask_image(pves["gm"]),
+            wm_img=self._make_threshold_mask_image(pves["wm"]),
         )
         return self._masks
-
 
     def _make_threshold_mask_image(
         self,
@@ -259,20 +214,44 @@ class MeshAnalysisPipeline:
         )
 
     def _save_tissue_masks(self, masks: TissueMasks) -> None:
-        mask_paths = {
-            "csf": self.paths.mesh_csf_mask_path,
-            "gm": self.paths.mesh_gm_mask_path,
-            "wm": self.paths.mesh_wm_mask_path,
-        }
-
         for tissue, mask_img in masks.as_dict().items():
-            out_path = mask_paths[tissue]
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            nib.save(mask_img, str(out_path))
+            nib.save(mask_img, str(self.paths.mesh_mask_paths[tissue]))
 
     # -------------------------------------------------------------------------
     # meshes
     # -------------------------------------------------------------------------
+
+    def _scale_mesh(
+    self,
+    mesh: trimesh.Trimesh,
+    factor: float,
+) -> None:
+        transform = trimesh.transformations.scale_matrix(
+            factor=factor,
+            origin=mesh.centroid,
+        )
+        mesh.apply_transform(transform)
+
+    def _rotate_mesh_x_90(self, mesh: trimesh.Trimesh) -> None:
+        transform = trimesh.transformations.rotation_matrix(
+            angle=np.deg2rad(-90.0),
+            direction=[1, 0, 0],
+            point=mesh.centroid,
+        )
+        mesh.apply_transform(transform)
+
+    def _apply_transparent_material(
+        self,
+        mesh: trimesh.Trimesh,
+        rgba: tuple[int, int, int, int],
+    ) -> None:
+        material = trimesh.visual.material.PBRMaterial(
+            baseColorFactor=list(rgba),
+            alphaMode="BLEND",
+            doubleSided=True,
+        )
+
+        mesh.visual = trimesh.visual.TextureVisuals(material=material)
 
     def _build_tissue_meshes(self, masks: TissueMasks) -> TissueMeshes:
         if self._meshes is not None:
@@ -284,7 +263,6 @@ class MeshAnalysisPipeline:
             wm=self._mask_image_to_mesh(masks.wm_img, "WM"),
         )
         return self._meshes
-
 
     def _crop_and_pad_mask_image_to_foreground(
         self,
@@ -332,7 +310,6 @@ class MeshAnalysisPipeline:
             header=header,
         )
 
-
     def _mask_image_to_mesh(
         self,
         mask_img: nib.Nifti1Image,
@@ -353,11 +330,7 @@ class MeshAnalysisPipeline:
                 f"Found only value {mask_min}."
             )
 
-        verts_voxel, faces, _, _ = marching_cubes(
-            mask_data,
-            level=0.5,
-        )
-
+        verts_voxel, faces, _, _ = marching_cubes(mask_data, level=0.5)
         verts_world = apply_affine(prepared_mask_img.affine, verts_voxel)
 
         return trimesh.Trimesh(
@@ -378,14 +351,16 @@ class MeshAnalysisPipeline:
 
     def _export_meshes(self, meshes: TissueMeshes) -> None:
         export_map = {
-            "csf": self.paths.mesh_csf_mesh_path,
-            "gm": self.paths.mesh_gm_mesh_path,
-            "wm": self.paths.mesh_wm_mesh_path,
-        }
+        "csf": (self.paths.mesh_csf_mesh_path, (80, 140, 255, 60)),
+        "gm":  (self.paths.mesh_gm_mesh_path,  (80, 140, 255, 90)),
+        "wm":  (self.paths.mesh_wm_mesh_path,  (80, 140, 255, 180)),
+    }
 
         for tissue, mesh in meshes.as_dict().items():
-            out_path = export_map[tissue]
-            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path, rgba = export_map[tissue]
+            self._rotate_mesh_x_90(mesh)
+            self._scale_mesh(mesh, factor=1.0)
+            self._apply_transparent_material(mesh, rgba)
             mesh.export(str(out_path), file_type="glb")
 
     # -------------------------------------------------------------------------
@@ -395,68 +370,27 @@ class MeshAnalysisPipeline:
     def _write_metrics_json(self, result: MeshAnalysisResult) -> None:
         payload = result.to_dict()
         payload["mask_paths"] = {
-            "csf": str(self.paths.mesh_csf_mask_path),
-            "gm": str(self.paths.mesh_gm_mask_path),
-            "wm": str(self.paths.mesh_wm_mask_path),
+            tissue: str(path)
+            for tissue, path in self.paths.mesh_mask_paths.items()
         }
         payload["mesh_paths"] = {
-            "csf": str(self.paths.mesh_csf_mesh_path),
-            "gm": str(self.paths.mesh_gm_mesh_path),
-            "wm": str(self.paths.mesh_wm_mesh_path),
+            tissue: str(path)
+            for tissue, path in self.paths.mesh_paths.items()
         }
 
-        out_path = self.paths.mesh_metrics_json_path
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with out_path.open("w", encoding="utf-8") as f:
+        with self.paths.mesh_metrics_json_path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
 
 
-def _is_nifti_path(path: Path) -> bool:
-    name = path.name.lower()
-    return name.endswith(".nii") or name.endswith(".nii.gz")
+def _preflight_checks(settings_obj: Settings) -> None:
+    ensure_main_directories(settings_obj)
 
 
-def _discover_cases(settings: Settings, subject_filter: str | None = None) -> list[MRICase]:
-    if not settings.input_mri_dir.exists():
-        raise FileNotFoundError(f"Input MRI directory does not exist: {settings.input_mri_dir}")
-
-    files = sorted(
-        p for p in settings.input_mri_dir.iterdir()
-        if p.is_file() and _is_nifti_path(p)
-    )
-
-    cases = [MRICase.from_input_path(p) for p in files]
-
-    if subject_filter is not None:
-        cases = [c for c in cases if c.subject_id == subject_filter]
-
-    return cases
-
-
-def _build_single_case(input_path: Path) -> MRICase:
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input file does not exist: {input_path}")
-
-    if not input_path.is_file():
-        raise ValueError(f"Input path is not a file: {input_path}")
-
-    if not _is_nifti_path(input_path):
-        raise ValueError(f"Input file is not a NIfTI (.nii or .nii.gz): {input_path}")
-
-    return MRICase.from_input_path(input_path)
-
-
-def _preflight_checks(settings: Settings) -> None:
-    ensure_main_directories(settings)
-
-
-def _process_case(case: MRICase, settings: Settings) -> CaseRunResult:
-    paths = build_case_paths(case, settings)
-    paths.ensure_stage_dirs()
+def _process_case(case: MRICase, settings_obj: Settings) -> CaseRunResult:
+    paths = build_prepared_case_paths(case, settings_obj)
 
     try:
-        pipeline = MeshAnalysisPipeline(paths, settings)
+        pipeline = MeshAnalysisPipeline(paths, settings_obj)
         result = pipeline.run()
 
         return CaseRunResult(
@@ -471,13 +405,6 @@ def _process_case(case: MRICase, settings: Settings) -> CaseRunResult:
             success=False,
             error=str(exc),
         )
-
-
-def _print_case_header(case: MRICase) -> None:
-    print("=" * 80)
-    print(f"Mesh analysis for case: {case.subject_id}")
-    print(f"Raw input: {case.raw_path}")
-    print("=" * 80)
 
 
 def _print_summary(results: list[CaseRunResult]) -> None:
@@ -505,70 +432,16 @@ def _print_summary(results: list[CaseRunResult]) -> None:
     print(f"Total     : {len(results)}")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run the mesh-analysis pipeline: PVE volumes -> masks -> meshes -> metrics"
-    )
-
-    parser.add_argument(
-        "--input",
-        type=Path,
-        default=None,
-        help="Process a single NIfTI file instead of scanning input_mri/.",
-    )
-
-    parser.add_argument(
-        "--subject",
-        type=str,
-        default=None,
-        help="When scanning input_mri/, process only the matching subject_id.",
-    )
-
-    parser.add_argument(
-        "--fail-fast",
-        action="store_true",
-        help="Stop immediately when one case fails.",
-    )
-
-    return parser.parse_args()
-
-
 def main() -> int:
-    args = parse_args()
-
-    try:
-        _preflight_checks(settings)
-
-        if args.input is not None:
-            cases = [_build_single_case(args.input)]
-        else:
-            cases = _discover_cases(settings, subject_filter=args.subject)
-
-        if not cases:
-            print("No input MRI files found to process.")
-            return 1
-
-        results: list[CaseRunResult] = []
-
-        for case in cases:
-            _print_case_header(case)
-            result = _process_case(case, settings)
-            results.append(result)
-
-            if result.success:
-                print(f"[OK] Completed mesh analysis: {case.subject_id}")
-            else:
-                print(f"[FAIL] {case.subject_id}: {result.error}")
-                if args.fail_fast:
-                    _print_summary(results)
-                    return 1
-
-        _print_summary(results)
-        return 0 if all(r.success for r in results) else 1
-
-    except Exception as exc:
-        print(f"[FATAL] {exc}", file=sys.stderr)
-        return 1
+    return run_pipeline_cli(
+        description="Run the mesh-analysis pipeline: PVE volumes -> masks -> meshes -> metrics",
+        settings_obj=settings,
+        preflight_checks=_preflight_checks,
+        process_case=_process_case,
+        print_summary=_print_summary,
+        case_header_title="Mesh analysis for case",
+        success_message=lambda case, _result: f"[OK] Completed mesh analysis: {case.subject_id}",
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,23 @@
+{
+  "subject_id": "IXI012-HH-1211-T1",
+  "volumes": {
+    "csf_mm3": 304195.71875,
+    "gm_mm3": 626910.4375,
+    "wm_mm3": 652983.0625
+  },
+  "surfaces": {
+    "csf_mm2": 337016.4330722708,
+    "gm_mm2": 522973.14490349,
+    "wm_mm2": 297339.2062746467
+  },
+  "mask_paths": {
+    "csf": "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\processed_mri\\meshes\\IXI012-HH-1211-T1\\IXI012-HH-1211-T1_csf_mask.nii.gz",
+    "gm": "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\processed_mri\\meshes\\IXI012-HH-1211-T1\\IXI012-HH-1211-T1_gm_mask.nii.gz",
+    "wm": "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\processed_mri\\meshes\\IXI012-HH-1211-T1\\IXI012-HH-1211-T1_wm_mask.nii.gz"
+  },
+  "mesh_paths": {
+    "csf": "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\processed_mri\\meshes\\IXI012-HH-1211-T1\\IXI012-HH-1211-T1_csf_mesh.glb",
+    "gm": "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\processed_mri\\meshes\\IXI012-HH-1211-T1\\IXI012-HH-1211-T1_gm_mesh.glb",
+    "wm": "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\processed_mri\\meshes\\IXI012-HH-1211-T1\\IXI012-HH-1211-T1_wm_mesh.glb"
+  }
+}
