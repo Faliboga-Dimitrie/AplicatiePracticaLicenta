@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import nibabel as nib
     import trimesh
 
 
@@ -23,7 +22,7 @@ class TissueVolumes:
 
 
 @dataclass(frozen=True)
-class TissueSurfaces:
+class TissueMeshSurfaces:
     csf_mm2: float
     gm_mm2: float
     wm_mm2: float
@@ -33,20 +32,6 @@ class TissueSurfaces:
             "csf_mm2": self.csf_mm2,
             "gm_mm2": self.gm_mm2,
             "wm_mm2": self.wm_mm2,
-        }
-
-
-@dataclass(frozen=True)
-class TissueMasks:
-    csf_img: nib.Nifti1Image
-    gm_img: nib.Nifti1Image
-    wm_img: nib.Nifti1Image
-
-    def as_dict(self) -> dict[str, nib.Nifti1Image]:
-        return {
-            "csf": self.csf_img,
-            "gm": self.gm_img,
-            "wm": self.wm_img,
         }
 
 
@@ -68,7 +53,7 @@ class TissueMeshes:
 class MeshAnalysisResult:
     subject_id: str
     volumes: TissueVolumes
-    surfaces: TissueSurfaces
+    surfaces: TissueMeshSurfaces
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -80,8 +65,7 @@ class MeshAnalysisResult:
 
 __all__ = [
     "TissueVolumes",
-    "TissueSurfaces",
-    "TissueMasks",
+    "TissueMeshSurfaces",
     "TissueMeshes",
     "MeshAnalysisResult",
 ]

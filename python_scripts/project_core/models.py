@@ -132,19 +132,7 @@ class CasePaths:
     def qc_fast_png(self) -> Path:
         return self.qc_dir / f"{self.subject_id}_fast_qc.png"
     
-    # ---------- meshes ----------
-    @property
-    def mesh_csf_mask_path(self) -> Path:
-        return self.mesh_dir / f"{self.subject_id}_csf_mask.nii.gz"
-    
-    @property
-    def mesh_gm_mask_path(self) -> Path:
-        return self.mesh_dir / f"{self.subject_id}_gm_mask.nii.gz"
-    
-    @property
-    def mesh_wm_mask_path(self) -> Path:
-        return self.mesh_dir / f"{self.subject_id}_wm_mask.nii.gz"
-    
+    # ---------- meshes ---------- 
     @property
     def mesh_csf_mesh_path(self) -> Path:
         return self.mesh_dir / f"{self.subject_id}_csf_mesh.glb"
@@ -181,27 +169,10 @@ class CasePaths:
     @property
     def fast_input_path(self) -> Path:
         return self.skull_stripped_path
-    
-    @property
-    def has_mesh_masks(self) -> bool:
-        return all([
-            self.mesh_csf_mask_path.exists(),
-            self.mesh_gm_mask_path.exists(),
-            self.mesh_wm_mask_path.exists(),
-        ])
-
-    @property
-    def has_mesh_outputs(self) -> bool:
-        return all([
-            self.mesh_csf_mesh_path.exists(),
-            self.mesh_gm_mesh_path.exists(),
-            self.mesh_wm_mesh_path.exists(),
-            self.mesh_metrics_json_path.exists(),
-        ])
 
     @property
     def has_complete_mesh_outputs(self) -> bool:
-        return self.has_mesh_masks and self.has_mesh_outputs
+        return all(path.exists() for path in self.mesh_output_paths)
 
     @property
     def has_any_mesh_outputs(self) -> bool:
@@ -225,14 +196,6 @@ class CasePaths:
         return [path for path in self.fast_pve_paths.values() if not path.exists()]
 
     @property
-    def mesh_mask_paths(self) -> dict[str, Path]:
-        return {
-            "csf": self.mesh_csf_mask_path,
-            "gm": self.mesh_gm_mask_path,
-            "wm": self.mesh_wm_mask_path,
-        }
-
-    @property
     def mesh_paths(self) -> dict[str, Path]:
         return {
             "csf": self.mesh_csf_mesh_path,
@@ -243,7 +206,6 @@ class CasePaths:
     @property
     def mesh_output_paths(self) -> list[Path]:
         return [
-            *self.mesh_mask_paths.values(),
             *self.mesh_paths.values(),
             self.mesh_metrics_json_path,
         ]

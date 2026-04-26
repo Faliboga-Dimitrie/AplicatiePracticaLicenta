@@ -2,4 +2,5 @@
 *.nii.gz
 *.png
 *.glb
+*.json
 **/__pycache__/

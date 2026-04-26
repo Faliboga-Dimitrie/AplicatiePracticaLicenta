@@ -15,9 +15,8 @@ from ..project_core import build_prepared_case_paths, run_pipeline_cli
 from .io import load_fast_pves
 from .models import (
     MeshAnalysisResult,
-    TissueMasks,
     TissueMeshes,
-    TissueSurfaces,
+    TissueMeshSurfaces,
     TissueVolumes,
 )
 
@@ -36,10 +35,9 @@ class MeshAnalysisPipeline:
     This class now focuses only on the actual mesh-analysis work:
     - load FAST PVE images
     - compute tissue volumes
-    - threshold PVE images into tissue masks
-    - convert masks to meshes
+    - use PVE images to build meshes via marching cubes
     - compute surface areas
-    - write masks, meshes, and metrics
+    - write meshes, and metrics
 
     Path and existence knowledge is delegated to CasePaths.
     Directory creation is expected to be handled before this class runs:
@@ -47,12 +45,13 @@ class MeshAnalysisPipeline:
     - paths.ensure_stage_dirs() for per-case folders
     """
 
+    PVE_MESH_LEVEL = 0.5
+
     def __init__(self, paths: CasePaths, settings: Settings):
         self.paths = paths
         self.settings = settings
 
         self._pves: dict[str, nib.Nifti1Image] | None = None
-        self._masks: TissueMasks | None = None
         self._meshes: TissueMeshes | None = None
 
     def run(self) -> MeshAnalysisResult:
@@ -64,10 +63,7 @@ class MeshAnalysisPipeline:
 
         volumes = self._compute_volumes()
 
-        masks = self._build_tissue_masks()
-        self._save_tissue_masks(masks)
-
-        meshes = self._build_tissue_meshes(masks)
+        meshes = self._build_tissue_meshes()
         surfaces = self._compute_surface_areas_from_meshes(meshes)
         self._export_meshes(meshes)
 
@@ -129,7 +125,7 @@ class MeshAnalysisPipeline:
                 gm_mm3=float(volumes_data["gm_mm3"]),
                 wm_mm3=float(volumes_data["wm_mm3"]),
             ),
-            surfaces=TissueSurfaces(
+            surfaces=TissueMeshSurfaces(
                 csf_mm2=float(surfaces_data["csf_mm2"]),
                 gm_mm2=float(surfaces_data["gm_mm2"]),
                 wm_mm2=float(surfaces_data["wm_mm2"]),
@@ -158,11 +154,21 @@ class MeshAnalysisPipeline:
     # volume
     # -------------------------------------------------------------------------
 
+    def _voxel_volume_mm3(self, img: nib.Nifti1Image) -> float:
+    # More robust than header zooms if the affine has rotations/shears
+        return float(abs(np.linalg.det(img.affine[:3, :3])))
+
+
     def _pve_volume_mm3(self, pve_img: nib.Nifti1Image) -> float:
         data = np.asarray(pve_img.get_fdata(), dtype=np.float32)
-        dx, dy, dz = pve_img.header.get_zooms()[:3]
-        voxel_volume_mm3 = float(dx * dy * dz)
-        return float(data.sum() * voxel_volume_mm3)
+
+        # Avoid tiny numerical weirdness outside [0, 1]
+        data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+        data = np.clip(data, 0.0, 1.0)
+
+        voxel_volume_mm3 = self._voxel_volume_mm3(pve_img)
+
+        return round(float(data.sum() * voxel_volume_mm3), 3)
 
     def _compute_volumes(self) -> TissueVolumes:
         pves = self._load_pves()
@@ -172,50 +178,6 @@ class MeshAnalysisPipeline:
             gm_mm3=self._pve_volume_mm3(pves["gm"]),
             wm_mm3=self._pve_volume_mm3(pves["wm"]),
         )
-
-    # -------------------------------------------------------------------------
-    # masks
-    # -------------------------------------------------------------------------
-
-    def _build_tissue_masks(self) -> TissueMasks:
-        if self._masks is not None:
-            return self._masks
-
-        pves = self._load_pves()
-
-        self._masks = TissueMasks(
-            csf_img=self._make_threshold_mask_image(pves["csf"]),
-            gm_img=self._make_threshold_mask_image(pves["gm"]),
-            wm_img=self._make_threshold_mask_image(pves["wm"]),
-        )
-        return self._masks
-
-    def _make_threshold_mask_image(
-        self,
-        pve_img: nib.Nifti1Image,
-        threshold: float = 0.5,
-    ) -> nib.Nifti1Image:
-        pve_data = np.asarray(pve_img.get_fdata(), dtype=np.float32)
-
-        if pve_data.ndim != 3:
-            raise ValueError(
-                f"Expected 3D PVE image for mesh analysis, got ndim={pve_data.ndim}"
-            )
-
-        mask_data = (pve_data >= threshold).astype(np.uint8)
-
-        header = pve_img.header.copy()
-        header.set_data_dtype(np.uint8)
-
-        return nib.Nifti1Image(
-            mask_data,
-            affine=pve_img.affine,
-            header=header,
-        )
-
-    def _save_tissue_masks(self, masks: TissueMasks) -> None:
-        for tissue, mask_img in masks.as_dict().items():
-            nib.save(mask_img, str(self.paths.mesh_mask_paths[tissue]))
 
     # -------------------------------------------------------------------------
     # meshes
@@ -253,85 +215,47 @@ class MeshAnalysisPipeline:
 
         mesh.visual = trimesh.visual.TextureVisuals(material=material)
 
-    def _build_tissue_meshes(self, masks: TissueMasks) -> TissueMeshes:
+    def _build_tissue_meshes(self) -> TissueMeshes:
         if self._meshes is not None:
             return self._meshes
+        
+        pves = self._load_pves()
 
         self._meshes = TissueMeshes(
-            csf=self._mask_image_to_mesh(masks.csf_img, "CSF"),
-            gm=self._mask_image_to_mesh(masks.gm_img, "GM"),
-            wm=self._mask_image_to_mesh(masks.wm_img, "WM"),
+            csf=self._mask_image_to_mesh(pves["csf"], "CSF"),
+            gm=self._mask_image_to_mesh(pves["gm"], "GM"),
+            wm=self._mask_image_to_mesh(pves["wm"], "WM"),
         )
-        return self._meshes
-
-    def _crop_and_pad_mask_image_to_foreground(
-        self,
-        mask_img: nib.Nifti1Image,
-        tissue_name: str,
-    ) -> nib.Nifti1Image:
-        mask_data = np.asarray(mask_img.get_fdata(), dtype=np.uint8)
-
-        if mask_data.ndim != 3:
-            raise ValueError(
-                f"{tissue_name} mask must be 3D, got ndim={mask_data.ndim}"
-            )
-
-        foreground = np.argwhere(mask_data > 0)
-        if foreground.size == 0:
-            raise ValueError(f"{tissue_name} mask contains no foreground voxels.")
-
-        min_i, min_j, min_k = foreground.min(axis=0)
-        max_i, max_j, max_k = foreground.max(axis=0)
-
-        cropped = mask_data[
-            min_i:max_i + 1,
-            min_j:max_j + 1,
-            min_k:max_k + 1,
-        ]
-
-        # Add a 1-voxel zero border so marching cubes sees a clean outside region.
-        padded = np.pad(cropped, pad_width=1, mode="constant", constant_values=0)
-
-        # The padded voxel (1,1,1) corresponds to original voxel (min_i,min_j,min_k).
-        # So padded voxel (0,0,0) corresponds to original voxel (min_i-1,min_j-1,min_k-1).
-        offset = np.array([min_i - 1, min_j - 1, min_k - 1], dtype=np.float64)
-
-        new_affine = mask_img.affine.copy()
-        new_affine[:3, 3] = (
-            mask_img.affine[:3, :3] @ offset + mask_img.affine[:3, 3]
-        )
-
-        header = mask_img.header.copy()
-        header.set_data_dtype(np.uint8)
-
-        return nib.Nifti1Image(
-            padded.astype(np.uint8),
-            affine=new_affine,
-            header=header,
-        )
+        return self._meshes  
 
     def _mask_image_to_mesh(
         self,
-        mask_img: nib.Nifti1Image,
+        pve_img: nib.Nifti1Image,
         tissue_name: str,
+        level: float = PVE_MESH_LEVEL,
     ) -> trimesh.Trimesh:
-        prepared_mask_img = self._crop_and_pad_mask_image_to_foreground(
-            mask_img,
-            tissue_name,
-        )
-        mask_data = np.asarray(prepared_mask_img.get_fdata(), dtype=np.uint8)
+        
+        pve_data = np.asarray(pve_img.get_fdata(), dtype=np.float32)
 
-        mask_min = int(mask_data.min())
-        mask_max = int(mask_data.max())
-
-        if mask_min == mask_max:
+        if pve_data.ndim != 3:
             raise ValueError(
-                f"{tissue_name} mask does not contain both background and foreground. "
-                f"Found only value {mask_min}."
+                f"Expected 3D PVE image for mesh analysis, got ndim={pve_data.ndim}"
             )
 
-        verts_voxel, faces, _, _ = marching_cubes(mask_data, level=0.5)
-        verts_world = apply_affine(prepared_mask_img.affine, verts_voxel)
+        pve_data = np.nan_to_num(pve_data, nan=0.0, posinf=0.0, neginf=0.0)
+        pve_data = np.clip(pve_data, 0.0, 1.0)
+
+        data_min = float(pve_data.min())
+        data_max = float(pve_data.max())
+
+        if not (data_min < level < data_max):
+            raise ValueError(
+                f"{tissue_name} PVE image cannot be meshed at level {level}. "
+                f"Data range is [{data_min}, {data_max}]."
+            )
+
+        verts_voxel, faces, _, _ = marching_cubes(pve_data, level=level)
+        verts_world = apply_affine(pve_img.affine, verts_voxel)
 
         return trimesh.Trimesh(
             vertices=verts_world,
@@ -342,11 +266,11 @@ class MeshAnalysisPipeline:
     def _compute_surface_areas_from_meshes(
         self,
         meshes: TissueMeshes,
-    ) -> TissueSurfaces:
-        return TissueSurfaces(
-            csf_mm2=float(mesh_surface_area(meshes.csf.vertices, meshes.csf.faces)),
-            gm_mm2=float(mesh_surface_area(meshes.gm.vertices, meshes.gm.faces)),
-            wm_mm2=float(mesh_surface_area(meshes.wm.vertices, meshes.wm.faces)),
+    ) -> TissueMeshSurfaces:
+        return TissueMeshSurfaces(
+            csf_mm2=round(float(mesh_surface_area(meshes.csf.vertices, meshes.csf.faces)), 3),
+            gm_mm2=round(float(mesh_surface_area(meshes.gm.vertices, meshes.gm.faces)), 3),
+            wm_mm2=round(float(mesh_surface_area(meshes.wm.vertices, meshes.wm.faces)), 3),
         )
 
     def _export_meshes(self, meshes: TissueMeshes) -> None:
@@ -369,10 +293,6 @@ class MeshAnalysisPipeline:
 
     def _write_metrics_json(self, result: MeshAnalysisResult) -> None:
         payload = result.to_dict()
-        payload["mask_paths"] = {
-            tissue: str(path)
-            for tissue, path in self.paths.mesh_mask_paths.items()
-        }
         payload["mesh_paths"] = {
             tissue: str(path)
             for tissue, path in self.paths.mesh_paths.items()
