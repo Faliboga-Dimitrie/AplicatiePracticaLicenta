@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+import time
+
 import nibabel as nib
 from nibabel.affines import apply_affine
 import numpy as np
@@ -16,6 +18,7 @@ from .io import load_fast_pves
 from .models import (
     MeshAnalysisResult,
     TissueMeshes,
+    TissueWireframes,
     TissueMeshSurfaces,
     TissueVolumes,
 )
@@ -46,6 +49,7 @@ class MeshAnalysisPipeline:
     """
 
     PVE_MESH_LEVEL = 0.5
+    WIREFRAME_STEP_SIZE = 3
 
     def __init__(self, paths: CasePaths, settings: Settings):
         self.paths = paths
@@ -53,6 +57,7 @@ class MeshAnalysisPipeline:
 
         self._pves: dict[str, nib.Nifti1Image] | None = None
         self._meshes: TissueMeshes | None = None
+        self._wireframes: TissueWireframes | None = None
 
     def run(self) -> MeshAnalysisResult:
         self._validate_inputs()
@@ -63,9 +68,20 @@ class MeshAnalysisPipeline:
 
         volumes = self._compute_volumes()
 
+        t0 = time.perf_counter()
         meshes = self._build_tissue_meshes()
+        t1 = time.perf_counter()
         surfaces = self._compute_surface_areas_from_meshes(meshes)
+
         self._export_meshes(meshes)
+
+        # build wireframes from the already export-prepared meshes
+        t2 = time.perf_counter()
+        wireframes = self._build_tissue_wireframes()
+        t3 = time.perf_counter()
+        self._export_wireframes(wireframes)
+        t4 = time.perf_counter()
+   
 
         result = MeshAnalysisResult(
             subject_id=self.paths.subject_id,
@@ -73,6 +89,10 @@ class MeshAnalysisPipeline:
             surfaces=surfaces,
         )
         self._write_metrics_json(result)
+        print(f"mesh build: {t1 - t0:.3f}s")
+        print(f"surface area computation and mesh export: {t2 - t1:.3f}s")
+        print(f"wireframe build: {t3 - t2:.3f}s")
+        print(f"wireframe export: {t4 - t3:.3f}s")
         return result
 
     # -------------------------------------------------------------------------
@@ -80,7 +100,19 @@ class MeshAnalysisPipeline:
     # -------------------------------------------------------------------------
 
     def _handle_existing_outputs(self) -> MeshAnalysisResult | None:
-        if self.paths.has_complete_mesh_outputs:
+        full_outputs_exist = (
+            self.paths.has_complete_mesh_outputs
+            and self.paths.has_complete_wireframe_outputs
+            and self.paths.mesh_metrics_json_path.exists()
+        )
+
+        partial_outputs_exist = (
+            self.paths.has_any_mesh_outputs
+            or self.paths.has_any_wireframe_outputs
+            or self.paths.mesh_metrics_json_path.exists()
+        )
+
+        if full_outputs_exist:
             if self.settings.skip_existing:
                 return self._load_existing_result()
 
@@ -90,22 +122,22 @@ class MeshAnalysisPipeline:
                     f"{self.paths.mesh_dir}. Set overwrite=True to rerun."
                 )
 
-            self._remove_existing_mesh_outputs()
+            self._remove_existing_outputs()
             return None
 
-        if self.paths.has_any_mesh_outputs:
+        if partial_outputs_exist:
             if not self.settings.overwrite:
                 raise FileExistsError(
                     f"Partial mesh-analysis outputs already exist for {self.paths.subject_id} in "
                     f"{self.paths.mesh_dir}. Set overwrite=True to clean and rerun."
                 )
 
-            self._remove_existing_mesh_outputs()
+            self._remove_existing_outputs()
 
         return None
 
-    def _remove_existing_mesh_outputs(self) -> None:
-        for path in self.paths.mesh_output_paths:
+    def _remove_existing_outputs(self) -> None:
+        for path in self.paths.mesh_analysis_output_paths:
             if path.exists():
                 path.unlink()
 
@@ -184,10 +216,10 @@ class MeshAnalysisPipeline:
     # -------------------------------------------------------------------------
 
     def _scale_mesh(
-    self,
-    mesh: trimesh.Trimesh,
-    factor: float,
-) -> None:
+            self,
+            mesh: trimesh.Trimesh,
+            factor: float,
+        ) -> None:
         transform = trimesh.transformations.scale_matrix(
             factor=factor,
             origin=mesh.centroid,
@@ -229,12 +261,13 @@ class MeshAnalysisPipeline:
         return self._meshes  
 
     def _mask_image_to_mesh(
-        self,
-        pve_img: nib.Nifti1Image,
-        tissue_name: str,
-        level: float = PVE_MESH_LEVEL,
-    ) -> trimesh.Trimesh:
-        
+    self,
+    pve_img: nib.Nifti1Image,
+    tissue_name: str,
+    level: float = PVE_MESH_LEVEL,
+    step_size: int = 1,
+) -> trimesh.Trimesh:
+
         pve_data = np.asarray(pve_img.get_fdata(), dtype=np.float32)
 
         if pve_data.ndim != 3:
@@ -254,7 +287,11 @@ class MeshAnalysisPipeline:
                 f"Data range is [{data_min}, {data_max}]."
             )
 
-        verts_voxel, faces, _, _ = marching_cubes(pve_data, level=level)
+        verts_voxel, faces, _, _ = marching_cubes(
+            pve_data,
+            level=level,
+            step_size=step_size,
+        )
         verts_world = apply_affine(pve_img.affine, verts_voxel)
 
         return trimesh.Trimesh(
@@ -288,6 +325,85 @@ class MeshAnalysisPipeline:
             mesh.export(str(out_path), file_type="glb")
 
     # -------------------------------------------------------------------------
+    # wireframes
+    # -------------------------------------------------------------------------
+
+    def _scale_wireframe(
+            self,
+            wireframe: trimesh.path.Path3D,
+            factor: float,
+        ) -> None:
+        center = wireframe.vertices.mean(axis=0)
+
+        transform = trimesh.transformations.scale_matrix(
+            factor=factor,
+            origin=center,
+        )
+        wireframe.apply_transform(transform)
+
+    def _set_wireframe_color(
+            self,
+            wireframe: trimesh.path.Path3D,
+            rgba: tuple[int, int, int, int],
+        ) -> None:
+        color = np.array(rgba, dtype=np.uint8)
+        wireframe.colors = np.tile(color, (len(wireframe.entities), 1))
+
+    def _build_tissue_wireframes(self) -> TissueWireframes:
+        if self._wireframes is not None:
+            return self._wireframes
+
+        pves = self._load_pves()
+
+        csf_mesh = self._mask_image_to_mesh(
+            pves["csf"],
+            "CSF wireframe",
+            step_size=self.WIREFRAME_STEP_SIZE,
+        )
+        gm_mesh = self._mask_image_to_mesh(
+            pves["gm"],
+            "GM wireframe",
+            step_size=self.WIREFRAME_STEP_SIZE,
+        )
+        wm_mesh = self._mask_image_to_mesh(
+            pves["wm"],
+            "WM wireframe",
+            step_size=self.WIREFRAME_STEP_SIZE,
+        )
+
+        # Apply the same viewing transforms as the solid meshes
+        for mesh in (csf_mesh, gm_mesh, wm_mesh):
+            self._rotate_mesh_x_90(mesh)
+            self._scale_mesh(mesh, factor=1.0)
+
+        self._wireframes = TissueWireframes(
+            csf=self._mesh_to_wireframe(csf_mesh),
+            gm=self._mesh_to_wireframe(gm_mesh),
+            wm=self._mesh_to_wireframe(wm_mesh),
+        )
+        return self._wireframes
+
+    def _mesh_to_wireframe(self, mesh: trimesh.Trimesh) -> trimesh.path.Path3D:
+        edges = mesh.edges_unique
+        segments = mesh.vertices[edges]
+        return trimesh.load_path(segments)
+
+    def _export_wireframes(self, wireframes: TissueWireframes) -> None:
+        color_map = {
+        "csf": (80, 140, 255, 60),
+        "gm":  (80, 140, 255, 60),
+        "wm":  (80, 140, 255, 60),
+        }
+
+        for tissue, wireframe in wireframes.as_dict().items():
+            out_path = self.paths.wireframe_paths[tissue]
+            
+            self._set_wireframe_color(wireframe, color_map[tissue])
+
+            scene = trimesh.Scene(wireframe)
+            scene.export(str(out_path), file_type="glb")
+
+    # -------------------------------------------------------------------------
     # metrics export
     # -------------------------------------------------------------------------
 
@@ -296,6 +412,10 @@ class MeshAnalysisPipeline:
         payload["mesh_paths"] = {
             tissue: str(path)
             for tissue, path in self.paths.mesh_paths.items()
+        }
+        payload["wireframe_paths"] = {
+            tissue: str(path)
+            for tissue, path in self.paths.wireframe_paths.items()
         }
 
         with self.paths.mesh_metrics_json_path.open("w", encoding="utf-8") as f:

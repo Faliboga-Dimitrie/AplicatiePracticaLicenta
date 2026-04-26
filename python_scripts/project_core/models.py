@@ -132,19 +132,31 @@ class CasePaths:
     def qc_fast_png(self) -> Path:
         return self.qc_dir / f"{self.subject_id}_fast_qc.png"
     
-    # ---------- meshes ---------- 
+       # ---------- meshes ----------
     @property
     def mesh_csf_mesh_path(self) -> Path:
         return self.mesh_dir / f"{self.subject_id}_csf_mesh.glb"
-    
+
     @property
     def mesh_gm_mesh_path(self) -> Path:
         return self.mesh_dir / f"{self.subject_id}_gm_mesh.glb"
-    
+
     @property
     def mesh_wm_mesh_path(self) -> Path:
         return self.mesh_dir / f"{self.subject_id}_wm_mesh.glb"
-    
+
+    @property
+    def mesh_csf_wireframe_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_csf_wireframe.glb"
+
+    @property
+    def mesh_gm_wireframe_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_gm_wireframe.glb"
+
+    @property
+    def mesh_wm_wireframe_path(self) -> Path:
+        return self.mesh_dir / f"{self.subject_id}_wm_wireframe.glb"
+
     @property
     def mesh_metrics_json_path(self) -> Path:
         return self.mesh_dir / f"{self.subject_id}_metrics.json"
@@ -165,19 +177,11 @@ class CasePaths:
             self.fast_seg_path,
         ]
         return all(path.exists() for path in required)
-    
+
     @property
     def fast_input_path(self) -> Path:
         return self.skull_stripped_path
 
-    @property
-    def has_complete_mesh_outputs(self) -> bool:
-        return all(path.exists() for path in self.mesh_output_paths)
-
-    @property
-    def has_any_mesh_outputs(self) -> bool:
-        return any(path.exists() for path in self.mesh_output_paths)
-    
     # ---------- utility methods ----------
     @property
     def fast_pve_paths(self) -> dict[str, Path]:
@@ -204,11 +208,44 @@ class CasePaths:
         }
 
     @property
+    def wireframe_paths(self) -> dict[str, Path]:
+        return {
+            "csf": self.mesh_csf_wireframe_path,
+            "gm": self.mesh_gm_wireframe_path,
+            "wm": self.mesh_wm_wireframe_path,
+        }
+
+    @property
     def mesh_output_paths(self) -> list[Path]:
+        return list(self.mesh_paths.values())
+
+    @property
+    def wireframe_output_paths(self) -> list[Path]:
+        return list(self.wireframe_paths.values())
+
+    @property
+    def mesh_analysis_output_paths(self) -> list[Path]:
         return [
-            *self.mesh_paths.values(),
+            *self.mesh_output_paths,
+            *self.wireframe_output_paths,
             self.mesh_metrics_json_path,
         ]
+
+    @property
+    def has_complete_mesh_outputs(self) -> bool:
+        return all(path.exists() for path in self.mesh_output_paths)
+
+    @property
+    def has_any_mesh_outputs(self) -> bool:
+        return any(path.exists() for path in self.mesh_output_paths)
+
+    @property
+    def has_complete_wireframe_outputs(self) -> bool:
+        return all(path.exists() for path in self.wireframe_output_paths)
+
+    @property
+    def has_any_wireframe_outputs(self) -> bool:
+        return any(path.exists() for path in self.wireframe_output_paths)
 
 
 def build_case_paths(case: MRICase, settings: Settings) -> CasePaths:

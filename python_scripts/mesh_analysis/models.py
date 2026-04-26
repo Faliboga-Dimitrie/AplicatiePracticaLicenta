@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import trimesh
+    from trimesh.path import Path3D
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,19 @@ class TissueMeshes:
             "gm": self.gm,
             "wm": self.wm,
         }
+    
+@dataclass(frozen=True)
+class TissueWireframes:
+    csf: Path3D
+    gm: Path3D
+    wm: Path3D
+
+    def as_dict(self) -> dict[str, Path3D]:
+        return {
+            "csf": self.csf,
+            "gm": self.gm,
+            "wm": self.wm,
+        }
 
 
 @dataclass(frozen=True)
@@ -54,7 +68,6 @@ class MeshAnalysisResult:
     subject_id: str
     volumes: TissueVolumes
     surfaces: TissueMeshSurfaces
-
     def to_dict(self) -> dict[str, object]:
         return {
             "subject_id": self.subject_id,
@@ -67,5 +80,6 @@ __all__ = [
     "TissueVolumes",
     "TissueMeshSurfaces",
     "TissueMeshes",
+    "TissueWireframes",
     "MeshAnalysisResult",
 ]
