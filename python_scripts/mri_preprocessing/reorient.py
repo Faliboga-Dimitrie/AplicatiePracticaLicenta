@@ -4,118 +4,160 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ..project_core import Settings
+from ..project_core.config import Settings
+from ..project_core.domain import MRICase
+from ..project_core.ports import ReorientationResult
+from ..project_core.workspace import CaseWorkspace
 from .input_checks import OrientationStatus, check_input_orientation
-from ..project_core import MRICase, CasePaths
 from .qc import maybe_save_reorientation_qc
 
 
-def _copy_to_reoriented(case: MRICase, paths: CasePaths) -> Path:
+class FslReorientationBackend:
     """
-    Copy the raw MRI into the per-subject reoriented folder.
-    Used when the image is already in the desired orientation.
+    ReorientationBackend implementation using the existing PowerShell/Docker/FSL
+    wrapper around fslreorient2std.
+
+    The backend is responsible only for producing the reoriented image inside the
+    provided CaseWorkspace. It does not decide how final artifacts are stored or
+    exposed to an API/frontend.
     """
-    paths.reoriented_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(case.raw_path, paths.reoriented_path)
-    return paths.reoriented_path
 
+    def __init__(self, settings: Settings):
+        self.settings = settings
 
-def _run_reorient_script(case: MRICase, paths: CasePaths, settings: Settings) -> None:
-    """
-    Call the PowerShell wrapper that performs fslreorient2std inside Docker.
-    """
-    paths.reoriented_dir.mkdir(parents=True, exist_ok=True)
+    def run(self, case: MRICase, workspace: CaseWorkspace) -> ReorientationResult:
+        output_path = workspace.reoriented_path
 
-    subprocess.run(
-    [
-        "powershell",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        str(settings.reorient_script),
-        "-InputPath",
-        str(case.raw_path),
-        "-OutputPath",
-        str(paths.reoriented_path),
-        "-DockerImage",
-        str(settings.fsl_docker_image),
-    ],
-    check=True,
-        
-    )
+        existing = self._handle_existing_output(output_path)
+        if existing is not None:
+            return existing
 
+        orientation = check_input_orientation(case, self.settings)
 
-def _check_output_is_standard(case: MRICase, paths: CasePaths, settings: Settings) -> None:
-    """
-    Re-run the orientation check on the produced output file.
-    """
-    post_case = MRICase(
-        subject_id=case.subject_id,
-        raw_path=paths.reoriented_path,
-    )
+        if orientation.status == OrientationStatus.ALREADY_STANDARD:
+            self._copy_to_reoriented(case.raw_path, output_path)
+            maybe_save_reorientation_qc(case, workspace, self.settings)
+            return ReorientationResult(
+                output_path=output_path,
+                already_standard=True,
+            )
 
-    post = check_input_orientation(post_case, settings)
+        if orientation.status == OrientationStatus.CAN_REORIENT:
+            self._run_reorient_script(
+                input_path=case.raw_path,
+                output_path=output_path,
+            )
+            self._require_output(output_path)
+            self._check_output_is_standard(case, workspace)
+            maybe_save_reorientation_qc(case, workspace, self.settings)
+            return ReorientationResult(
+                output_path=output_path,
+                already_standard=False,
+            )
 
-    if post.status != OrientationStatus.ALREADY_STANDARD:
         raise RuntimeError(
-            "Reorientation finished, but the output still does not match the "
-            f"template orientation. Details: {post.message}"
+            f"Automatic reorientation refused for {case.subject_id}: {orientation.message}"
         )
 
+    def _handle_existing_output(self, output_path: Path) -> ReorientationResult | None:
+        if not output_path.exists():
+            return None
 
-def run_reorientation(case: MRICase, paths: CasePaths, settings: Settings) -> Path:
-    """
-    Reorientation policy:
+        if self.settings.skip_existing:
+            return ReorientationResult(
+                output_path=output_path,
+                already_standard=False,
+            )
 
-    1. If the output already exists:
-       - return it when skip_existing=True
-       - overwrite it only when overwrite=True
-       - otherwise raise an error
-
-    2. If the input is already standard-oriented:
-       - copy it into processed_mri/reoriented/<subject>/<subject>_reo.nii.gz
-
-    3. If the input can be safely reoriented:
-       - call the PowerShell/Docker/FSL wrapper
-       - verify the produced output
-
-    4. Otherwise:
-       - stop and require manual review
-    """
-    output_path = paths.reoriented_path
-
-    if paths.has_reoriented:
-        if settings.skip_existing:
-            return output_path
-
-        if not settings.overwrite:
+        if not self.settings.overwrite:
             raise FileExistsError(
                 f"Reoriented output already exists: {output_path}. "
                 "Set overwrite=True or remove the file."
             )
 
         output_path.unlink()
+        return None
 
-    # Check the raw input before doing anything
-    result = check_input_orientation(case, settings)
+    def _copy_to_reoriented(self, input_path: Path, output_path: Path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(input_path, output_path)
 
-    if result.status == OrientationStatus.ALREADY_STANDARD:
-        out_path = _copy_to_reoriented(case, paths)
-        maybe_save_reorientation_qc(case, paths, settings)
-        return out_path
+    def _build_command(self, input_path: Path, output_path: Path) -> list[str]:
+        return [
+            "powershell",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(self.settings.reorient_script),
+            "-InputPath",
+            str(input_path),
+            "-OutputPath",
+            str(output_path),
+            "-DockerImage",
+            str(self.settings.fsl_docker_image),
+        ]
 
-    if result.status == OrientationStatus.CAN_REORIENT:
-        _run_reorient_script(case, paths, settings)
+    def _run_reorient_script(self, input_path: Path, output_path: Path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = self._build_command(input_path, output_path)
 
-        if not output_path.exists():
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if proc.returncode != 0:
             raise RuntimeError(
-                f"Reorientation script completed, but output file was not created: {output_path}"
+                "FSL reorientation failed.\n"
+                f"Command: {' '.join(cmd)}\n\n"
+                f"STDOUT:\n{proc.stdout}\n\n"
+                f"STDERR:\n{proc.stderr}"
             )
 
-        _check_output_is_standard(case, paths, settings)
-        maybe_save_reorientation_qc(case, paths, settings)
-        return output_path
+    def _require_output(self, output_path: Path) -> None:
+        if not output_path.exists():
+            raise RuntimeError(
+                "Reorientation script completed, but output file was not created: "
+                f"{output_path}"
+            )
 
-    raise RuntimeError(
-        f"Automatic reorientation refused for {case.subject_id}: {result.message}"
-    )
+    def _check_output_is_standard(self, case: MRICase, workspace: CaseWorkspace) -> None:
+        post_case = MRICase(
+            subject_id=case.subject_id,
+            raw_path=workspace.reoriented_path,
+        )
+
+        post = check_input_orientation(post_case, self.settings)
+
+        if post.status != OrientationStatus.ALREADY_STANDARD:
+            raise RuntimeError(
+                "Reorientation finished, but the output still does not match the "
+                f"template orientation. Details: {post.message}"
+            )
+
+
+# -----------------------------------------------------------------------------
+# Backwards-compatible function API
+# -----------------------------------------------------------------------------
+
+def run_reorientation(
+    case: MRICase,
+    paths: CaseWorkspace,
+    settings: Settings,
+) -> Path:
+    """
+    Compatibility wrapper for the old function-style pipeline.
+
+    New code should inject/use FslReorientationBackend through the
+    ReorientationBackend protocol.
+    """
+    backend = FslReorientationBackend(settings)
+    return backend.run(case, paths).output_path
+
+
+__all__ = [
+    "FslReorientationBackend",
+    "run_reorientation",
+]

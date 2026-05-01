@@ -5,162 +5,215 @@ from pathlib import Path
 
 import nibabel as nib
 
-from ..project_core import Settings
+from ..project_core.config import Settings
+from ..project_core.domain import MRICase
+from ..project_core.ports import SegmentationResult
+from ..project_core.workspace import CaseWorkspace
 from .input_checks import OrientationStatus, check_input_orientation
-from ..project_core import MRICase, CasePaths
 from .qc import maybe_save_fast_qc
 
 
-def _validate_fast_input(case: MRICase, paths: CasePaths, settings: Settings) -> None:
+class FslFastSegmentationBackend:
     """
-    Validate the input that will be passed to FAST.
+    SegmentationBackend implementation using FSL FAST through the existing
+    PowerShell/Docker wrapper.
 
-    FAST itself expects a brain-extracted 3D structural image.
-    In this pipeline we also keep the stricter invariant that the input
-    should still be in the chosen standard MNI orientation.
+    The backend produces FAST outputs in the provided CaseWorkspace and returns
+    typed paths to the generated PVE/segmentation files.
     """
-    input_path = paths.fast_input_path
 
-    if not input_path.exists():
-        raise FileNotFoundError(f"FAST input does not exist: {input_path}")
+    def __init__(self, settings: Settings):
+        self.settings = settings
 
-    try:
-        img = nib.load(str(input_path))
-    except Exception as exc:
-        raise RuntimeError(f"Failed to load FAST input with nibabel: {input_path}\n{exc}") from exc
+    def run(self, input_path: Path, workspace: CaseWorkspace) -> SegmentationResult:
+        input_path = Path(input_path)
 
-    if img.ndim != 3:
-        raise ValueError(
-            f"FAST expects a 3D image in this pipeline, but got ndim={img.ndim} for {input_path}"
-        )
+        existing = self._handle_existing_outputs(workspace)
+        if existing is not None:
+            return existing
 
-    # Reuse the orientation checker on the FAST input itself.
-    # Since skull stripping should preserve orientation, this should still be ALREADY_STANDARD.
-    temp_case = MRICase(
-        subject_id=case.subject_id,
-        raw_path=input_path,
-    )
-    orient = check_input_orientation(temp_case, settings)
+        self._validate_input(input_path, workspace)
+        self._run_fast(input_path, workspace)
+        self._require_outputs(workspace)
 
-    if orient.status != OrientationStatus.ALREADY_STANDARD:
-        raise RuntimeError(
-            "FAST input is expected to already be in the chosen standard orientation, "
-            f"but the check returned {orient.status.name}: {orient.message}"
-        )
+        case = MRICase(subject_id=workspace.subject_id, raw_path=workspace.raw_path)
+        maybe_save_fast_qc(case, workspace, self.settings)
 
+        return self._result_from_workspace(workspace)
 
-def _remove_existing_fast_outputs(paths: CasePaths) -> None:
-    """
-    Remove all existing FAST outputs for this subject from the subject-specific FAST folder.
-    """
-    if not paths.fast_dir.exists():
-        return
+    # ------------------------------------------------------------------
+    # existing output policy
+    # ------------------------------------------------------------------
 
-    for p in paths.fast_dir.glob(f"{paths.subject_id}*"):
-        if p.is_file():
-            p.unlink()
+    def _handle_existing_outputs(
+        self,
+        workspace: CaseWorkspace,
+    ) -> SegmentationResult | None:
+        full_outputs_exist = workspace.has_fast_outputs
+        partial_outputs_exist = any(workspace.fast_dir.glob(f"{workspace.subject_id}*"))
 
+        if full_outputs_exist:
+            if self.settings.skip_existing:
+                return self._result_from_workspace(workspace)
 
-def _list_missing_fast_outputs(paths: CasePaths) -> list[Path]:
-    expected = [
-        paths.fast_mixeltype_path,
-        paths.fast_pve_csf_path,
-        paths.fast_pve_gm_path,
-        paths.fast_pve_wm_path,
-        paths.fast_pve_seg_path,
-        paths.fast_seg_path,
-    ]
-    return [p for p in expected if not p.exists()]
+            if not self.settings.overwrite:
+                raise FileExistsError(
+                    f"FAST outputs already exist for {workspace.subject_id} in "
+                    f"{workspace.fast_dir}. Set overwrite=True to rerun."
+                )
 
+            self._remove_existing_outputs(workspace)
+            return None
 
-def run_segmentation(case: MRICase, paths: CasePaths, settings: Settings) -> Path:
-    """
-    Run FSL FAST on the skull-stripped T1 image for one subject.
+        if partial_outputs_exist:
+            if not self.settings.overwrite:
+                raise FileExistsError(
+                    f"Partial FAST outputs already exist for {workspace.subject_id} in "
+                    f"{workspace.fast_dir}. Set overwrite=True to clean and rerun."
+                )
 
-    Input:
-        paths.fast_input_path   -> skull-stripped T1
+            self._remove_existing_outputs(workspace)
 
-    Outputs:
-        paths.fast_prefix + FAST-derived outputs in processed_mri/fast/<subject>/
+        return None
 
-    Existing-output policy:
-        - if skip_existing=True and all expected outputs exist, return the main segmentation
-        - if partial outputs exist and overwrite=False, raise
-        - if overwrite=True, remove old outputs and rerun
-    """
-    input_path = paths.fast_input_path
-    output_prefix = paths.fast_prefix
+    def _remove_existing_outputs(self, workspace: CaseWorkspace) -> None:
+        if not workspace.fast_dir.exists():
+            return
 
-    full_outputs_exist = paths.has_fast_outputs
-    partial_outputs_exist = any(paths.fast_dir.glob(f"{paths.subject_id}*"))
+        for path in workspace.fast_dir.glob(f"{workspace.subject_id}*"):
+            if path.is_file():
+                path.unlink()
 
-    if full_outputs_exist:
-        if settings.skip_existing:
-            return paths.fast_seg_path
+    # ------------------------------------------------------------------
+    # validation
+    # ------------------------------------------------------------------
 
-        if not settings.overwrite:
-            raise FileExistsError(
-                f"FAST outputs already exist for {case.subject_id} in {paths.fast_dir}. "
-                "Set overwrite=True to rerun."
+    def _validate_input(self, input_path: Path, workspace: CaseWorkspace) -> None:
+        """
+        Validate the image passed to FAST.
+
+        FAST expects a brain-extracted 3D structural image. This pipeline also
+        keeps the stricter invariant that the input should already match the
+        configured MNI/template orientation.
+        """
+        if not input_path.exists():
+            raise FileNotFoundError(f"FAST input does not exist: {input_path}")
+
+        try:
+            img = nib.load(str(input_path))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load FAST input with nibabel: {input_path}\n{exc}"
+            ) from exc
+
+        if img.ndim != 3:
+            raise ValueError(
+                "FAST expects a 3D image in this pipeline, but got "
+                f"ndim={img.ndim} for {input_path}"
             )
 
-        _remove_existing_fast_outputs(paths)
+        temp_case = MRICase(
+            subject_id=workspace.subject_id,
+            raw_path=input_path,
+        )
+        orientation = check_input_orientation(temp_case, self.settings)
 
-    elif partial_outputs_exist:
-        if not settings.overwrite:
-            raise FileExistsError(
-                f"Partial FAST outputs already exist for {case.subject_id} in {paths.fast_dir}. "
-                "Set overwrite=True to clean and rerun."
+        if orientation.status != OrientationStatus.ALREADY_STANDARD:
+            raise RuntimeError(
+                "FAST input is expected to already be in the chosen standard "
+                "orientation, but the check returned "
+                f"{orientation.status.name}: {orientation.message}"
             )
 
-        _remove_existing_fast_outputs(paths)
+    # ------------------------------------------------------------------
+    # command execution
+    # ------------------------------------------------------------------
 
-    _validate_fast_input(case, paths, settings)
+    def _build_command(self, input_path: Path, workspace: CaseWorkspace) -> list[str]:
+        return [
+            "powershell",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(self.settings.fast_script),
+            "-InputPath",
+            str(input_path),
+            "-OutputPrefix",
+            str(workspace.fast_prefix),
+            "-DockerImage",
+            str(self.settings.fsl_docker_image),
+            "-Classes",
+            str(self.settings.fast_classes),
+            "-ImageType",
+            "1",  # T1 pipeline
+            "-ContainerInputDir",
+            str(self.settings.container_input_dir),
+            "-ContainerOutputDir",
+            str(self.settings.container_output_dir),
+        ]
 
-    cmd = [
-        "powershell",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        str(settings.fast_script),
-        "-InputPath",
-        str(input_path),
-        "-OutputPrefix",
-        str(output_prefix),
-        "-DockerImage",
-        str(settings.fsl_docker_image),
-        "-Classes",
-        str(settings.fast_classes),
-        "-ImageType",
-        "1",  # T1 pipeline
-        "-ContainerInputDir",
-        str(settings.container_input_dir),
-        "-ContainerOutputDir",
-        str(settings.container_output_dir),
-    ]
+    def _run_fast(self, input_path: Path, workspace: CaseWorkspace) -> None:
+        cmd = self._build_command(input_path, workspace)
 
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"FAST failed for {case.subject_id}\n"
-            f"Command: {' '.join(cmd)}\n\n"
-            f"STDOUT:\n{proc.stdout}\n\n"
-            f"STDERR:\n{proc.stderr}"
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
-    missing = _list_missing_fast_outputs(paths)
-    if missing:
-        missing_str = "\n".join(str(p) for p in missing)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"FAST failed for {workspace.subject_id}\n"
+                f"Command: {' '.join(cmd)}\n\n"
+                f"STDOUT:\n{proc.stdout}\n\n"
+                f"STDERR:\n{proc.stderr}"
+            )
+
+    def _require_outputs(self, workspace: CaseWorkspace) -> None:
+        missing = [path for path in workspace.fast_output_paths if not path.exists()]
+        if not missing:
+            return
+
+        missing_str = "\n".join(str(path) for path in missing)
         raise RuntimeError(
             "FAST reported success, but some expected output files were not created:\n"
             f"{missing_str}"
         )
 
-    maybe_save_fast_qc(case, paths, settings)
-    return paths.fast_seg_path
+    def _result_from_workspace(self, workspace: CaseWorkspace) -> SegmentationResult:
+        return SegmentationResult(
+            pve_paths=workspace.fast_pve_paths,
+            seg_path=workspace.fast_seg_path,
+            pveseg_path=workspace.fast_pve_seg_path,
+        )
+
+
+# -----------------------------------------------------------------------------
+# Backwards-compatible function API
+# -----------------------------------------------------------------------------
+
+def run_segmentation(
+    case: MRICase,
+    paths: CaseWorkspace,
+    settings: Settings,
+) -> Path:
+    """
+    Compatibility wrapper for the old function-style pipeline.
+
+    New code should inject/use FslFastSegmentationBackend through the
+    SegmentationBackend protocol.
+    """
+    backend = FslFastSegmentationBackend(settings)
+    result = backend.run(paths.fast_input_path, paths)
+
+    if result.seg_path is None:
+        raise RuntimeError("FAST completed but did not return a segmentation path.")
+
+    return result.seg_path
+
+
+__all__ = [
+    "FslFastSegmentationBackend",
+    "run_segmentation",
+]
