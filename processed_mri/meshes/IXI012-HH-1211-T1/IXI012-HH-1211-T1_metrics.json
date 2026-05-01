@@ -1,14 +1,14 @@
 {
   "subject_id": "IXI012-HH-1211-T1",
   "volumes": {
-    "csf_mm3": 304179.0,
-    "gm_mm3": 626900.062,
-    "wm_mm3": 653011.375
+    "csf_mm3": 304195.719,
+    "gm_mm3": 626910.438,
+    "wm_mm3": 652983.062
   },
   "surfaces": {
-    "csf_mm2": 304525.771,
-    "gm_mm2": 459607.371,
-    "wm_mm2": 262460.236
+    "csf_mm2": 304533.064,
+    "gm_mm2": 459617.216,
+    "wm_mm2": 262457.264
   },
   "mesh_paths": {
     "csf": "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\processed_mri\\meshes\\IXI012-HH-1211-T1\\IXI012-HH-1211-T1_csf_mesh.glb",

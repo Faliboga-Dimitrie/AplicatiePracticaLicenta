@@ -1,27 +1,35 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-
 import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Mapping
 
-import nibabel as nib
-from nibabel.affines import apply_affine
-import numpy as np
-import trimesh
-from skimage.measure import marching_cubes, mesh_surface_area
-
-from ..project_core import Settings, ensure_main_directories, settings
-from ..project_core import MRICase, CasePaths
-from ..project_core import build_prepared_case_paths, run_pipeline_cli
-from .io import load_fast_pves
-from .models import (
+from ..project_core import (
+    CaseWorkspace,
     MeshAnalysisResult,
-    TissueMeshes,
-    TissueWireframes,
-    TissueMeshSurfaces,
+    MeshExportResult,
+    MeshExporter as MeshExporterPort,
+    MeshExtractor as MeshExtractorPort,
+    MRICase,
+    Settings,
+    SurfaceEstimator as SurfaceEstimatorPort,
+    TissueSurfaces,
     TissueVolumes,
+    VolumeEstimator as VolumeEstimatorPort,
+    build_prepared_case_paths,
+    ensure_main_directories,
+    run_pipeline_cli,
+    settings,
 )
+
+from .exporters import GlbMeshExporter
+from .mesh_extractors import MarchingCubesMeshExtractor
+from .models import MeshAnalysisMeshes
+from .surface_estimators import TrimeshSurfaceEstimator
+from .volume_estimators import PveSumVolumeEstimator
+
 
 @dataclass
 class CaseRunResult:
@@ -33,31 +41,42 @@ class CaseRunResult:
 
 class MeshAnalysisPipeline:
     """
-    Mesh-analysis stage for one MRI case.
+    Mesh-analysis orchestration for one MRI case.
 
-    This class now focuses only on the actual mesh-analysis work:
-    - load FAST PVE images
-    - compute tissue volumes
-    - use PVE images to build meshes via marching cubes
-    - compute surface areas
-    - write meshes, and metrics
+    This class now coordinates strategy interfaces instead of hardcoding the
+    algorithms directly. The default strategies still use your current approach:
+    - PVE sum volume estimation
+    - skimage marching cubes
+    - mesh triangle surface area
+    - trimesh GLB export
 
-    Path and existence knowledge is delegated to CasePaths.
-    Directory creation is expected to be handled before this class runs:
-    - ensure_main_directories(settings) for global project folders
-    - paths.ensure_stage_dirs() for per-case folders
+    The important change is that the pipeline depends on protocols, so a future
+    implementation can replace one strategy without modifying this class.
     """
 
-    PVE_MESH_LEVEL = 0.5
-    WIREFRAME_STEP_SIZE = 3
-
-    def __init__(self, paths: CasePaths, settings: Settings):
-        self.paths = paths
+    def __init__(
+        self,
+        workspace: CaseWorkspace,
+        settings: Settings,
+        *,
+        volume_estimator: VolumeEstimatorPort | None = None,
+        mesh_extractor: MeshExtractorPort[MeshAnalysisMeshes] | None = None,
+        surface_estimator: SurfaceEstimatorPort[MeshAnalysisMeshes] | None = None,
+        mesh_exporter: MeshExporterPort[MeshAnalysisMeshes] | None = None,
+        log_timings: bool = True,
+    ):
+        self.workspace = workspace
         self.settings = settings
+        self.volume_estimator = volume_estimator or PveSumVolumeEstimator()
+        self.mesh_extractor = mesh_extractor or MarchingCubesMeshExtractor()
+        self.surface_estimator = surface_estimator or TrimeshSurfaceEstimator()
+        self.mesh_exporter = mesh_exporter or GlbMeshExporter()
+        self.log_timings = log_timings
 
-        self._pves: dict[str, nib.Nifti1Image] | None = None
-        self._meshes: TissueMeshes | None = None
-        self._wireframes: TissueWireframes | None = None
+    # Backwards-compatible alias while older code still says `paths`.
+    @property
+    def paths(self) -> CaseWorkspace:
+        return self.workspace
 
     def run(self) -> MeshAnalysisResult:
         self._validate_inputs()
@@ -66,33 +85,35 @@ class MeshAnalysisPipeline:
         if existing is not None:
             return existing
 
-        volumes = self._compute_volumes()
+        pve_paths = self.workspace.fast_pve_paths
 
         t0 = time.perf_counter()
-        meshes = self._build_tissue_meshes()
+        volumes = self.volume_estimator.compute(pve_paths)
         t1 = time.perf_counter()
-        surfaces = self._compute_surface_areas_from_meshes(meshes)
 
-        self._export_meshes(meshes)
-
-        # build wireframes from the already export-prepared meshes
+        meshes = self.mesh_extractor.extract_all(pve_paths)
         t2 = time.perf_counter()
-        wireframes = self._build_tissue_wireframes()
+
+        surfaces = self.surface_estimator.compute(meshes)
         t3 = time.perf_counter()
-        self._export_wireframes(wireframes)
+
+        export_result = self.mesh_exporter.export(meshes, self.workspace)
         t4 = time.perf_counter()
-   
 
         result = MeshAnalysisResult(
-            subject_id=self.paths.subject_id,
+            subject_id=self.workspace.subject_id,
             volumes=volumes,
             surfaces=surfaces,
         )
-        self._write_metrics_json(result)
-        print(f"mesh build: {t1 - t0:.3f}s")
-        print(f"surface area computation and mesh export: {t2 - t1:.3f}s")
-        print(f"wireframe build: {t3 - t2:.3f}s")
-        print(f"wireframe export: {t4 - t3:.3f}s")
+
+        self._write_metrics_json(result, export_result)
+
+        if self.log_timings:
+            print(f"volume computation: {t1 - t0:.3f}s")
+            print(f"mesh build: {t2 - t1:.3f}s")
+            print(f"surface area computation: {t3 - t2:.3f}s")
+            print(f"mesh/wireframe export: {t4 - t3:.3f}s")
+
         return result
 
     # -------------------------------------------------------------------------
@@ -100,17 +121,13 @@ class MeshAnalysisPipeline:
     # -------------------------------------------------------------------------
 
     def _handle_existing_outputs(self) -> MeshAnalysisResult | None:
-        full_outputs_exist = (
-            self.paths.has_complete_mesh_outputs
-            and self.paths.has_complete_wireframe_outputs
-            and self.paths.mesh_metrics_json_path.exists()
-        )
+        partial_outputs_exist = self.workspace.has_any_mesh_analysis_outputs
 
-        partial_outputs_exist = (
-            self.paths.has_any_mesh_outputs
-            or self.paths.has_any_wireframe_outputs
-            or self.paths.mesh_metrics_json_path.exists()
-        )
+        if not partial_outputs_exist:
+            return None
+
+        full_outputs_exist = self.workspace.has_complete_mesh_analysis_outputs
+
 
         if full_outputs_exist:
             if self.settings.skip_existing:
@@ -118,8 +135,8 @@ class MeshAnalysisPipeline:
 
             if not self.settings.overwrite:
                 raise FileExistsError(
-                    f"Mesh-analysis outputs already exist for {self.paths.subject_id} in "
-                    f"{self.paths.mesh_dir}. Set overwrite=True to rerun."
+                    f"Mesh-analysis outputs already exist for {self.workspace.subject_id} in "
+                    f"{self.workspace.mesh_dir}. Set overwrite=True to rerun."
                 )
 
             self._remove_existing_outputs()
@@ -128,8 +145,8 @@ class MeshAnalysisPipeline:
         if partial_outputs_exist:
             if not self.settings.overwrite:
                 raise FileExistsError(
-                    f"Partial mesh-analysis outputs already exist for {self.paths.subject_id} in "
-                    f"{self.paths.mesh_dir}. Set overwrite=True to clean and rerun."
+                    f"Partial mesh-analysis outputs already exist for {self.workspace.subject_id} in "
+                    f"{self.workspace.mesh_dir}. Set overwrite=True to clean and rerun."
                 )
 
             self._remove_existing_outputs()
@@ -137,39 +154,28 @@ class MeshAnalysisPipeline:
         return None
 
     def _remove_existing_outputs(self) -> None:
-        for path in self.paths.mesh_analysis_output_paths:
+        for path in self.workspace.mesh_analysis_output_paths:
             if path.exists():
                 path.unlink()
 
     def _load_existing_result(self) -> MeshAnalysisResult:
-        metrics_path = self.paths.mesh_metrics_json_path
+        metrics_path = self.workspace.mesh_metrics_json_path
 
         with metrics_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
 
-        volumes_data = payload["volumes"]
-        surfaces_data = payload["surfaces"]
-
         return MeshAnalysisResult(
             subject_id=str(payload["subject_id"]),
-            volumes=TissueVolumes(
-                csf_mm3=float(volumes_data["csf_mm3"]),
-                gm_mm3=float(volumes_data["gm_mm3"]),
-                wm_mm3=float(volumes_data["wm_mm3"]),
-            ),
-            surfaces=TissueMeshSurfaces(
-                csf_mm2=float(surfaces_data["csf_mm2"]),
-                gm_mm2=float(surfaces_data["gm_mm2"]),
-                wm_mm2=float(surfaces_data["wm_mm2"]),
-            ),
+            volumes=TissueVolumes.from_mapping(payload["volumes"]),
+            surfaces=TissueSurfaces.from_mapping(payload["surfaces"]),
         )
 
     # -------------------------------------------------------------------------
-    # validation / loading
+    # validation
     # -------------------------------------------------------------------------
 
     def _validate_inputs(self) -> None:
-        missing = self.paths.missing_fast_pve_paths
+        missing = self.workspace.missing_fast_pve_paths
         if missing:
             missing_str = "\n".join(str(path) for path in missing)
             raise FileNotFoundError(
@@ -177,249 +183,28 @@ class MeshAnalysisPipeline:
                 f"{missing_str}"
             )
 
-    def _load_pves(self) -> dict[str, nib.Nifti1Image]:
-        if self._pves is None:
-            self._pves = load_fast_pves(self.paths)
-        return self._pves
-
-    # -------------------------------------------------------------------------
-    # volume
-    # -------------------------------------------------------------------------
-
-    def _voxel_volume_mm3(self, img: nib.Nifti1Image) -> float:
-    # More robust than header zooms if the affine has rotations/shears
-        return float(abs(np.linalg.det(img.affine[:3, :3])))
-
-
-    def _pve_volume_mm3(self, pve_img: nib.Nifti1Image) -> float:
-        data = np.asarray(pve_img.get_fdata(), dtype=np.float32)
-
-        # Avoid tiny numerical weirdness outside [0, 1]
-        data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
-        data = np.clip(data, 0.0, 1.0)
-
-        voxel_volume_mm3 = self._voxel_volume_mm3(pve_img)
-
-        return round(float(data.sum() * voxel_volume_mm3), 3)
-
-    def _compute_volumes(self) -> TissueVolumes:
-        pves = self._load_pves()
-
-        return TissueVolumes(
-            csf_mm3=self._pve_volume_mm3(pves["csf"]),
-            gm_mm3=self._pve_volume_mm3(pves["gm"]),
-            wm_mm3=self._pve_volume_mm3(pves["wm"]),
-        )
-
-    # -------------------------------------------------------------------------
-    # meshes
-    # -------------------------------------------------------------------------
-
-    def _scale_mesh(
-            self,
-            mesh: trimesh.Trimesh,
-            factor: float,
-        ) -> None:
-        transform = trimesh.transformations.scale_matrix(
-            factor=factor,
-            origin=mesh.centroid,
-        )
-        mesh.apply_transform(transform)
-
-    def _rotate_mesh_x_90(self, mesh: trimesh.Trimesh) -> None:
-        transform = trimesh.transformations.rotation_matrix(
-            angle=np.deg2rad(-90.0),
-            direction=[1, 0, 0],
-            point=mesh.centroid,
-        )
-        mesh.apply_transform(transform)
-
-    def _apply_transparent_material(
-        self,
-        mesh: trimesh.Trimesh,
-        rgba: tuple[int, int, int, int],
-    ) -> None:
-        material = trimesh.visual.material.PBRMaterial(
-            baseColorFactor=list(rgba),
-            alphaMode="BLEND",
-            doubleSided=True,
-        )
-
-        mesh.visual = trimesh.visual.TextureVisuals(material=material)
-
-    def _build_tissue_meshes(self) -> TissueMeshes:
-        if self._meshes is not None:
-            return self._meshes
-        
-        pves = self._load_pves()
-
-        self._meshes = TissueMeshes(
-            csf=self._mask_image_to_mesh(pves["csf"], "CSF"),
-            gm=self._mask_image_to_mesh(pves["gm"], "GM"),
-            wm=self._mask_image_to_mesh(pves["wm"], "WM"),
-        )
-        return self._meshes  
-
-    def _mask_image_to_mesh(
-    self,
-    pve_img: nib.Nifti1Image,
-    tissue_name: str,
-    level: float = PVE_MESH_LEVEL,
-    step_size: int = 1,
-) -> trimesh.Trimesh:
-
-        pve_data = np.asarray(pve_img.get_fdata(), dtype=np.float32)
-
-        if pve_data.ndim != 3:
-            raise ValueError(
-                f"Expected 3D PVE image for mesh analysis, got ndim={pve_data.ndim}"
-            )
-
-        pve_data = np.nan_to_num(pve_data, nan=0.0, posinf=0.0, neginf=0.0)
-        pve_data = np.clip(pve_data, 0.0, 1.0)
-
-        data_min = float(pve_data.min())
-        data_max = float(pve_data.max())
-
-        if not (data_min < level < data_max):
-            raise ValueError(
-                f"{tissue_name} PVE image cannot be meshed at level {level}. "
-                f"Data range is [{data_min}, {data_max}]."
-            )
-
-        verts_voxel, faces, _, _ = marching_cubes(
-            pve_data,
-            level=level,
-            step_size=step_size,
-        )
-        verts_world = apply_affine(pve_img.affine, verts_voxel)
-
-        return trimesh.Trimesh(
-            vertices=verts_world,
-            faces=faces,
-            process=False,
-        )
-
-    def _compute_surface_areas_from_meshes(
-        self,
-        meshes: TissueMeshes,
-    ) -> TissueMeshSurfaces:
-        return TissueMeshSurfaces(
-            csf_mm2=round(float(mesh_surface_area(meshes.csf.vertices, meshes.csf.faces)), 3),
-            gm_mm2=round(float(mesh_surface_area(meshes.gm.vertices, meshes.gm.faces)), 3),
-            wm_mm2=round(float(mesh_surface_area(meshes.wm.vertices, meshes.wm.faces)), 3),
-        )
-
-    def _export_meshes(self, meshes: TissueMeshes) -> None:
-        export_map = {
-        "csf": (self.paths.mesh_csf_mesh_path, (80, 140, 255, 60)),
-        "gm":  (self.paths.mesh_gm_mesh_path,  (80, 140, 255, 90)),
-        "wm":  (self.paths.mesh_wm_mesh_path,  (80, 140, 255, 180)),
-    }
-
-        for tissue, mesh in meshes.as_dict().items():
-            out_path, rgba = export_map[tissue]
-            self._rotate_mesh_x_90(mesh)
-            self._scale_mesh(mesh, factor=1.0)
-            self._apply_transparent_material(mesh, rgba)
-            mesh.export(str(out_path), file_type="glb")
-
-    # -------------------------------------------------------------------------
-    # wireframes
-    # -------------------------------------------------------------------------
-
-    def _scale_wireframe(
-            self,
-            wireframe: trimesh.path.Path3D,
-            factor: float,
-        ) -> None:
-        center = wireframe.vertices.mean(axis=0)
-
-        transform = trimesh.transformations.scale_matrix(
-            factor=factor,
-            origin=center,
-        )
-        wireframe.apply_transform(transform)
-
-    def _set_wireframe_color(
-            self,
-            wireframe: trimesh.path.Path3D,
-            rgba: tuple[int, int, int, int],
-        ) -> None:
-        color = np.array(rgba, dtype=np.uint8)
-        wireframe.colors = np.tile(color, (len(wireframe.entities), 1))
-
-    def _build_tissue_wireframes(self) -> TissueWireframes:
-        if self._wireframes is not None:
-            return self._wireframes
-
-        pves = self._load_pves()
-
-        csf_mesh = self._mask_image_to_mesh(
-            pves["csf"],
-            "CSF wireframe",
-            step_size=self.WIREFRAME_STEP_SIZE,
-        )
-        gm_mesh = self._mask_image_to_mesh(
-            pves["gm"],
-            "GM wireframe",
-            step_size=self.WIREFRAME_STEP_SIZE,
-        )
-        wm_mesh = self._mask_image_to_mesh(
-            pves["wm"],
-            "WM wireframe",
-            step_size=self.WIREFRAME_STEP_SIZE,
-        )
-
-        # Apply the same viewing transforms as the solid meshes
-        for mesh in (csf_mesh, gm_mesh, wm_mesh):
-            self._rotate_mesh_x_90(mesh)
-            self._scale_mesh(mesh, factor=1.0)
-
-        self._wireframes = TissueWireframes(
-            csf=self._mesh_to_wireframe(csf_mesh),
-            gm=self._mesh_to_wireframe(gm_mesh),
-            wm=self._mesh_to_wireframe(wm_mesh),
-        )
-        return self._wireframes
-
-    def _mesh_to_wireframe(self, mesh: trimesh.Trimesh) -> trimesh.path.Path3D:
-        edges = mesh.edges_unique
-        segments = mesh.vertices[edges]
-        return trimesh.load_path(segments)
-
-    def _export_wireframes(self, wireframes: TissueWireframes) -> None:
-        color_map = {
-        "csf": (80, 140, 255, 60),
-        "gm":  (80, 140, 255, 60),
-        "wm":  (80, 140, 255, 60),
-        }
-
-        for tissue, wireframe in wireframes.as_dict().items():
-            out_path = self.paths.wireframe_paths[tissue]
-            
-            self._set_wireframe_color(wireframe, color_map[tissue])
-
-            scene = trimesh.Scene(wireframe)
-            scene.export(str(out_path), file_type="glb")
-
     # -------------------------------------------------------------------------
     # metrics export
     # -------------------------------------------------------------------------
 
-    def _write_metrics_json(self, result: MeshAnalysisResult) -> None:
+    def _write_metrics_json(
+        self,
+        result: MeshAnalysisResult,
+        export_result: MeshExportResult,
+    ) -> None:
         payload = result.to_dict()
-        payload["mesh_paths"] = {
-            tissue: str(path)
-            for tissue, path in self.paths.mesh_paths.items()
-        }
-        payload["wireframe_paths"] = {
-            tissue: str(path)
-            for tissue, path in self.paths.wireframe_paths.items()
-        }
+        payload["mesh_paths"] = _stringify_paths(export_result.mesh_paths)
 
-        with self.paths.mesh_metrics_json_path.open("w", encoding="utf-8") as f:
+        if export_result.wireframe_paths is not None:
+            payload["wireframe_paths"] = _stringify_paths(export_result.wireframe_paths)
+
+        self.workspace.mesh_metrics_json_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.workspace.mesh_metrics_json_path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
+
+
+def _stringify_paths(paths: Mapping[str, Path]) -> dict[str, str]:
+    return {name: str(path) for name, path in paths.items()}
 
 
 def _preflight_checks(settings_obj: Settings) -> None:
@@ -427,10 +212,10 @@ def _preflight_checks(settings_obj: Settings) -> None:
 
 
 def _process_case(case: MRICase, settings_obj: Settings) -> CaseRunResult:
-    paths = build_prepared_case_paths(case, settings_obj)
+    workspace = build_prepared_case_paths(case, settings_obj)
 
     try:
-        pipeline = MeshAnalysisPipeline(paths, settings_obj)
+        pipeline = MeshAnalysisPipeline(workspace, settings_obj)
         result = pipeline.run()
 
         return CaseRunResult(
@@ -474,7 +259,7 @@ def _print_summary(results: list[CaseRunResult]) -> None:
 
 def main() -> int:
     return run_pipeline_cli(
-        description="Run the mesh-analysis pipeline: PVE volumes -> masks -> meshes -> metrics",
+        description="Run the mesh-analysis pipeline: PVE volumes -> meshes -> metrics",
         settings_obj=settings,
         preflight_checks=_preflight_checks,
         process_case=_process_case,
@@ -486,3 +271,10 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+__all__ = [
+    "CaseRunResult",
+    "MeshAnalysisPipeline",
+    "main",
+]
