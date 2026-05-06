@@ -53,17 +53,16 @@ class GlbMeshExporter:
 
     def export(
         self,
-        meshes: MeshAnalysisMeshes | TissueMeshes,
+        meshes: MeshAnalysisMeshes,
         workspace: CaseWorkspace,
     ) -> MeshExportResult:
-        workspace.mesh_dir.mkdir(parents=True, exist_ok=True)
 
-        solid_meshes = self._solid_meshes(meshes)
+        solid_meshes = meshes.solid
         mesh_paths = self._export_solid_meshes(solid_meshes, workspace)
 
         wireframe_paths: dict[str, Path] | None = None
         if self.config.export_wireframes:
-            wireframe_source = self._wireframe_source(meshes)
+            wireframe_source = meshes.wireframe_source
             wireframes = self._build_wireframes(wireframe_source)
             wireframe_paths = self._export_wireframes(wireframes, workspace)
 
@@ -71,16 +70,6 @@ class GlbMeshExporter:
             mesh_paths=mesh_paths,
             wireframe_paths=wireframe_paths,
         )
-
-    def _solid_meshes(self, meshes: MeshAnalysisMeshes | TissueMeshes) -> TissueMeshes:
-        if isinstance(meshes, MeshAnalysisMeshes):
-            return meshes.solid
-        return meshes
-
-    def _wireframe_source(self, meshes: MeshAnalysisMeshes | TissueMeshes) -> TissueMeshes:
-        if isinstance(meshes, MeshAnalysisMeshes) and meshes.wireframe_source is not None:
-            return meshes.wireframe_source
-        return self._solid_meshes(meshes)
 
     def _export_solid_meshes(
         self,

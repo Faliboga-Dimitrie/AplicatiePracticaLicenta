@@ -11,7 +11,7 @@ from typing import Optional
 
 from ..project_core import Settings
 
-from ..project_core import MRICase, CasePaths
+from ..project_core import MRICase, CaseWorkspace
 
 
 def _load_canonical_data(path: Path, like: nib.Nifti1Image | None = None, order: int = 1) -> tuple[nib.Nifti1Image, np.ndarray]:
@@ -83,7 +83,7 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def save_reorientation_qc(case: MRICase, paths: CasePaths) -> Path:
+def save_reorientation_qc(case: MRICase, paths: CaseWorkspace) -> Path:
     """
     Save side-by-side QC for raw vs reoriented MRI.
     """
@@ -116,7 +116,7 @@ def save_reorientation_qc(case: MRICase, paths: CasePaths) -> Path:
     return out_path
 
 
-def save_bet_qc(case: MRICase, paths: CasePaths) -> Path:
+def save_bet_qc(case: MRICase, paths: CaseWorkspace) -> Path:
     """
     Save QC for skull stripping:
     - reoriented T1 with HD-BET mask overlay
@@ -157,7 +157,7 @@ def save_bet_qc(case: MRICase, paths: CasePaths) -> Path:
     return out_path
 
 
-def save_fast_qc(case: MRICase, paths: CasePaths) -> Path:
+def save_fast_qc(case: MRICase, paths: CaseWorkspace) -> Path:
     """
     Save FAST QC:
     - skull-stripped T1
@@ -207,7 +207,7 @@ def save_fast_qc(case: MRICase, paths: CasePaths) -> Path:
     return out_path
 
 
-def run_available_qc(case: MRICase, paths: CasePaths) -> dict[str, Path]:
+def run_available_qc(case: MRICase, paths: CaseWorkspace) -> dict[str, Path]:
     """
     Run all QC steps for which the required files exist.
     Returns a dictionary of generated QC outputs.
@@ -247,7 +247,7 @@ def _handle_qc_result(
 
 def maybe_save_reorientation_qc(
     case: MRICase,
-    paths: CasePaths,
+    paths: CaseWorkspace,
     settings: Settings,
 ) -> Optional[Path]:
     if not settings.generate_qc:
@@ -261,7 +261,7 @@ def maybe_save_reorientation_qc(
 
 def maybe_save_bet_qc(
     case: MRICase,
-    paths: CasePaths,
+    paths: CaseWorkspace,
     settings: Settings,
 ) -> Optional[Path]:
     if not settings.generate_qc:
@@ -275,7 +275,7 @@ def maybe_save_bet_qc(
 
 def maybe_save_fast_qc(
     case: MRICase,
-    paths: CasePaths,
+    paths: CaseWorkspace,
     settings: Settings,
 ) -> Optional[Path]:
     if not settings.generate_qc:

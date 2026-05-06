@@ -186,30 +186,23 @@ def _process_case(case: MRICase, settings_obj: Settings) -> CaseRunResult:
         )
 
 
-def _print_summary(results: list[CaseRunResult]) -> None:
+def _print_summary(result: CaseRunResult) -> bool:
     print("\n" + "#" * 80)
     print("PREPROCESSING SUMMARY")
     print("#" * 80)
 
-    ok_count = 0
-    fail_count = 0
-
-    for res in results:
-        if res.success and res.result is not None:
-            ok_count += 1
-            print(f"[OK] {res.subject_id}")
-            print(f"     reoriented    : {res.reoriented_path}")
-            print(f"     skull-stripped: {res.skull_stripped_path}")
-            print(f"     segmentation  : {res.segmentation_path}")
-        else:
-            fail_count += 1
-            print(f"[FAIL] {res.subject_id}")
-            print(f"       error: {res.error}")
+    ok: bool = result.success and result.result is not None
+    if ok:
+        print(f"[OK] {result.subject_id}")
+        print(f"     reoriented    : {result.reoriented_path}")
+        print(f"     skull-stripped: {result.skull_stripped_path}")
+        print(f"     segmentation  : {result.segmentation_path}")
+    else:
+        print(f"[FAIL] {result.subject_id}")
+        print(f"       error: {result.error}")
 
     print("-" * 80)
-    print(f"Successful: {ok_count}")
-    print(f"Failed    : {fail_count}")
-    print(f"Total     : {len(results)}")
+    return ok
 
 
 def main() -> int:
@@ -220,7 +213,6 @@ def main() -> int:
         process_case=_process_case,
         print_summary=_print_summary,
         case_header_title="Processing case",
-        success_message=lambda case, _result: f"[OK] Completed preprocessing: {case.subject_id}",
     )
 
 

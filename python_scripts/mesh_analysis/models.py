@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..project_core import MeshAnalysisResult, TissueMeshSurfaces, TissueSurfaces, TissueVolumes
+from ..project_core import MeshAnalysisResult, TissueSurfaces, TissueSurfaces, TissueVolumes
 
 if TYPE_CHECKING:
     import trimesh
@@ -69,7 +69,7 @@ __all__ = [
     # Re-exported domain models for a smoother migration from the old file.
     "TissueVolumes",
     "TissueSurfaces",
-    "TissueMeshSurfaces",
+    "TissueSurfaces",
     "MeshAnalysisResult",
     # mesh_analysis-specific implementation models
     "TissueMeshes",

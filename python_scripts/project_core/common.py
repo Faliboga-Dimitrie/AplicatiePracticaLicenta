@@ -32,31 +32,56 @@ def is_nifti_path(path: Path) -> bool:
     return name.endswith(".nii") or name.endswith(".nii.gz")
 
 
-def discover_cases(
+def discover_case(
     settings_obj: Settings,
     subject_filter: str | None = None,
-) -> list[MRICase]:
+) -> MRICase:
     """
-    Discover raw MRI inputs from settings.input_mri_dir.
-    Assumes input_mri contains raw NIfTI inputs only.
+    Discover exactly one raw MRI case from settings.input_mri_dir.
+
+    input_mri is expected to contain raw NIfTI files directly, not per-subject
+    folders. Because one subject must map to one raw input file, this function
+    returns the matching case or raises an explicit error.
     """
-    if not settings_obj.input_mri_dir.exists():
-        raise FileNotFoundError(
-            f"Input MRI directory does not exist: {settings_obj.input_mri_dir}"
+
+    if subject_filter is None:
+        raise ValueError(
+            "A subject_id is required when scanning input_mri/. "
+            "Use --subject <subject_id> or --input <path>."
         )
 
-    files = sorted(
-        path
-        for path in settings_obj.input_mri_dir.iterdir()
-        if path.is_file() and is_nifti_path(path)
-    )
+    found_case: MRICase | None = None
 
-    cases = [MRICase.from_input_path(path) for path in files]
+    for path in settings_obj.input_mri_dir.iterdir():
+        if not path.is_file():
+            continue
 
-    if subject_filter is not None:
-        cases = [case for case in cases if case.subject_id == subject_filter]
+        if not is_nifti_path(path):
+            continue
 
-    return cases
+        case = MRICase.from_input_path(path)
+
+        if case.subject_id != subject_filter:
+            continue
+
+        if found_case is not None:
+            raise RuntimeError(
+                "Duplicate raw MRI inputs found for subject "
+                f"'{subject_filter}':\n"
+                f"- {found_case.raw_path}\n"
+                f"- {case.raw_path}\n\n"
+                "input_mri/ must contain at most one NIfTI file per subject."
+            )
+
+        found_case = case
+
+    if found_case is None:
+        raise FileNotFoundError(
+            f"No raw NIfTI input found for subject '{subject_filter}' in "
+            f"{settings_obj.input_mri_dir}"
+        )
+
+    return found_case
 
 
 def build_single_case(input_path: Path) -> MRICase:
@@ -100,7 +125,7 @@ def parse_pipeline_args(description: str) -> argparse.Namespace:
         "--subject",
         type=str,
         default=None,
-        help="When scanning input_mri/, process only the matching subject_id.",
+        help="Required when scanning input_mri/. Process the matching subject_id.",
     )
 
     parser.add_argument(
@@ -115,16 +140,16 @@ def parse_pipeline_args(description: str) -> argparse.Namespace:
 def select_cases_from_args(
     args: argparse.Namespace,
     settings_obj: Settings,
-) -> list[MRICase]:
+) -> MRICase:
     """
     Apply the shared input-selection policy:
     - --input means one explicit file
-    - otherwise scan input_mri/, optionally filtered by --subject
+    - otherwise scan input_mri/, filtered by --subject
     """
     if args.input is not None:
-        return [build_single_case(args.input)]
+        return build_single_case(args.input)
 
-    return discover_cases(settings_obj, subject_filter=args.subject)
+    return discover_case(settings_obj, subject_filter=args.subject)
 
 
 def print_case_header(case: MRICase, title: str = "Processing case") -> None:
@@ -148,7 +173,6 @@ def run_pipeline_cli(
     settings_obj: Settings = settings,
     preflight_checks: Callable[[Settings], None] = default_preflight_checks,
     case_header_title: str = "Processing case",
-    success_message: Callable[[MRICase, R], str] | None = None,
 ) -> int:
     """
     Shared CLI orchestration for pipeline entry points.
@@ -163,32 +187,19 @@ def run_pipeline_cli(
 
     try:
         preflight_checks(settings_obj)
-        cases = select_cases_from_args(args, settings_obj)
+        case = select_cases_from_args(args, settings_obj)
 
-        if not cases:
+        if not case:
             print("No input MRI files found to process.")
             return 1
+       
+        print_case_header(case, title=case_header_title)
+        result = process_case(case, settings_obj)
 
-        results: list[R] = []
-
-        for case in cases:
-            print_case_header(case, title=case_header_title)
-            result = process_case(case, settings_obj)
-            results.append(result)
-
-            if result.success:
-                if success_message is None:
-                    print(f"[OK] Completed: {case.subject_id}")
-                else:
-                    print(success_message(case, result))
-            else:
-                print(f"[FAIL] {case.subject_id}: {result.error}")
-                if args.fail_fast:
-                    print_summary(results)
-                    return 1
-
-        print_summary(results)
-        return 0 if all(result.success for result in results) else 1
+        if print_summary(result):
+            return 0
+        
+        return 2
 
     except Exception as exc:
         print(f"[FATAL] {exc}", file=sys.stderr)
@@ -198,7 +209,7 @@ def run_pipeline_cli(
 __all__ = [
     "CaseRunResultLike",
     "is_nifti_path",
-    "discover_cases",
+    "discover_case",
     "build_single_case",
     "build_prepared_case_paths",
     "parse_pipeline_args",

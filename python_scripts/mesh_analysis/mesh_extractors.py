@@ -28,6 +28,7 @@ class MarchingCubesConfig:
     level: float = 0.5
     solid_step_size: int = 1
     wireframe_step_size: int | None = 3
+    create_wireframe_source: bool = True
 
 
 class MarchingCubesMeshExtractor:
@@ -50,7 +51,7 @@ class MarchingCubesMeshExtractor:
         )
 
         wireframe_source: TissueMeshes | None = None
-        if self.config.wireframe_step_size is not None:
+        if self.config.wireframe_step_size is not None and self.config.create_wireframe_source:
             wireframe_source = self._extract_tissue_meshes(
                 pve_paths=pve_paths,
                 step_size=self.config.wireframe_step_size,
@@ -71,30 +72,21 @@ class MarchingCubesMeshExtractor:
     ) -> TissueMeshes:
         return TissueMeshes(
             csf=self._pve_path_to_mesh(
-                self._path_for_tissue(pve_paths, TissueName.CSF),
+                pve_paths[TissueName.CSF.value],
                 "CSF" + label_suffix,
                 step_size=step_size,
             ),
             gm=self._pve_path_to_mesh(
-                self._path_for_tissue(pve_paths, TissueName.GM),
+                pve_paths[TissueName.GM.value],
                 "GM" + label_suffix,
                 step_size=step_size,
             ),
             wm=self._pve_path_to_mesh(
-                self._path_for_tissue(pve_paths, TissueName.WM),
+                pve_paths[TissueName.WM.value],
                 "WM" + label_suffix,
                 step_size=step_size,
             ),
         )
-
-    def _path_for_tissue(self, pve_paths: Mapping[str, Path], tissue: TissueName) -> Path:
-        try:
-            return Path(pve_paths[tissue.value])
-        except KeyError as exc:
-            raise KeyError(
-                f"Missing PVE path for tissue '{tissue.value}'. "
-                f"Available keys: {list(pve_paths.keys())}"
-            ) from exc
 
     def _pve_path_to_mesh(
         self,

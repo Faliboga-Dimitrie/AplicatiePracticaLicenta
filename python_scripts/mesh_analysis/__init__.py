@@ -1,4 +1,4 @@
-from ..project_core import MeshAnalysisResult, TissueMeshSurfaces, TissueSurfaces, TissueVolumes
+from ..project_core import MeshAnalysisResult, TissueSurfaces, TissueSurfaces, TissueVolumes
 from .exporters import GlbExportConfig, GlbMeshExporter
 from .mesh_extractors import MarchingCubesConfig, MarchingCubesMeshExtractor
 from .models import MeshAnalysisMeshes, TissueMeshes, TissueWireframes
@@ -9,7 +9,7 @@ from .volume_estimators import PveSumVolumeEstimator
 __all__ = [
     "TissueVolumes",
     "TissueSurfaces",
-    "TissueMeshSurfaces",
+    "TissueSurfaces",
     "MeshAnalysisResult",
     "TissueMeshes",
     "TissueWireframes",

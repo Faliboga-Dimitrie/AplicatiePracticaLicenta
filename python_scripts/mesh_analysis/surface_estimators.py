@@ -5,13 +5,7 @@ from typing import overload
 from skimage.measure import mesh_surface_area
 
 from ..project_core import TissueSurfaces
-from .models import MeshAnalysisMeshes, TissueMeshes
-
-
-def _solid_meshes(meshes: MeshAnalysisMeshes | TissueMeshes) -> TissueMeshes:
-    if isinstance(meshes, MeshAnalysisMeshes):
-        return meshes.solid
-    return meshes
+from .models import MeshAnalysisMeshes
 
 
 class TrimeshSurfaceEstimator:
@@ -22,8 +16,8 @@ class TrimeshSurfaceEstimator:
     metric only from the solid meshes, not from the simplified wireframe source.
     """
 
-    def compute(self, meshes: MeshAnalysisMeshes | TissueMeshes) -> TissueSurfaces:
-        solid = _solid_meshes(meshes)
+    def compute(self, meshes: MeshAnalysisMeshes) -> TissueSurfaces:
+        solid = meshes.solid
 
         return TissueSurfaces(
             csf_mm2=self._area_mm2(solid.csf),

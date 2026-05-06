@@ -73,11 +73,6 @@ class MeshAnalysisPipeline:
         self.mesh_exporter = mesh_exporter or GlbMeshExporter()
         self.log_timings = log_timings
 
-    # Backwards-compatible alias while older code still says `paths`.
-    @property
-    def paths(self) -> CaseWorkspace:
-        return self.workspace
-
     def run(self) -> MeshAnalysisResult:
         self._validate_inputs()
 
@@ -232,29 +227,23 @@ def _process_case(case: MRICase, settings_obj: Settings) -> CaseRunResult:
         )
 
 
-def _print_summary(results: list[CaseRunResult]) -> None:
+def _print_summary(case: CaseRunResult) -> bool:
     print("\n" + "#" * 80)
     print("MESH ANALYSIS SUMMARY")
     print("#" * 80)
 
-    ok_count = 0
-    fail_count = 0
+    ok: bool = case.success and case.result is not None
 
-    for res in results:
-        if res.success and res.result is not None:
-            ok_count += 1
-            print(f"[OK] {res.subject_id}")
-            print(f"     volumes : {res.result.volumes.to_dict()}")
-            print(f"     surfaces: {res.result.surfaces.to_dict()}")
-        else:
-            fail_count += 1
-            print(f"[FAIL] {res.subject_id}")
-            print(f"       error: {res.error}")
+    if ok:
+        print(f"[OK] {case.subject_id}")
+        print(f"     volumes : {case.result.volumes.to_dict()}")
+        print(f"     surfaces: {case.result.surfaces.to_dict()}")
+    else:
+        print(f"[FAIL] {case.subject_id}")
+        print(f"       error: {case.error}")
 
     print("-" * 80)
-    print(f"Successful: {ok_count}")
-    print(f"Failed    : {fail_count}")
-    print(f"Total     : {len(results)}")
+    return ok
 
 
 def main() -> int:
@@ -265,7 +254,6 @@ def main() -> int:
         process_case=_process_case,
         print_summary=_print_summary,
         case_header_title="Mesh analysis for case",
-        success_message=lambda case, _result: f"[OK] Completed mesh analysis: {case.subject_id}",
     )
 
 

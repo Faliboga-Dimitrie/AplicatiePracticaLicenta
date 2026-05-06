@@ -8,7 +8,7 @@ from .domain import (
     MRICase,
     TissueVolumes,
     TissueSurfaces,
-    TissueMeshSurfaces,
+    TissueSurfaces,
     CaseMetrics,
     MeshAnalysisResult,
     CaseProcessingResult,
@@ -16,7 +16,7 @@ from .domain import (
 
 from .workspace import (
     CaseWorkspace,
-    CasePaths,
+    CaseWorkspace,
     FileSystemWorkspaceProvider,
     build_case_workspace,
     build_case_paths,
@@ -64,13 +64,13 @@ __all__ = [
     "MRICase",
     "TissueVolumes",
     "TissueSurfaces",
-    "TissueMeshSurfaces",
+    "TissueSurfaces",
     "CaseMetrics",
     "MeshAnalysisResult",
     "CaseProcessingResult",
     # workspace
     "CaseWorkspace",
-    "CasePaths",
+    "CaseWorkspace",
     "FileSystemWorkspaceProvider",
     "build_case_workspace",
     "build_case_paths",

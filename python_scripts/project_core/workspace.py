@@ -57,10 +57,6 @@ class CaseWorkspace:
         for directory in self.stage_dirs:
             directory.mkdir(parents=True, exist_ok=True)
 
-    # Backwards-compatible name while migrating from CasePaths.
-    def ensure_stage_dirs(self) -> None:
-        self.ensure_directories()
-
     # ------------------------------------------------------------------
     # reorientation
     # ------------------------------------------------------------------
@@ -322,18 +318,12 @@ def build_case_workspace(case: MRICase, settings: Settings) -> CaseWorkspace:
         mesh_dir=Path(settings.mesh_dir) / subject_id,
     )
 
-
-# Backwards-compatible aliases while migrating from CasePaths/build_case_paths.
-CasePaths = CaseWorkspace
-
-
 def build_case_paths(case: MRICase, settings: Settings) -> CaseWorkspace:
     return build_case_workspace(case, settings)
 
 
 __all__ = [
     "CaseWorkspace",
-    "CasePaths",
     "FileSystemWorkspaceProvider",
     "build_case_workspace",
     "build_case_paths",

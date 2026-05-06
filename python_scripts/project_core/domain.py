@@ -165,11 +165,6 @@ class TissueSurfaces:
             wm_mm2=float(data.get("wm_mm2", data.get("wm", 0.0))),
         )
 
-
-# Backwards-compatible name while migrating the old mesh_analysis model.
-TissueMeshSurfaces = TissueSurfaces
-
-
 @dataclass(frozen=True)
 class CaseMetrics:
     """
@@ -246,7 +241,6 @@ __all__ = [
     "MRICase",
     "TissueVolumes",
     "TissueSurfaces",
-    "TissueMeshSurfaces",
     "CaseMetrics",
     "MeshAnalysisResult",
     "CaseProcessingResult",

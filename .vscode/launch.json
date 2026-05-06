@@ -10,7 +10,7 @@
         "PYTHONPATH": "${workspaceFolder}"
       },
       "cwd": "${workspaceFolder}",
-      "args": ["--subject", "IXI013-HH-1212-T1"],
+      "args": ["--subject", "IXI012-HH-1212-T1"],
       "justMyCode": true,
       "logToFile": false
     },
@@ -23,7 +23,7 @@
         "PYTHONPATH": "${workspaceFolder}"
       },
       "cwd": "${workspaceFolder}",
-      "args": ["--subject", "IXI012-HH-1211-T1"],
+      "args": ["--input", "C:\\Users\\Dimitrie_U\\1Facultate\\Anul3\\LicentaMRI\\AplicatiePractica\\input_mri\\IXI012-HH-1211-T1.nii.gz"],
       "justMyCode": true,
       "logToFile": false
     }
