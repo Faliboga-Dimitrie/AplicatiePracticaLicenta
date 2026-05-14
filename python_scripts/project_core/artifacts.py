@@ -83,17 +83,28 @@ class ArtifactRef:
 @dataclass(frozen=True)
 class StoredCaseResult:
     """
-    Collection of published artifacts for one case.
+    Collection of published artifacts for one subject acquisition.
     """
 
     subject_id: str
+    acquisition_date: str | None = None
     artifacts: tuple[ArtifactRef, ...] = field(default_factory=tuple)
 
+    @property
+    def case_id(self) -> str:
+        if self.acquisition_date is None:
+            return self.subject_id
+        return f"{self.subject_id}_{self.acquisition_date}"
+
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "subject_id": self.subject_id,
             "artifacts": [artifact.to_dict() for artifact in self.artifacts],
         }
+        if self.acquisition_date is not None:
+            payload["acquisition_date"] = self.acquisition_date
+            payload["case_id"] = self.case_id
+        return payload
 
     def by_name(self) -> dict[str, ArtifactRef]:
         return {artifact.name: artifact for artifact in self.artifacts}
@@ -244,7 +255,11 @@ class FileSystemArtifactStore:
         )
 
     def _case_dir(self, case: MRICase) -> Path:
-        return self.root_dir / _safe_case_segment(case.subject_id)
+        return (
+            self.root_dir
+            / _safe_case_segment(case.subject_id)
+            / _safe_case_segment(case.acquisition_date)
+        )
 
     def _final_path(self, case: MRICase, artifact_name: str, source_path: Path) -> Path:
         return self._case_dir(case) / _artifact_filename(artifact_name, source_path)
@@ -260,9 +275,10 @@ class FileSystemArtifactStore:
             return str(path)
 
         # Keep the URI independent of OS path separators.
-        case_segment = quote(_safe_case_segment(case.subject_id))
+        subject_segment = quote(_safe_case_segment(case.subject_id))
+        date_segment = quote(_safe_case_segment(case.acquisition_date))
         filename = quote(path.name)
-        return f"{self.base_uri}/{case_segment}/{filename}"
+        return f"{self.base_uri}/{subject_segment}/{date_segment}/{filename}"
 
 
 __all__ = [

@@ -141,11 +141,6 @@ def build_default_preprocessing_pipeline(
         segmentation_backend=FslFastSegmentationBackend(settings_obj),
     )
 
-
-# -----------------------------------------------------------------------------
-# CLI integration
-# -----------------------------------------------------------------------------
-
 def _preflight_checks(settings_obj: Settings) -> None:
     """
     Validate the minimum environment needed before preprocessing starts.
@@ -186,20 +181,20 @@ def _process_case(case: MRICase, settings_obj: Settings) -> CaseRunResult:
         )
 
 
-def _print_summary(result: CaseRunResult) -> bool:
+def _print_summary(case: CaseRunResult) -> bool:
     print("\n" + "#" * 80)
     print("PREPROCESSING SUMMARY")
     print("#" * 80)
 
-    ok: bool = result.success and result.result is not None
+    ok = case.success and case.result is not None
     if ok:
-        print(f"[OK] {result.subject_id}")
-        print(f"     reoriented    : {result.reoriented_path}")
-        print(f"     skull-stripped: {result.skull_stripped_path}")
-        print(f"     segmentation  : {result.segmentation_path}")
+            print(f"[OK] {case.subject_id}")
+            print(f"     reoriented    : {case.reoriented_path}")
+            print(f"     skull-stripped: {case.skull_stripped_path}")
+            print(f"     segmentation  : {case.segmentation_path}")
     else:
-        print(f"[FAIL] {result.subject_id}")
-        print(f"       error: {result.error}")
+        print(f"[FAIL] {case.subject_id}")
+        print(f"       error: {case.error}")
 
     print("-" * 80)
     return ok

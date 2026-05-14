@@ -29,6 +29,7 @@ class HdBetSkullStripBackend:
 
     def run(self, input_path: Path, workspace: CaseWorkspace) -> SkullStripResult:
         exe = self._ensure_hd_bet_available()
+        input_path = Path(input_path)
         output_path = workspace.skull_stripped_path
         mask_path = workspace.skull_stripped_mask_path
         native_mask_path = self._native_mask_path(output_path)
@@ -46,9 +47,10 @@ class HdBetSkullStripBackend:
             native_mask_path=native_mask_path,
             expects_mask=expects_mask,
         )
-        
         if existing is not None:
             return existing
+
+        self._validate_input(input_path)
 
         proc = subprocess.run(
             cmd,
@@ -77,17 +79,17 @@ class HdBetSkullStripBackend:
             expects_mask=expects_mask,
         )
 
-        case = MRICase(subject_id=workspace.subject_id, raw_path=workspace.raw_path)
+        case = MRICase(
+            subject_id=workspace.subject_id,
+            acquisition_date=workspace.acquisition_date,
+            raw_path=workspace.raw_path,
+        )
         maybe_save_bet_qc(case, workspace, self.settings)
 
         return SkullStripResult(
             image_path=output_path,
             mask_path=mask_path if mask_path.exists() else None,
         )
-
-    # ------------------------------------------------------------------
-    # command discovery/building
-    # ------------------------------------------------------------------
 
     def _ensure_hd_bet_available(self) -> str:
         """
@@ -177,9 +179,15 @@ class HdBetSkullStripBackend:
 
         return cmd, expects_mask
 
-    # ------------------------------------------------------------------
-    # validation/existing output policy
-    # ------------------------------------------------------------------
+    def _validate_input(self, input_path: Path) -> None:
+        if not input_path.exists():
+            raise FileNotFoundError(f"HD-BET input does not exist: {input_path}")
+
+        img = nib.load(str(input_path))
+        if img.ndim != 3:
+            raise ValueError(
+                f"HD-BET expects a 3D NIfTI image, but got ndim={img.ndim} for {input_path}"
+            )
 
     def _handle_existing_outputs(
         self,
@@ -229,10 +237,6 @@ class HdBetSkullStripBackend:
         if path.exists():
             path.unlink()
 
-    # ------------------------------------------------------------------
-    # mask normalization
-    # ------------------------------------------------------------------
-
     def _native_mask_path(self, output_path: Path) -> Path:
         """
         HD-BET derives the mask name from the output image name.
@@ -270,7 +274,6 @@ class HdBetSkullStripBackend:
             f"Expected pipeline mask: {desired_mask_path}\n"
             f"Expected HD-BET native mask: {native_mask_path}"
         )
-
 
 __all__ = [
     "HdBetSkullStripBackend",

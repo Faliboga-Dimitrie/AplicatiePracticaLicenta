@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -8,32 +9,48 @@ from .config import Settings
 from .domain import MRICase, TISSUE_NAMES, TissueName, tissue_key
 
 
+def _safe_case_segment(value: str) -> str:
+    """Keep filesystem path segments simple and prevent accidental nesting."""
+    return value.replace("/", "_").replace("\\", "_").strip()
+
+
+def _case_dir(root: Path, case: MRICase) -> Path:
+    """Standard subject/acquisition directory for a given stage root."""
+    return (
+        Path(root)
+        / _safe_case_segment(case.subject_id)
+        / _safe_case_segment(case.acquisition_date)
+    )
+
+
 @dataclass(frozen=True)
 class CaseWorkspace:
     """
-    Local working area for one MRI case.
+    Local working area for one MRI acquisition.
 
-    The workspace represents files that processing tools read from and write to
-    while the pipeline runs: reoriented NIfTI files, HD-BET outputs, FAST outputs,
-    QC images, generated meshes, metrics JSON, etc.
+    The workspace now separates:
+        - source_raw_path: the file selected by the caller/importer;
+        - raw_path: the standardized raw file inside input_mri/<subject>/<date>/.
 
-    Important boundary:
-        - CaseWorkspace knows local processing paths.
-        - ArtifactStore decides how final outputs are exposed/published.
-
-    This keeps the pipeline usable with external tools that require files, while
-    still allowing a future API/database/blob-storage layer to replace how final
-    results are registered.
+    The processing tools should read from workspace.raw_path after the workspace
+    provider has copied/staged the source file into the standardized input area.
     """
 
     subject_id: str
+    acquisition_date: str
+    source_raw_path: Path
     raw_path: Path
 
+    input_mri_dir: Path
     reoriented_dir: Path
     hd_bet_dir: Path
     fast_dir: Path
     qc_dir: Path
     mesh_dir: Path
+
+    @property
+    def case_id(self) -> str:
+        return f"{self.subject_id}_{self.acquisition_date}"
 
     # ------------------------------------------------------------------
     # directories
@@ -42,6 +59,7 @@ class CaseWorkspace:
     @property
     def stage_dirs(self) -> list[Path]:
         return [
+            self.input_mri_dir,
             self.reoriented_dir,
             self.hd_bet_dir,
             self.fast_dir,
@@ -51,11 +69,36 @@ class CaseWorkspace:
 
     def ensure_directories(self) -> None:
         """
-        Create all local workspace directories for this case.
+        Create all local workspace directories for this acquisition.
         Safe to call multiple times.
         """
         for directory in self.stage_dirs:
             directory.mkdir(parents=True, exist_ok=True)
+
+    def ensure_input_file(self, *, overwrite: bool = False) -> None:
+        """
+        Copy the caller-selected raw MRI into the standardized input folder.
+
+        If the source is already the canonical workspace raw_path, nothing is
+        copied. Existing canonical input is preserved unless overwrite=True.
+        """
+        self.input_mri_dir.mkdir(parents=True, exist_ok=True)
+
+        source = Path(self.source_raw_path).resolve()
+        target = Path(self.raw_path).resolve()
+
+        if source == target:
+            return
+
+        if not source.exists():
+            raise FileNotFoundError(f"Raw MRI source file does not exist: {source}")
+        if not source.is_file():
+            raise ValueError(f"Raw MRI source path is not a file: {source}")
+
+        if target.exists() and not overwrite:
+            return
+
+        shutil.copy2(source, target)
 
     # ------------------------------------------------------------------
     # reorientation
@@ -281,12 +324,13 @@ class FileSystemWorkspaceProvider:
     """
     Default WorkspaceProvider implementation backed by the local filesystem.
 
-    This keeps your current project layout:
-        processed_mri/reoriented/<subject>/...
-        processed_mri/hd_bet/<subject>/...
-        processed_mri/fast/<subject>/...
-        processed_mri/qc/<subject>/...
-        processed_mri/meshes/<subject>/...
+    New layout:
+        input_mri/<subject>/<date>/...
+        processed_mri/reoriented/<subject>/<date>/...
+        processed_mri/hd_bet/<subject>/<date>/...
+        processed_mri/fast/<subject>/<date>/...
+        processed_mri/qc/<subject>/<date>/...
+        processed_mri/meshes/<subject>/<date>/...
     """
 
     def __init__(self, settings: Settings, *, create_directories: bool = True):
@@ -298,25 +342,31 @@ class FileSystemWorkspaceProvider:
 
         if self.create_directories:
             workspace.ensure_directories()
+            workspace.ensure_input_file(overwrite=self.settings.overwrite)
 
         return workspace
 
 
 def build_case_workspace(case: MRICase, settings: Settings) -> CaseWorkspace:
     """
-    Build the local workspace paths for one case without creating directories.
+    Build the local workspace paths for one subject/date acquisition without
+    creating directories.
     """
-    subject_id = case.subject_id
+    input_mri_dir = _case_dir(Path(settings.input_mri_dir), case)
 
     return CaseWorkspace(
-        subject_id=subject_id,
-        raw_path=case.raw_path,
-        reoriented_dir=Path(settings.reoriented_dir) / subject_id,
-        hd_bet_dir=Path(settings.hd_bet_dir) / subject_id,
-        fast_dir=Path(settings.fast_dir) / subject_id,
-        qc_dir=Path(settings.qc_dir) / subject_id,
-        mesh_dir=Path(settings.mesh_dir) / subject_id,
+        subject_id=case.subject_id,
+        acquisition_date=case.acquisition_date,
+        source_raw_path=case.raw_path,
+        raw_path=input_mri_dir / Path(case.raw_path).name,
+        input_mri_dir=input_mri_dir,
+        reoriented_dir=_case_dir(Path(settings.reoriented_dir), case),
+        hd_bet_dir=_case_dir(Path(settings.hd_bet_dir), case),
+        fast_dir=_case_dir(Path(settings.fast_dir), case),
+        qc_dir=_case_dir(Path(settings.qc_dir), case),
+        mesh_dir=_case_dir(Path(settings.mesh_dir), case),
     )
+
 
 def build_case_paths(case: MRICase, settings: Settings) -> CaseWorkspace:
     return build_case_workspace(case, settings)
