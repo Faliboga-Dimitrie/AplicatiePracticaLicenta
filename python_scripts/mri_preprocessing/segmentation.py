@@ -9,7 +9,6 @@ from ..project_core.config import Settings
 from ..project_core.domain import MRICase
 from ..project_core.ports import SegmentationResult
 from ..project_core.workspace import CaseWorkspace
-from .input_checks import OrientationStatus, check_input_orientation
 from .qc import maybe_save_fast_qc
 
 
@@ -26,13 +25,11 @@ class FslFastSegmentationBackend:
         self.settings = settings
 
     def run(self, input_path: Path, workspace: CaseWorkspace) -> SegmentationResult:
-        input_path = Path(input_path)
 
         existing = self._handle_existing_outputs(workspace)
         if existing is not None:
             return existing
 
-        self._validate_input(input_path, workspace)
         self._run_fast(input_path, workspace)
         self._require_outputs(workspace)
 
@@ -83,47 +80,6 @@ class FslFastSegmentationBackend:
         for path in workspace.fast_dir.glob(f"{workspace.subject_id}*"):
             if path.is_file():
                 path.unlink()
-
-    # ------------------------------------------------------------------
-    # validation
-    # ------------------------------------------------------------------
-
-    def _validate_input(self, input_path: Path, workspace: CaseWorkspace) -> None:
-        """
-        Validate the image passed to FAST.
-
-        FAST expects a brain-extracted 3D structural image. This pipeline also
-        keeps the stricter invariant that the input should already match the
-        configured MNI/template orientation.
-        """
-        if not input_path.exists():
-            raise FileNotFoundError(f"FAST input does not exist: {input_path}")
-
-        try:
-            img = nib.load(str(input_path))
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to load FAST input with nibabel: {input_path}\n{exc}"
-            ) from exc
-
-        if img.ndim != 3:
-            raise ValueError(
-                "FAST expects a 3D image in this pipeline, but got "
-                f"ndim={img.ndim} for {input_path}"
-            )
-
-        temp_case = MRICase(
-            subject_id=workspace.subject_id,
-            raw_path=input_path,
-        )
-        orientation = check_input_orientation(temp_case, self.settings)
-
-        if orientation.status != OrientationStatus.ALREADY_STANDARD:
-            raise RuntimeError(
-                "FAST input is expected to already be in the chosen standard "
-                "orientation, but the check returned "
-                f"{orientation.status.name}: {orientation.message}"
-            )
 
     # ------------------------------------------------------------------
     # command execution
@@ -189,31 +145,6 @@ class FslFastSegmentationBackend:
         )
 
 
-# -----------------------------------------------------------------------------
-# Backwards-compatible function API
-# -----------------------------------------------------------------------------
-
-def run_segmentation(
-    case: MRICase,
-    paths: CaseWorkspace,
-    settings: Settings,
-) -> Path:
-    """
-    Compatibility wrapper for the old function-style pipeline.
-
-    New code should inject/use FslFastSegmentationBackend through the
-    SegmentationBackend protocol.
-    """
-    backend = FslFastSegmentationBackend(settings)
-    result = backend.run(paths.fast_input_path, paths)
-
-    if result.seg_path is None:
-        raise RuntimeError("FAST completed but did not return a segmentation path.")
-
-    return result.seg_path
-
-
 __all__ = [
-    "FslFastSegmentationBackend",
-    "run_segmentation",
+    "FslFastSegmentationBackend"
 ]

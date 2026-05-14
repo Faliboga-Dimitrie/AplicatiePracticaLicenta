@@ -10,9 +10,9 @@ from .pipeline import (
     PreprocessingResult,
     build_default_preprocessing_pipeline,
 )
-from .reorient import FslReorientationBackend, run_reorientation
-from .segmentation import FslFastSegmentationBackend, run_segmentation
-from .skull_strip import HdBetSkullStripBackend, run_skull_strip
+from .reorient import FslReorientationBackend
+from .segmentation import FslFastSegmentationBackend
+from .skull_strip import HdBetSkullStripBackend
 
 __all__ = [
     "Settings",
@@ -30,9 +30,6 @@ __all__ = [
     "FslReorientationBackend",
     "HdBetSkullStripBackend",
     "FslFastSegmentationBackend",
-    "run_reorientation",
-    "run_skull_strip",
-    "run_segmentation",
     "PreprocessingResult",
     "CaseRunResult",
     "PreprocessingPipeline",

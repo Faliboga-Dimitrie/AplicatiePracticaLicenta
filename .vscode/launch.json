@@ -10,7 +10,7 @@
         "PYTHONPATH": "${workspaceFolder}"
       },
       "cwd": "${workspaceFolder}",
-      "args": ["--subject", "IXI012-HH-1212-T1"],
+      "args": ["--subject", "IXI012-HH-1211-T1"],
       "justMyCode": true,
       "logToFile": false
     },

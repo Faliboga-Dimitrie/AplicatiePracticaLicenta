@@ -9,6 +9,8 @@ from typing import Any
 import nibabel as nib
 from nibabel.orientations import aff2axcodes
 
+from python_scripts.project_core.domain import MRICase
+
 
 class OrientationStatus(Enum):
     ALREADY_STANDARD = auto()
@@ -34,7 +36,6 @@ class InputCheckResult:
 
     # loadability / shape
     loadable: bool
-    is_nifti: bool
     ndim: int | None
     shape: tuple[int, ...] | None
 
@@ -53,12 +54,6 @@ class InputCheckResult:
             OrientationStatus.ALREADY_STANDARD,
             OrientationStatus.CAN_REORIENT,
         }
-
-
-def _is_nifti_path(path: Path) -> bool:
-    name = path.name.lower()
-    return name.endswith(".nii") or name.endswith(".nii.gz")
-
 
 def _safe_aff2axcodes(affine) -> tuple[str | None, str | None, str | None] | None:
     try:
@@ -94,7 +89,7 @@ def _looks_like_structural_3d(shape: tuple[int, ...] | None, ndim: int | None) -
     return False
 
 
-def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
+def check_input_orientation(case: MRICase, settings: Any) -> InputCheckResult:
     """
     Decide whether an input MRI:
       - is already in the same voxel orientation as the chosen MNI template
@@ -109,7 +104,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
     """
     input_path = Path(case.raw_path)
     subject_id = str(case.subject_id)
-    is_nifti = _is_nifti_path(input_path)
 
     if not input_path.exists():
         return InputCheckResult(
@@ -124,7 +118,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=None,
             sform_axcodes=None,
             loadable=False,
-            is_nifti=is_nifti,
             ndim=None,
             shape=None,
             already_standard=False,
@@ -132,29 +125,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_sform_consistent=None,
             requires_manual_review=True,
             message=f"Input file does not exist: {input_path}",
-        )
-
-    if not is_nifti:
-        return InputCheckResult(
-            subject_id=subject_id,
-            input_path=input_path,
-            status=OrientationStatus.CANNOT_AUTO_REORIENT,
-            image_axcodes=None,
-            template_axcodes=None,
-            affine_source="unknown",
-            qform_code=0,
-            sform_code=0,
-            qform_axcodes=None,
-            sform_axcodes=None,
-            loadable=False,
-            is_nifti=False,
-            ndim=None,
-            shape=None,
-            already_standard=False,
-            has_usable_orientation_metadata=False,
-            qform_sform_consistent=None,
-            requires_manual_review=True,
-            message="Input is not a NIfTI file (.nii or .nii.gz).",
         )
 
     try:
@@ -172,7 +142,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=None,
             sform_axcodes=None,
             loadable=False,
-            is_nifti=True,
             ndim=None,
             shape=None,
             already_standard=False,
@@ -245,7 +214,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=qform_axcodes,
             sform_axcodes=sform_axcodes,
             loadable=True,
-            is_nifti=True,
             ndim=ndim,
             shape=shape,
             already_standard=already_standard,
@@ -268,7 +236,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=qform_axcodes,
             sform_axcodes=sform_axcodes,
             loadable=True,
-            is_nifti=True,
             ndim=ndim,
             shape=shape,
             already_standard=False,
@@ -291,7 +258,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=qform_axcodes,
             sform_axcodes=sform_axcodes,
             loadable=True,
-            is_nifti=True,
             ndim=ndim,
             shape=shape,
             already_standard=already_standard,
@@ -317,7 +283,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=qform_axcodes,
             sform_axcodes=sform_axcodes,
             loadable=True,
-            is_nifti=True,
             ndim=ndim,
             shape=shape,
             already_standard=already_standard,
@@ -342,7 +307,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=qform_axcodes,
             sform_axcodes=sform_axcodes,
             loadable=True,
-            is_nifti=True,
             ndim=ndim,
             shape=shape,
             already_standard=True,
@@ -365,7 +329,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
             qform_axcodes=qform_axcodes,
             sform_axcodes=sform_axcodes,
             loadable=True,
-            is_nifti=True,
             ndim=ndim,
             shape=shape,
             already_standard=False,
@@ -387,7 +350,6 @@ def check_input_orientation(case: Any, settings: Any) -> InputCheckResult:
         qform_axcodes=qform_axcodes,
         sform_axcodes=sform_axcodes,
         loadable=True,
-        is_nifti=True,
         ndim=ndim,
         shape=shape,
         already_standard=False,

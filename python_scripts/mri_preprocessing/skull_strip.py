@@ -29,7 +29,6 @@ class HdBetSkullStripBackend:
 
     def run(self, input_path: Path, workspace: CaseWorkspace) -> SkullStripResult:
         exe = self._ensure_hd_bet_available()
-        input_path = Path(input_path)
         output_path = workspace.skull_stripped_path
         mask_path = workspace.skull_stripped_mask_path
         native_mask_path = self._native_mask_path(output_path)
@@ -47,10 +46,9 @@ class HdBetSkullStripBackend:
             native_mask_path=native_mask_path,
             expects_mask=expects_mask,
         )
+        
         if existing is not None:
             return existing
-
-        self._validate_input(input_path)
 
         proc = subprocess.run(
             cmd,
@@ -183,16 +181,6 @@ class HdBetSkullStripBackend:
     # validation/existing output policy
     # ------------------------------------------------------------------
 
-    def _validate_input(self, input_path: Path) -> None:
-        if not input_path.exists():
-            raise FileNotFoundError(f"HD-BET input does not exist: {input_path}")
-
-        img = nib.load(str(input_path))
-        if img.ndim != 3:
-            raise ValueError(
-                f"HD-BET expects a 3D NIfTI image, but got ndim={img.ndim} for {input_path}"
-            )
-
     def _handle_existing_outputs(
         self,
         *,
@@ -284,26 +272,6 @@ class HdBetSkullStripBackend:
         )
 
 
-# -----------------------------------------------------------------------------
-# Backwards-compatible function API
-# -----------------------------------------------------------------------------
-
-def run_skull_strip(
-    case: MRICase,
-    paths: CaseWorkspace,
-    settings: Settings,
-) -> Path:
-    """
-    Compatibility wrapper for the old function-style pipeline.
-
-    New code should inject/use HdBetSkullStripBackend through the
-    SkullStripBackend protocol.
-    """
-    backend = HdBetSkullStripBackend(settings)
-    return backend.run(paths.reoriented_path, paths).image_path
-
-
 __all__ = [
     "HdBetSkullStripBackend",
-    "run_skull_strip",
 ]

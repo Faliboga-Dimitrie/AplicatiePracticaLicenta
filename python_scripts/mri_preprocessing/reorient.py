@@ -35,7 +35,7 @@ class FslReorientationBackend:
         orientation = check_input_orientation(case, self.settings)
 
         if orientation.status == OrientationStatus.ALREADY_STANDARD:
-            self._copy_to_reoriented(case.raw_path, output_path)
+            shutil.copy2(case.raw_path, output_path)
             maybe_save_reorientation_qc(case, workspace, self.settings)
             return ReorientationResult(
                 output_path=output_path,
@@ -47,7 +47,6 @@ class FslReorientationBackend:
                 input_path=case.raw_path,
                 output_path=output_path,
             )
-            self._require_output(output_path)
             self._check_output_is_standard(case, workspace)
             maybe_save_reorientation_qc(case, workspace, self.settings)
             return ReorientationResult(
@@ -66,7 +65,7 @@ class FslReorientationBackend:
         if self.settings.skip_existing:
             return ReorientationResult(
                 output_path=output_path,
-                already_standard=False,
+                already_standard=True,
             )
 
         if not self.settings.overwrite:
@@ -77,10 +76,6 @@ class FslReorientationBackend:
 
         output_path.unlink()
         return None
-
-    def _copy_to_reoriented(self, input_path: Path, output_path: Path) -> None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(input_path, output_path)
 
     def _build_command(self, input_path: Path, output_path: Path) -> list[str]:
         return [
@@ -98,7 +93,6 @@ class FslReorientationBackend:
         ]
 
     def _run_reorient_script(self, input_path: Path, output_path: Path) -> None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = self._build_command(input_path, output_path)
 
         proc = subprocess.run(
@@ -116,13 +110,6 @@ class FslReorientationBackend:
                 f"STDERR:\n{proc.stderr}"
             )
 
-    def _require_output(self, output_path: Path) -> None:
-        if not output_path.exists():
-            raise RuntimeError(
-                "Reorientation script completed, but output file was not created: "
-                f"{output_path}"
-            )
-
     def _check_output_is_standard(self, case: MRICase, workspace: CaseWorkspace) -> None:
         post_case = MRICase(
             subject_id=case.subject_id,
@@ -138,26 +125,6 @@ class FslReorientationBackend:
             )
 
 
-# -----------------------------------------------------------------------------
-# Backwards-compatible function API
-# -----------------------------------------------------------------------------
-
-def run_reorientation(
-    case: MRICase,
-    paths: CaseWorkspace,
-    settings: Settings,
-) -> Path:
-    """
-    Compatibility wrapper for the old function-style pipeline.
-
-    New code should inject/use FslReorientationBackend through the
-    ReorientationBackend protocol.
-    """
-    backend = FslReorientationBackend(settings)
-    return backend.run(case, paths).output_path
-
-
 __all__ = [
     "FslReorientationBackend",
-    "run_reorientation",
 ]

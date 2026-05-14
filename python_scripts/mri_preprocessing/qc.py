@@ -78,16 +78,11 @@ def _pick_nonzero_center_slice(arr3d: np.ndarray) -> int:
         return _pick_center_slice(arr3d)
     return int(nz[len(nz) // 2])
 
-
-def _ensure_parent(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-
 def save_reorientation_qc(case: MRICase, paths: CaseWorkspace) -> Path:
     """
     Save side-by-side QC for raw vs reoriented MRI.
     """
-    raw_img, raw = _load_canonical_data(paths.raw_path)
+    _, raw = _load_canonical_data(paths.raw_path)
     _, reo = _load_canonical_data(paths.reoriented_path)
 
     k_raw = _pick_center_slice(raw)
@@ -97,7 +92,6 @@ def save_reorientation_qc(case: MRICase, paths: CaseWorkspace) -> Path:
     reo_disp = _axial_slice_for_display(_robust_normalize(reo), k_reo)
 
     out_path = paths.qc_reorientation_png
-    _ensure_parent(out_path)
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     axes[0].imshow(raw_disp, cmap="gray")
@@ -136,7 +130,6 @@ def save_bet_qc(case: MRICase, paths: CaseWorkspace) -> Path:
     mask_disp = _axial_slice_for_display((mask > 0).astype(np.uint8), k)
 
     out_path = paths.qc_bet_png
-    _ensure_parent(out_path)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -186,7 +179,6 @@ def save_fast_qc(case: MRICase, paths: CaseWorkspace) -> Path:
     ])
 
     out_path = paths.qc_fast_png
-    _ensure_parent(out_path)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -206,37 +198,11 @@ def save_fast_qc(case: MRICase, paths: CaseWorkspace) -> Path:
 
     return out_path
 
-
-def run_available_qc(case: MRICase, paths: CaseWorkspace) -> dict[str, Path]:
-    """
-    Run all QC steps for which the required files exist.
-    Returns a dictionary of generated QC outputs.
-    """
-    outputs: dict[str, Path] = {}
-
-    if paths.raw_path.exists() and paths.reoriented_path.exists():
-        outputs["reorientation"] = save_reorientation_qc(case, paths)
-
-    if (
-        paths.reoriented_path.exists()
-        and paths.skull_stripped_path.exists()
-        and paths.skull_stripped_mask_path.exists()
-    ):
-        outputs["hd_bet"] = save_bet_qc(case, paths)
-
-    if paths.fast_input_path.exists() and paths.fast_seg_path.exists():
-        outputs["fast"] = save_fast_qc(case, paths)
-
-    return outputs
-
 def _handle_qc_result(
     qc_name: str,
-    output_path: Optional[Path],
     settings: Settings,
     exc: Exception | None = None,
 ) -> Optional[Path]:
-    if exc is None:
-        return output_path
 
     if settings.fail_on_qc_error:
         raise RuntimeError(f"{qc_name} QC failed: {exc}") from exc
@@ -256,7 +222,7 @@ def maybe_save_reorientation_qc(
     try:
         return save_reorientation_qc(case, paths)
     except Exception as exc:
-        return _handle_qc_result("Reorientation", None, settings, exc)
+        return _handle_qc_result("Reorientation", settings, exc)
 
 
 def maybe_save_bet_qc(
@@ -270,7 +236,7 @@ def maybe_save_bet_qc(
     try:
         return save_bet_qc(case, paths)
     except Exception as exc:
-        return _handle_qc_result("HD-BET", None, settings, exc)
+        return _handle_qc_result("HD-BET", settings, exc)
 
 
 def maybe_save_fast_qc(
@@ -284,4 +250,4 @@ def maybe_save_fast_qc(
     try:
         return save_fast_qc(case, paths)
     except Exception as exc:
-        return _handle_qc_result("FAST", None, settings, exc)
+        return _handle_qc_result("FAST", settings, exc)
