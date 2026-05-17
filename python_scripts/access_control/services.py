@@ -169,20 +169,22 @@ class AccessControlService:
             return DbResult.fail("Subject age cannot be negative.")
         return self.subjects.update(subject_id, name=name, age=age, notes=notes)
 
-    def delete_subject(self, subject_id: str, *, delete_workspaces: bool = False) -> DbResult[bool]:
+    def delete_subject(self, subject_id: str) -> DbResult[bool]:
         try:
-            cases = self.list_cases_for_subject(subject_id)
-            if not cases.success:
-                return DbResult.fail(cases.error or "Could not list cases before deleting subject.")
-
             result = self.subjects.delete(subject_id)
+
             if not result.success or not result.data:
                 return result
 
-            if delete_workspaces:
-                self._delete_workspaces_for_cases(cases.data or [])
+            if self.workspace_gateway is None:
+                    raise RuntimeError("delete_workspaces=True requires a workspace_gateway.")
+
+            self.workspace_gateway.delete_subject_workspaces(
+                subject_id=subject_id,
+            ) 
 
             return result
+
         except Exception as exc:
             return DbResult.fail(str(exc))
 
@@ -197,7 +199,6 @@ class AccessControlService:
         *,
         notes: str | None = None,
         status: str | None = "registered",
-        create_workspace: bool = False,
         source_raw_path: Path | None = None,
     ) -> DbResult[MriCaseRecord]:
         try:
@@ -206,22 +207,21 @@ class AccessControlService:
             if not result.success or result.data is None:
                 return result
 
-            if create_workspace:
-                workspace = self._create_workspace(
+            workspace = self._create_workspace(
                     subject_id=subject_id,
                     acquisition_date=acq_date,
                     source_raw_path=source_raw_path,
                 )
-                result = DbResult.ok(
-                    MriCaseRecord(
-                        id=result.data.id,
-                        subject_id=result.data.subject_id,
-                        acquisition_date=result.data.acquisition_date,
-                        notes=result.data.notes,
-                        status=result.data.status,
-                        workspace=workspace,
-                    )
+            result = DbResult.ok(
+                MriCaseRecord(
+                    id=result.data.id,
+                    subject_id=result.data.subject_id,
+                    acquisition_date=result.data.acquisition_date,
+                    notes=result.data.notes,
+                    status=result.data.status,
+                    workspace=workspace,
                 )
+            )
 
             return result
         except Exception as exc:
@@ -233,6 +233,20 @@ class AccessControlService:
             return result
         return DbResult.ok(self._with_workspace(result.data))
 
+    def get_first_mri_case_for_subject(
+        self,
+        subject_id: str,
+        *,
+        include_workspace: bool = False,
+    ) -> DbResult[MriCaseRecord]:
+        result = self.cases.get_first_for_subject(subject_id)
+
+        if not result.success or result.data is None or not include_workspace:
+            return result
+
+        return DbResult.ok(self._with_workspace(result.data))
+
+
     def get_mri_case_by_subject_date(
         self,
         subject_id: str,
@@ -241,39 +255,30 @@ class AccessControlService:
         include_workspace: bool = False,
     ) -> DbResult[MriCaseRecord]:
         result = self.cases.get_by_subject_date(subject_id, acquisition_date)
+
         if not result.success or result.data is None or not include_workspace:
             return result
+
         return DbResult.ok(self._with_workspace(result.data))
 
-    def update_mri_case(
+
+    def update_mri_case_by_subject_date(
         self,
-        case_id: int,
+        subject_id: str,
+        acquisition_date: str | date,
         *,
-        acquisition_date: str | date | object = UNSET,
+        new_acquisition_date: str | date | object = UNSET,
         notes: str | None | object = UNSET,
         status: str | None | object = UNSET,
     ) -> DbResult[bool]:
-        return self.cases.update(
-            case_id,
-            acquisition_date=acquisition_date,
+        return self.cases.update_by_subject_date(
+            subject_id,
+            acquisition_date,
+            new_acquisition_date=new_acquisition_date,
             notes=notes,
             status=status,
         )
 
-    def delete_mri_case(self, case_id: int, *, delete_workspace: bool = False) -> DbResult[bool]:
-        try:
-            existing = self.cases.get(case_id)
-            if not existing.success:
-                return DbResult.fail(existing.error or "Could not load case before delete.")
-            if existing.data is None:
-                return DbResult.ok(False)
-
-            result = self.cases.delete(case_id)
-            if result.success and result.data and delete_workspace:
-                self._delete_workspace(existing.data)
-            return result
-        except Exception as exc:
-            return DbResult.fail(str(exc))
 
     def delete_mri_case_by_subject_date(
         self,
@@ -282,12 +287,24 @@ class AccessControlService:
         *,
         delete_workspace: bool = False,
     ) -> DbResult[bool]:
-        existing = self.cases.get_by_subject_date(subject_id, acquisition_date)
-        if not existing.success:
-            return DbResult.fail(existing.error or "Could not load case before delete.")
-        if existing.data is None:
-            return DbResult.ok(False)
-        return self.delete_mri_case(existing.data.id, delete_workspace=delete_workspace)
+        try:
+            existing = self.cases.get_by_subject_date(subject_id, acquisition_date)
+
+            if not existing.success:
+                return DbResult.fail(existing.error or "Could not load case before delete.")
+
+            if existing.data is None:
+                return DbResult.ok(False)
+
+            result = self.cases.delete_by_subject_date(subject_id, acquisition_date)
+
+            if result.success and result.data and delete_workspace:
+                self._delete_workspace(existing.data)
+
+            return result
+
+        except Exception as exc:
+            return DbResult.fail(str(exc))
 
     def list_cases_for_subject(
         self,

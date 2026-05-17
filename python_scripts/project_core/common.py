@@ -184,18 +184,6 @@ def parse_pipeline_args(description: str) -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _format_case_matches(cases: list[MRICase], *, limit: int = 10) -> str:
-    """Human-readable case list for ambiguous CLI selections."""
-    shown = cases[:limit]
-    lines = [f"  - {case.case_id}: {case.raw_path}" for case in shown]
-
-    remaining = len(cases) - len(shown)
-    if remaining > 0:
-        lines.append(f"  ... and {remaining} more")
-
-    return "\n".join(lines)
-
-
 def select_case_from_args(
     args: argparse.Namespace,
     settings_obj: Settings,

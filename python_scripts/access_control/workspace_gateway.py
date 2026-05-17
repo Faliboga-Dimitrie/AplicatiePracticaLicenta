@@ -50,6 +50,20 @@ class ProjectCaseWorkspaceGateway:
             if directory.exists():
                 shutil.rmtree(directory)
 
+    def delete_subject_workspaces(self, *, subject_id: str) -> None:
+        subject_dirs = [
+            Path(self.settings.input_mri_dir) / subject_id,
+            Path(self.settings.reoriented_dir) / subject_id,
+            Path(self.settings.hd_bet_dir) / subject_id,
+            Path(self.settings.fast_dir) / subject_id,
+            Path(self.settings.qc_dir) / subject_id,
+            Path(self.settings.mesh_dir) / subject_id,
+        ]
+
+        for directory in subject_dirs:
+            if directory.exists():
+                shutil.rmtree(directory)
+
     def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
         placeholder_raw = Path("__lookup_case_placeholder__.nii.gz")
         case = MRICase(

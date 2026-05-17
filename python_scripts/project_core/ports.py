@@ -235,6 +235,9 @@ class WorkspaceGateway(Protocol):
     def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> None:
         ...
 
+    def delete_subject_workspaces(self, *, subject_id: str) -> None:
+        ...
+
     def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
         ...
 
