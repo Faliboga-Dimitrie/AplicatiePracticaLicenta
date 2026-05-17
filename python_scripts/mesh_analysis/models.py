@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..project_core import MeshAnalysisResult, TissueSurfaces, TissueSurfaces, TissueVolumes
-
 if TYPE_CHECKING:
     import trimesh
     from trimesh.path import Path3D
@@ -66,12 +64,6 @@ class MeshAnalysisMeshes:
 
 
 __all__ = [
-    # Re-exported domain models for a smoother migration from the old file.
-    "TissueVolumes",
-    "TissueSurfaces",
-    "TissueSurfaces",
-    "MeshAnalysisResult",
-    # mesh_analysis-specific implementation models
     "TissueMeshes",
     "TissueWireframes",
     "MeshAnalysisMeshes",

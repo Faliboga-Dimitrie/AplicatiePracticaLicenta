@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import overload
-
 from skimage.measure import mesh_surface_area
 
 from ..project_core import TissueSurfaces

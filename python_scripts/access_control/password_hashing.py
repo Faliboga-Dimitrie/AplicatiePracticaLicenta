@@ -69,7 +69,7 @@ class PasswordHasher:
 
     def needs_rehash(self, stored_hash: str) -> bool:
         try:
-            algorithm, iterations_raw, _salt_b64, _digest_b64 = stored_hash.split("$", 3)
+            algorithm, iterations_raw, _, _ = stored_hash.split("$", 3)
             iterations = int(iterations_raw)
         except Exception:
             return True

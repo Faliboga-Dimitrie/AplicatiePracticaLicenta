@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
+from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar, Any
+
+from tomlkit import date
 
 if TYPE_CHECKING:
     from .artifacts import ArtifactKind, ArtifactRef
@@ -29,9 +31,7 @@ class ReorientationResult:
 
 @dataclass(frozen=True)
 class SkullStripResult:
-    """
-    Result produced by a skull-stripping backend.
-    """
+    """Result produced by a skull-stripping backend."""
 
     image_path: Path
     mask_path: Path | None = None
@@ -66,37 +66,129 @@ class MeshExportResult:
 
 
 # The concrete mesh representation is intentionally not defined in project_core.
-# For the current implementation this will probably be mesh_analysis.models.TissueMeshes,
-# but another implementation could use a different mesh object.
 MeshCollectionT_co = TypeVar("MeshCollectionT_co", covariant=True)
 MeshCollectionT_contra = TypeVar("MeshCollectionT_contra", contravariant=True)
 
 
 # -----------------------------------------------------------------------------
-# Infrastructure ports
+# Workspace lifecycle helper
 # -----------------------------------------------------------------------------
 
 class WorkspaceProvider(Protocol):
     """
-    Creates the temporary/local working area used while processing one MRI case.
+    Small workspace lifecycle protocol used by existing preprocessing code.
 
-    A filesystem implementation can create folders under processed_mri/.
-    A future implementation could create an isolated temporary workspace,
-    a Docker-mounted workspace, etc.
+    This is not a separate storage abstraction. The current implementation is
+    FileSystemWorkspaceProvider, and CaseWorkspace owns the real file creation
+    and deletion logic.
     """
 
     def create_workspace(self, case: MRICase) -> CaseWorkspace:
         ...
 
+    def get_workspace(self, case: MRICase) -> CaseWorkspace:
+        ...
+
+    def delete_workspace(
+        self,
+        case: MRICase,
+        *,
+        include_input: bool = True,
+        prune_empty_subject_dirs: bool = True,
+    ) -> list[Path]:
+        ...
+
+
+# -----------------------------------------------------------------------------
+# External processing backend ports
+# -----------------------------------------------------------------------------
+
+class ReorientationBackend(Protocol):
+    """Reorients a raw MRI into the orientation expected by the rest of the system."""
+
+    def run(self, case: MRICase, workspace: CaseWorkspace) -> ReorientationResult:
+        ...
+
+
+class SkullStripBackend(Protocol):
+    """Removes non-brain tissue from a structural MRI."""
+
+    def run(self, input_path: Path, workspace: CaseWorkspace) -> SkullStripResult:
+        ...
+
+
+class SegmentationBackend(Protocol):
+    """Segments a skull-stripped structural MRI into tissue probability maps."""
+
+    def run(self, input_path: Path, workspace: CaseWorkspace) -> SegmentationResult:
+        ...
+
+
+# -----------------------------------------------------------------------------
+# Metric and mesh strategy ports
+# -----------------------------------------------------------------------------
+
+class VolumeEstimator(Protocol):
+    """Computes tissue volumes from tissue probability/label images."""
+
+    def compute(self, pve_paths: Mapping[str, Path]) -> TissueVolumes:
+        ...
+
+
+class MeshExtractor(Protocol, Generic[MeshCollectionT_co]):
+    """
+    Builds an in-memory mesh collection from tissue probability/label images.
+
+    The mesh representation is generic so project_core does not depend on
+    trimesh or any other concrete mesh library.
+    """
+
+    def extract_all(self, pve_paths: Mapping[str, Path]) -> MeshCollectionT_co:
+        ...
+
+
+class SurfaceEstimator(Protocol, Generic[MeshCollectionT_contra]):
+    """Computes tissue surface areas from a mesh collection."""
+
+    def compute(self, meshes: MeshCollectionT_contra) -> TissueSurfaces:
+        ...
+
+
+class MeshExporter(Protocol, Generic[MeshCollectionT_contra]):
+    """Exports a mesh collection into web-consumable assets such as GLB files."""
+
+    def export(
+        self,
+        meshes: MeshCollectionT_contra,
+        workspace: CaseWorkspace,
+    ) -> MeshExportResult:
+        ...
+
+
+class QualityControlGenerator(Protocol):
+    """
+    Generates optional QC artifacts for a processed case.
+
+    This is intentionally separate from the main processing stages so QC can be
+    disabled, replaced, or allowed to fail without changing scientific metrics.
+    """
+
+    def generate(self, case: MRICase, workspace: CaseWorkspace) -> Mapping[str, Path]:
+        ...
+
+
+# -----------------------------------------------------------------------------
+# Optional API/static artifact helper
+# -----------------------------------------------------------------------------
 
 class ArtifactStore(Protocol):
     """
-    Publishes final outputs produced by the pipeline.
+    Optional helper for a FastAPI/static-file layer.
 
-    The pipeline works inside a CaseWorkspace, then asks an ArtifactStore to
-    expose/register final results. The first implementation can simply keep
-    files on disk. A later implementation can store metadata in a database or
-    upload files to blob storage without changing the pipeline orchestration.
+    Do not build the core pipeline around this for now. CaseWorkspace already
+    knows where outputs are written. ArtifactStore is only useful if an API wants
+    to copy/register those files under a public static root and return ArtifactRef
+    objects to the frontend.
     """
 
     def save_file(
@@ -119,107 +211,31 @@ class ArtifactStore(Protocol):
     ) -> ArtifactRef:
         ...
 
-
-# -----------------------------------------------------------------------------
-# External processing backend ports
-# -----------------------------------------------------------------------------
-
-class ReorientationBackend(Protocol):
+class WorkspaceGateway(Protocol):
     """
-    Reorients a raw MRI into the orientation expected by the rest of the system.
+    Optional adapter used when the service should also touch the filesystem.
 
-    Current implementation: FSL fslreorient2std through Docker/PowerShell.
-    Future implementation: nibabel-only, ANTs-based, manual-review backend, etc.
-    """
+    The recommended API flow is still:
+        1. database operation succeeds;
+        2. API/application layer calls CaseWorkspace through this gateway.
 
-    def run(self, case: MRICase, workspace: CaseWorkspace) -> ReorientationResult:
-        ...
-
-
-class SkullStripBackend(Protocol):
-    """
-    Removes non-brain tissue from a structural MRI.
-
-    Current implementation: HD-BET.
-    Future implementation: SynthStrip, ROBEX, a mock backend for tests, etc.
+    Injecting a gateway here is useful for a small local application where you
+    want the same service method to also create/delete case folders.
     """
 
-    def run(self, input_path: Path, workspace: CaseWorkspace) -> SkullStripResult:
-        ...
-
-
-class SegmentationBackend(Protocol):
-    """
-    Segments a skull-stripped structural MRI into tissue probability maps.
-
-    Current implementation: FSL FAST.
-    Future implementation: SPM, ANTs Atropos, neural-network segmentation, etc.
-    """
-
-    def run(self, input_path: Path, workspace: CaseWorkspace) -> SegmentationResult:
-        ...
-
-
-# -----------------------------------------------------------------------------
-# Metric and mesh strategy ports
-# -----------------------------------------------------------------------------
-
-class VolumeEstimator(Protocol):
-    """
-    Computes tissue volumes from tissue probability/label images.
-
-    Current implementation: sum(PVE values) * voxel volume.
-    Future implementations can use label counting, atlas correction,
-    uncertainty-aware estimates, etc.
-    """
-
-    def compute(self, pve_paths: Mapping[str, Path]) -> TissueVolumes:
-        ...
-
-
-class MeshExtractor(Protocol, Generic[MeshCollectionT_co]):
-    """
-    Builds an in-memory mesh collection from tissue probability/label images.
-
-    The mesh representation is generic so project_core does not depend on
-    trimesh or any other concrete mesh library.
-    """
-
-    def extract_all(self, pve_paths: Mapping[str, Path]) -> MeshCollectionT_co:
-        ...
-
-
-class SurfaceEstimator(Protocol, Generic[MeshCollectionT_contra]):
-    """
-    Computes tissue surface areas from a mesh collection.
-    """
-
-    def compute(self, meshes: MeshCollectionT_contra) -> TissueSurfaces:
-        ...
-
-
-class MeshExporter(Protocol, Generic[MeshCollectionT_contra]):
-    """
-    Exports a mesh collection into web-consumable assets such as GLB files.
-    """
-
-    def export(
+    def create_case_workspace(
         self,
-        meshes: MeshCollectionT_contra,
-        workspace: CaseWorkspace,
-    ) -> MeshExportResult:
+        *,
+        subject_id: str,
+        acquisition_date: date,
+        source_raw_path: Path | None = None,
+    ) -> Any:
         ...
 
+    def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> None:
+        ...
 
-class QualityControlGenerator(Protocol):
-    """
-    Generates optional QC artifacts for a processed case.
-
-    This is intentionally separate from the main processing stages so QC can be
-    disabled, replaced, or allowed to fail without changing scientific metrics.
-    """
-
-    def generate(self, case: MRICase, workspace: CaseWorkspace) -> Mapping[str, Path]:
+    def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
         ...
 
 
@@ -229,7 +245,6 @@ __all__ = [
     "SegmentationResult",
     "MeshExportResult",
     "WorkspaceProvider",
-    "ArtifactStore",
     "ReorientationBackend",
     "SkullStripBackend",
     "SegmentationBackend",
@@ -238,4 +253,6 @@ __all__ = [
     "SurfaceEstimator",
     "MeshExporter",
     "QualityControlGenerator",
+    "ArtifactStore",
+    "WorkspaceGateway",
 ]

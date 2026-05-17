@@ -10,7 +10,7 @@ import numpy as np
 import trimesh
 from skimage.measure import marching_cubes
 
-from ..project_core import TISSUE_NAMES, TissueName
+from ..project_core import TissueName
 from .models import MeshAnalysisMeshes, TissueMeshes
 
 

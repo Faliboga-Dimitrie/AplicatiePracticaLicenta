@@ -19,7 +19,6 @@ from .workspace import (
     CaseWorkspace,
     FileSystemWorkspaceProvider,
     build_case_workspace,
-    build_case_paths,
 )
 
 from .artifacts import (
@@ -70,10 +69,8 @@ __all__ = [
     "CaseProcessingResult",
     # workspace
     "CaseWorkspace",
-    "CaseWorkspace",
     "FileSystemWorkspaceProvider",
     "build_case_workspace",
-    "build_case_paths",
     # artifacts
     "ArtifactKind",
     "ArtifactRef",

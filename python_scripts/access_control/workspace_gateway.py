@@ -3,36 +3,9 @@ from __future__ import annotations
 import shutil
 from datetime import date
 from pathlib import Path
-from typing import Any, Protocol
-
-
-class WorkspaceGateway(Protocol):
-    """
-    Optional adapter used when the service should also touch the filesystem.
-
-    The recommended API flow is still:
-        1. database operation succeeds;
-        2. API/application layer calls CaseWorkspace through this gateway.
-
-    Injecting a gateway here is useful for a small local application where you
-    want the same service method to also create/delete case folders.
-    """
-
-    def create_case_workspace(
-        self,
-        *,
-        subject_id: str,
-        acquisition_date: date,
-        source_raw_path: Path | None = None,
-    ) -> Any:
-        ...
-
-    def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> None:
-        ...
-
-    def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
-        ...
-
+from typing import Any
+from ..project_core import MRICase, FileSystemWorkspaceProvider, build_case_workspace
+from ..project_core.ports import WorkspaceGateway
 
 class ProjectCaseWorkspaceGateway:
     """
@@ -56,7 +29,6 @@ class ProjectCaseWorkspaceGateway:
         if source_raw_path is None:
             raise ValueError("source_raw_path is required to create a CaseWorkspace input file.")
 
-        MRICase, FileSystemWorkspaceProvider, _build_case_workspace = self._load_project_core()
         case = MRICase(
             subject_id=subject_id,
             acquisition_date=acquisition_date.isoformat(),
@@ -66,7 +38,6 @@ class ProjectCaseWorkspaceGateway:
         return provider.create_workspace(case)
 
     def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> None:
-        MRICase, _FileSystemWorkspaceProvider, build_case_workspace = self._load_project_core()
         placeholder_raw = Path("__deleted_case_placeholder__.nii.gz")
         case = MRICase(
             subject_id=subject_id,
@@ -80,7 +51,6 @@ class ProjectCaseWorkspaceGateway:
                 shutil.rmtree(directory)
 
     def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
-        MRICase, _FileSystemWorkspaceProvider, build_case_workspace = self._load_project_core()
         placeholder_raw = Path("__lookup_case_placeholder__.nii.gz")
         case = MRICase(
             subject_id=subject_id,
@@ -88,13 +58,6 @@ class ProjectCaseWorkspaceGateway:
             raw_path=placeholder_raw,
         )
         return build_case_workspace(case, self.settings)
-
-    def _load_project_core(self) -> tuple[Any, Any, Any]:
-        try:
-            from ..project_core import MRICase, FileSystemWorkspaceProvider, build_case_workspace
-        except ImportError:
-            from project_core import MRICase, FileSystemWorkspaceProvider, build_case_workspace
-        return MRICase, FileSystemWorkspaceProvider, build_case_workspace
-
+    
 
 __all__ = ["ProjectCaseWorkspaceGateway", "WorkspaceGateway"]

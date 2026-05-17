@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..project_core.config import Settings, build_settings, ensure_main_directories, settings
 from ..project_core.domain import MRICase
-from ..project_core.workspace import CaseWorkspace, CaseWorkspace, build_case_paths, build_case_workspace
+from ..project_core.workspace import CaseWorkspace, CaseWorkspace, build_case_workspace
 from .input_checks import InputCheckResult, OrientationStatus, check_input_orientation
 from .pipeline import (
     CaseRunResult,
@@ -21,9 +21,7 @@ __all__ = [
     "ensure_main_directories",
     "MRICase",
     "CaseWorkspace",
-    "CaseWorkspace",
     "build_case_workspace",
-    "build_case_paths",
     "OrientationStatus",
     "InputCheckResult",
     "check_input_orientation",
