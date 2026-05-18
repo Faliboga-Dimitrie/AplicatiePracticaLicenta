@@ -227,21 +227,19 @@ class AccessControlService:
         except Exception as exc:
             return DbResult.fail(str(exc))
 
-    def get_mri_case(self, case_id: int, *, include_workspace: bool = False) -> DbResult[MriCaseRecord]:
+    def get_mri_case(self, case_id: int) -> DbResult[MriCaseRecord]:
         result = self.cases.get(case_id)
-        if not result.success or result.data is None or not include_workspace:
+        if not result.success or result.data is None:
             return result
         return DbResult.ok(self._with_workspace(result.data))
 
     def get_first_mri_case_for_subject(
         self,
         subject_id: str,
-        *,
-        include_workspace: bool = False,
     ) -> DbResult[MriCaseRecord]:
         result = self.cases.get_first_for_subject(subject_id)
 
-        if not result.success or result.data is None or not include_workspace:
+        if not result.success or result.data is None:
             return result
 
         return DbResult.ok(self._with_workspace(result.data))
@@ -251,12 +249,10 @@ class AccessControlService:
         self,
         subject_id: str,
         acquisition_date: str | date,
-        *,
-        include_workspace: bool = False,
     ) -> DbResult[MriCaseRecord]:
         result = self.cases.get_by_subject_date(subject_id, acquisition_date)
 
-        if not result.success or result.data is None or not include_workspace:
+        if not result.success or result.data is None:
             return result
 
         return DbResult.ok(self._with_workspace(result.data))
@@ -271,21 +267,90 @@ class AccessControlService:
         notes: str | None | object = UNSET,
         status: str | None | object = UNSET,
     ) -> DbResult[bool]:
-        return self.cases.update_by_subject_date(
-            subject_id,
-            acquisition_date,
-            new_acquisition_date=new_acquisition_date,
-            notes=notes,
-            status=status,
-        )
+        try:
+            current_acq_date = normalize_date(acquisition_date)
+
+            old_case = self.cases.get_by_subject_date(subject_id, current_acq_date)
+            if not old_case.success:
+                return DbResult.fail(old_case.error or "Could not load MRI case before update.")
+            if old_case.data is None:
+                return DbResult.ok(False)
+
+            date_is_changing = new_acquisition_date is not UNSET
+
+            if not date_is_changing:
+                return self.cases.update_by_subject_date(
+                    subject_id,
+                    current_acq_date,
+                    notes=notes,
+                    status=status,
+                )
+
+            next_acq_date = normalize_date(new_acquisition_date)
+
+            if next_acq_date == current_acq_date:
+                return self.cases.update_by_subject_date(
+                    subject_id,
+                    current_acq_date,
+                    notes=notes,
+                    status=status,
+                )
+
+            existing_target = self.cases.get_by_subject_date(subject_id, next_acq_date)
+            if not existing_target.success:
+                return DbResult.fail(existing_target.error or "Could not check target MRI case date.")
+            if existing_target.data is not None:
+                return DbResult.fail(
+                    f"MRI case already exists for subject '{subject_id}' "
+                    f"on acquisition date '{next_acq_date.isoformat()}'."
+                )
+
+            moved_paths = []
+
+            if self.workspace_gateway is None:
+                    return DbResult.fail("rename_workspace=True requires a workspace_gateway.")
+
+            moved_paths = self.workspace_gateway.rename_case_workspace(
+                subject_id=subject_id,
+                old_acquisition_date=current_acq_date,
+                new_acquisition_date=next_acq_date,
+                overwrite=False,
+            )
+
+                
+            update_result = self.cases.update_by_subject_date(
+                subject_id,
+                current_acq_date,
+                new_acquisition_date=next_acq_date,
+                notes=notes,
+                status=status,
+            )
+
+            if update_result.success and update_result.data:
+                return update_result
+
+            # Rollback filesystem rename if DB update failed.
+            if moved_paths:
+                try:
+                    self.workspace_gateway.rename_case_workspace(
+                        subject_id=subject_id,
+                        old_acquisition_date=next_acq_date,
+                        new_acquisition_date=current_acq_date,
+                        overwrite=False,
+                    )
+                except Exception:
+                    pass
+
+            return update_result
+
+        except Exception as exc:
+            return DbResult.fail(str(exc))
 
 
     def delete_mri_case_by_subject_date(
         self,
         subject_id: str,
         acquisition_date: str | date,
-        *,
-        delete_workspace: bool = False,
     ) -> DbResult[bool]:
         try:
             existing = self.cases.get_by_subject_date(subject_id, acquisition_date)
@@ -298,7 +363,7 @@ class AccessControlService:
 
             result = self.cases.delete_by_subject_date(subject_id, acquisition_date)
 
-            if result.success and result.data and delete_workspace:
+            if result.success and result.data:
                 self._delete_workspace(existing.data)
 
             return result
@@ -309,11 +374,9 @@ class AccessControlService:
     def list_cases_for_subject(
         self,
         subject_id: str,
-        *,
-        include_workspace: bool = False,
     ) -> DbResult[list[MriCaseRecord]]:
         result = self.cases.list_for_subject(subject_id)
-        if not result.success or not include_workspace:
+        if not result.success:
             return result
         return DbResult.ok([self._with_workspace(case) for case in result.data or []])
 
@@ -389,27 +452,22 @@ class AccessControlService:
         subject_id: str,
         *,
         include_cases: bool = True,
-        include_workspace: bool = False,
     ) -> DbResult[list[SubjectWithCases]]:
         return self.search_subjects_for_user(
             user_id,
             subject_id=subject_id,
             include_cases=include_cases,
-            include_workspace=include_workspace,
         )
 
     def search_by_date(
         self,
         user_id: int,
         acquisition_date: str | date,
-        *,
-        include_workspace: bool = False,
     ) -> DbResult[list[SubjectWithCases]]:
         return self.search_subjects_for_user(
             user_id,
             acquisition_date=acquisition_date,
             include_cases=True,
-            include_workspace=include_workspace,
         )
 
     def search_subjects_for_user(
@@ -419,7 +477,6 @@ class AccessControlService:
         subject_id: str | None = None,
         acquisition_date: str | date | None = None,
         include_cases: bool = True,
-        include_workspace: bool = False,
     ) -> DbResult[list[SubjectWithCases]]:
         """
         Search only inside the subjects visible to a given user.
@@ -436,10 +493,7 @@ class AccessControlService:
         if not rows.success:
             return DbResult.fail(rows.error or "Search failed.")
         return DbResult.ok(
-            self._group_subject_search_rows(
-                rows.data or [],
-                include_workspace=include_workspace,
-            )
+            self._group_subject_search_rows(rows.data or [])
         )
 
     # ------------------------------------------------------------------
@@ -465,8 +519,6 @@ class AccessControlService:
     def _group_subject_search_rows(
         self,
         rows: list[dict[str, Any]],
-        *,
-        include_workspace: bool,
     ) -> list[SubjectWithCases]:
         grouped: dict[str, tuple[SubjectRecord, str, list[MriCaseRecord]]] = {}
 
@@ -488,7 +540,7 @@ class AccessControlService:
             if case_id is not None:
                 acq_date = date_from_db(row["case_acquisition_date"])
                 workspace = None
-                if include_workspace and self.workspace_gateway is not None:
+                if self.workspace_gateway is not None:
                     workspace = self.workspace_gateway.get_case_workspace(
                         subject_id=str(row["case_subject_id"]),
                         acquisition_date=acq_date,

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar, Any
 
-from tomlkit import date
+from datetime import date
 
 if TYPE_CHECKING:
     from .artifacts import ArtifactKind, ArtifactRef
@@ -215,12 +215,8 @@ class WorkspaceGateway(Protocol):
     """
     Optional adapter used when the service should also touch the filesystem.
 
-    The recommended API flow is still:
-        1. database operation succeeds;
-        2. API/application layer calls CaseWorkspace through this gateway.
-
-    Injecting a gateway here is useful for a small local application where you
-    want the same service method to also create/delete case folders.
+    The API/database layer should not know the internal folder layout. It asks
+    this gateway to create, delete, lookup, or rename workspaces.
     """
 
     def create_case_workspace(
@@ -236,6 +232,16 @@ class WorkspaceGateway(Protocol):
         ...
 
     def delete_subject_workspaces(self, *, subject_id: str) -> None:
+        ...
+
+    def rename_case_workspace(
+        self,
+        *,
+        subject_id: str,
+        old_acquisition_date: date,
+        new_acquisition_date: date,
+        overwrite: bool = False,
+    ) -> Any:
         ...
 
     def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:

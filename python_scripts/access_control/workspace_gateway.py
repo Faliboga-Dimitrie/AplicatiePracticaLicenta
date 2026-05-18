@@ -73,5 +73,39 @@ class ProjectCaseWorkspaceGateway:
         )
         return build_case_workspace(case, self.settings)
     
+    def rename_case_workspace(
+        self,
+        *,
+        subject_id: str,
+        old_acquisition_date: date,
+        new_acquisition_date: date,
+        overwrite: bool = False,
+    ) -> Any:
+        placeholder_raw = Path("__renamed_case_placeholder__.nii.gz")
+
+        old_case = MRICase(
+            subject_id=subject_id,
+            acquisition_date=old_acquisition_date.isoformat(),
+            raw_path=placeholder_raw,
+        )
+
+        new_case = MRICase(
+            subject_id=subject_id,
+            acquisition_date=new_acquisition_date.isoformat(),
+            raw_path=placeholder_raw,
+        )
+
+        provider = FileSystemWorkspaceProvider(
+            self.settings,
+            create_directories=False,
+        )
+
+        return provider.rename_workspace(
+            old_case,
+            new_case,
+            overwrite=overwrite,
+            prune_empty_subject_dirs=True,
+        )
+    
 
 __all__ = ["ProjectCaseWorkspaceGateway", "WorkspaceGateway"]

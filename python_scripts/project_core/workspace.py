@@ -32,6 +32,36 @@ def _remove_tree(path: Path) -> bool:
     shutil.rmtree(path)
     return True
 
+def _move_tree(source: Path, target: Path, *, overwrite: bool = False) -> bool:
+    """
+    Move a directory tree if it exists.
+
+    Returns True when a directory was moved.
+    Raises if the target already exists and overwrite=False.
+    """
+    if not source.exists():
+        return False
+
+    if not source.is_dir():
+        raise ValueError(f"Expected source directory, got file path: {source}")
+
+    if target.exists():
+        if not overwrite:
+            raise FileExistsError(
+                f"Cannot rename workspace directory because target already exists:\n"
+                f"source: {source}\n"
+                f"target: {target}"
+            )
+
+        if not target.is_dir():
+            raise ValueError(f"Expected target directory, got file path: {target}")
+
+        shutil.rmtree(target)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(target))
+    return True
+
 
 def _remove_file(path: Path) -> bool:
     """Remove one file if it exists. Return True when something was removed."""
@@ -228,6 +258,57 @@ class CaseWorkspace:
 
     def delete_mesh_analysis_outputs(self) -> list[Path]:
         return self.delete_files(self.mesh_analysis_output_paths)
+    
+    # ------------------------------------------------------------------
+    # rename
+    # ------------------------------------------------------------------
+
+    def rename_to(
+        self,
+        target_workspace: "CaseWorkspace",
+        *,
+        overwrite: bool = False,
+        prune_empty_subject_dirs: bool = True,
+    ) -> list[tuple[Path, Path]]:
+        """
+        Rename/move this case workspace to another acquisition date.
+
+        This is meant for correcting acquisition_date mistakes, for example:
+
+            input_mri/<subject>/2026-05-17
+                -> input_mri/<subject>/2026-05-18
+
+            processed_mri/fast/<subject>/2026-05-17
+                -> processed_mri/fast/<subject>/2026-05-18
+
+        The method moves every existing stage directory. Missing stage directories
+        are ignored, because a case may exist in the DB before all processing stages
+        have generated files.
+
+        Returns a list of (old_path, new_path) pairs that were actually moved.
+        """
+        if self.subject_id != target_workspace.subject_id:
+            raise ValueError(
+                "CaseWorkspace.rename_to only supports acquisition-date rename for "
+                "the same subject. Subject rename should be a separate operation."
+            )
+
+        if self.acquisition_date == target_workspace.acquisition_date:
+            return []
+
+        source_dirs = self.stage_dirs
+        target_dirs = target_workspace.stage_dirs
+
+        moved: list[tuple[Path, Path]] = []
+
+        for source_dir, target_dir in zip(source_dirs, target_dirs, strict=True):
+            if _move_tree(source_dir, target_dir, overwrite=overwrite):
+                moved.append((source_dir, target_dir))
+
+                if prune_empty_subject_dirs:
+                    _prune_empty_parent(source_dir)
+
+        return moved
 
     # ------------------------------------------------------------------
     # reorientation
@@ -482,6 +563,23 @@ class FileSystemWorkspaceProvider:
     def get_workspace(self, case: MRICase) -> CaseWorkspace:
         """Build paths for a case without creating folders or copying the input file."""
         return self.build_workspace(case)
+    
+    def rename_workspace(
+        self,
+        old_case: MRICase,
+        new_case: MRICase,
+        *,
+        overwrite: bool = False,
+        prune_empty_subject_dirs: bool = True,
+    ) -> list[tuple[Path, Path]]:
+        old_workspace = self.build_workspace(old_case)
+        new_workspace = self.build_workspace(new_case)
+
+        return old_workspace.rename_to(
+            new_workspace,
+            overwrite=overwrite,
+            prune_empty_subject_dirs=prune_empty_subject_dirs,
+        )
 
     def delete_workspace(
         self,

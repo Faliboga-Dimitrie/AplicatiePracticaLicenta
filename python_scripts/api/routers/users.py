@@ -48,31 +48,25 @@ def get_user_by_email(
     return user_to_dict(user)
 
 
-@router.get("/{user_id}")
-def get_user(
-    user_id: int,
-    access: AccessControlService = Depends(get_access_service),
-):
-    result = access.get_user_by_id(user_id)
-    user = unwrap_result(result, not_found_message="User not found.")
-    return user_to_dict(user)
-
-
-@router.put("/{user_id}")
+@router.put("/{email}")
 def update_user(
-    user_id: int,
+    email: str,
     request: UpdateUserRequest,
     access: AccessControlService = Depends(get_access_service),
 ):
     changed: dict[str, bool] = {}
 
+    user_result = access.get_user_by_email(email)
+
+    user = unwrap_result(user_result, not_found_message="User not found.")
+
     if request.email is not None:
-        result = access.update_user_email(user_id, request.email)
+        result = access.update_user_email(user.id, request.email)
         unwrap_bool_result(result, not_found_message="User not found.")
         changed["email"] = True
 
     if request.password is not None:
-        result = access.update_user_password(user_id, request.password)
+        result = access.update_user_password(user.id, request.password)
         unwrap_bool_result(result, not_found_message="User not found.")
         changed["password"] = True
 
@@ -82,7 +76,7 @@ def update_user(
             detail="Nothing to update. Send email and/or password.",
         )
 
-    refreshed = access.get_user_by_id(user_id)
+    refreshed = access.get_user_by_id(user.id)
     user = unwrap_result(refreshed, not_found_message="User not found after update.")
 
     return {
@@ -92,15 +86,18 @@ def update_user(
     }
 
 
-@router.delete("/{user_id}")
+@router.delete("/{email}")
 def delete_user(
-    user_id: int,
+    email: str,
     access: AccessControlService = Depends(get_access_service),
 ):
-    result = access.delete_user(user_id)
+    user_result = access.get_user_by_email(email)
+
+    user = unwrap_result(user_result, not_found_message="User not found for deletion.")
+    result = access.delete_user(user.id)
     unwrap_bool_result(result, not_found_message="User not found.")
 
     return {
         "deleted": True,
-        "user_id": user_id,
+        "user_id": user.id,
     }

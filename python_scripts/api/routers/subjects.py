@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ...access_control.services import AccessControlService
 from ...access_control.utils import UNSET
@@ -30,6 +30,10 @@ def create_subject(
     request: CreateSubjectRequest,
     access: AccessControlService = Depends(get_access_service),
 ):
+    duplicate_check = access.get_subject(request.subject_id)
+    if duplicate_check.success and duplicate_check.data is not None:
+        raise HTTPException(status_code=400, detail="Subject with this ID already exists.")
+
     result = access.create_subject(
         request.subject_id,
         name=request.name,
