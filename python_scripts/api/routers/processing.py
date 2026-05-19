@@ -1,50 +1,93 @@
-from fastapi import APIRouter, Depends, HTTPException
+from __future__ import annotations
 
-from ..dependencies import get_access_service, get_settings
-from ...access_control import AccessControlService
-from ...project_core import MRICase
-from ...mri_preprocessing.pipeline import build_default_preprocessing_pipeline
+from fastapi import APIRouter, Depends
+
+from ...access_control import UserRecord
+from ..dependencies import (
+    get_current_user,
+    get_mesh_analysis_service,
+    get_preprocessing_service,
+)
+from ..errors import unwrap_result
+from ..schemas import JobResponse
+from ..serialization import job_to_dict
+from ..services import MeshAnalysisService, PreprocessingService
 
 router = APIRouter()
 
 
-@router.post("/{case_id}/preprocess")
-def preprocess_case(
+@router.post("/cases/{case_id}/preprocessing-jobs", response_model=JobResponse)
+def start_preprocessing_job(
     case_id: int,
-    access: AccessControlService = Depends(get_access_service),
-    settings=Depends(get_settings),
+    current_user: UserRecord = Depends(get_current_user),
+    preprocessing: PreprocessingService = Depends(get_preprocessing_service),
 ):
-    case_result = access.get_mri_case(case_id, include_workspace=True)
+    """
+    Start preprocessing for one authorized MRI case and return immediately.
 
-    if not case_result.success:
-        raise HTTPException(status_code=500, detail=case_result.error)
+    React should not wait for HD-BET/FAST inside this request. It receives the
+    job id here, then polls GET /jobs/{job_id} until the status becomes
+    completed or failed.
+    """
+    result = preprocessing.start_for_case(current_user, case_id)
+    job = unwrap_result(
+        result,
+        not_found_message="MRI case not found or not enough permissions to preprocess it.",
+    )
+    return job_to_dict(job)
 
-    case_record = case_result.data
-    if case_record is None:
-        raise HTTPException(status_code=404, detail="MRI case not found.")
 
-    workspace = case_record.workspace
-    if workspace is None:
-        raise HTTPException(status_code=500, detail="Workspace could not be resolved.")
+@router.post("/cases/{case_id}/mesh-analysis-jobs", response_model=JobResponse)
+def start_mesh_analysis_job(
+    case_id: int,
+    current_user: UserRecord = Depends(get_current_user),
+    mesh_analysis: MeshAnalysisService = Depends(get_mesh_analysis_service),
+):
+    """
+    Start mesh analysis for one authorized MRI case and return immediately.
 
-    case = MRICase(
-        subject_id=case_record.subject_id,
-        acquisition_date=case_record.acquisition_date.isoformat(),
-        raw_path=workspace.raw_path,
+    React receives the job id here, then polls GET /jobs/{job_id}. When the job
+    is completed, the result contains metrics and frontend-safe artifact URLs
+    for the generated GLB files/metrics JSON.
+    """
+    result = mesh_analysis.start_for_case(current_user, case_id)
+    job = unwrap_result(
+        result,
+        not_found_message="MRI case not found or not enough permissions to run mesh analysis.",
+    )
+    return job_to_dict(job)
+
+
+@router.post("/{case_id}/preprocess", response_model=JobResponse)
+def preprocess_case_legacy_path(
+    case_id: int,
+    current_user: UserRecord = Depends(get_current_user),
+    preprocessing: PreprocessingService = Depends(get_preprocessing_service),
+):
+    """
+    Compatibility alias for the old testing endpoint.
+
+    The old endpoint used to block until preprocessing finished. It now follows
+    the web/backend contract and returns a JobResponse immediately.
+    """
+    return start_preprocessing_job(
+        case_id=case_id,
+        current_user=current_user,
+        preprocessing=preprocessing,
     )
 
-    pipeline = build_default_preprocessing_pipeline(settings)
 
-    try:
-        result = pipeline.run_case(case)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    return {
-        "subject_id": result.subject_id,
-        "acquisition_date": result.workspace.acquisition_date,
-        "reoriented_path": str(result.reoriented_path),
-        "skull_stripped_path": str(result.skull_stripped_path),
-        "segmentation_path": str(result.segmentation_path),
-        "pve_paths": {k: str(v) for k, v in result.pve_paths.items()},
-    }
+@router.post("/{case_id}/mesh", response_model=JobResponse)
+def mesh_case_legacy_path(
+    case_id: int,
+    current_user: UserRecord = Depends(get_current_user),
+    mesh_analysis: MeshAnalysisService = Depends(get_mesh_analysis_service),
+):
+    """
+    Compatibility alias for a simple mesh-analysis testing endpoint.
+    """
+    return start_mesh_analysis_job(
+        case_id=case_id,
+        current_user=current_user,
+        mesh_analysis=mesh_analysis,
+    )
