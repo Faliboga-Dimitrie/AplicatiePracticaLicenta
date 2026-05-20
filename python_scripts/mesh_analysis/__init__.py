@@ -2,6 +2,12 @@ from ..project_core import MeshAnalysisResult, TissueSurfaces, TissueSurfaces, T
 from .exporters import GlbExportConfig, GlbMeshExporter
 from .mesh_extractors import MarchingCubesConfig, MarchingCubesMeshExtractor
 from .models import MeshAnalysisMeshes, TissueMeshes, TissueWireframes
+from .evolution_in_time import (
+    EvolutionCaseMetrics,
+    EvolutionMriArtifacts,
+    MriEvolutionInTime,
+    evolution_artifacts_from_workspaces,
+)
 from .pipeline import CaseRunResult, MeshAnalysisPipeline
 from .surface_estimators import TrimeshSurfaceEstimator
 from .volume_estimators import PveSumVolumeEstimator
@@ -14,6 +20,10 @@ __all__ = [
     "TissueMeshes",
     "TissueWireframes",
     "MeshAnalysisMeshes",
+    "EvolutionCaseMetrics",
+    "EvolutionMriArtifacts",
+    "MriEvolutionInTime",
+    "evolution_artifacts_from_workspaces",
     "PveSumVolumeEstimator",
     "MarchingCubesConfig",
     "MarchingCubesMeshExtractor",

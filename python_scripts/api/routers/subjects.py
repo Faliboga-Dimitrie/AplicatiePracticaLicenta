@@ -83,33 +83,31 @@ def list_subject_cases(
 
 
 # -----------------------------------------------------------------------------
-# Temporary admin/test CRUD endpoints
+# User-facing subject creation + temporary admin/test update/delete
 # -----------------------------------------------------------------------------
 
-@router.post("")
+@router.post("", response_model=AuthorizedSubjectResponse)
 def create_subject(
     request: CreateSubjectRequest,
-    access: AccessControlService = Depends(get_access_service),
+    current_user: UserRecord = Depends(get_current_user),
+    subjects: SubjectService = Depends(get_subject_service),
 ):
     """
-    Temporary test/admin endpoint.
+    React-facing endpoint.
 
-    This is intentionally not the endpoint React should use for normal browsing.
-    Later we can protect it with an admin role or move admin operations into a
-    separate router.
+    Create a new subject and immediately grant the logged-in user owner access.
+    Without this subject_access row, the newly created subject would not appear
+    in GET /subjects for the same user.
     """
-    duplicate_check = access.get_subject(request.subject_id)
-    if duplicate_check.success and duplicate_check.data is not None:
-        raise HTTPException(status_code=400, detail="Subject with this ID already exists.")
-
-    result = access.create_subject(
-        request.subject_id,
+    result = subjects.create_for_user(
+        current_user,
+        subject_id=request.subject_id,
         name=request.name,
         age=request.age,
         notes=request.notes,
     )
-    subject = unwrap_result(result)
-    return subject_to_dict(subject)
+    subject_with_cases = unwrap_result(result, not_found_message="Subject could not be created.")
+    return subject_with_cases_to_dict(subject_with_cases, include_cases=True)
 
 
 @router.put("/{subject_id}")
