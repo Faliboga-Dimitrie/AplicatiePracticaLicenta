@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...access_control import UserRecord
-from ...access_control.services import AccessControlService
+from ...access_control.access_control_service import AccessControlService
 from ...access_control.utils import UNSET
 from ..dependencies import get_access_service, get_current_user, get_subject_service
 from ..errors import unwrap_bool_result, unwrap_result

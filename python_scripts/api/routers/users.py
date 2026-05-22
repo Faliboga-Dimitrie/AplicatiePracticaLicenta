@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...access_control.services import AccessControlService
+from ...access_control.access_control_service import AccessControlService
 from ..dependencies import get_access_service
 from ..errors import unwrap_bool_result, unwrap_result
 from ..schemas import CreateUserRequest, UpdateUserRequest
