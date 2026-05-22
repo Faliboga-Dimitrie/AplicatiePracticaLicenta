@@ -61,10 +61,25 @@ class SubjectWithCases:
     role: str
 
 
+@dataclass(frozen=True)
+class SubjectSummaryRecord:
+    """
+    Authorized subject summary used by list screens.
+
+    Unlike SubjectWithCases, this does not carry full MRI case records. The
+    case_count is computed in SQL, so GET /subjects can stay lightweight.
+    """
+
+    subject: SubjectRecord
+    role: str
+    case_count: int
+
+
 __all__ = [
     "MriCaseRecord",
     "SubjectAccessRecord",
     "SubjectRecord",
+    "SubjectSummaryRecord",
     "SubjectWithCases",
     "UserCredentialsRecord",
     "UserRecord",

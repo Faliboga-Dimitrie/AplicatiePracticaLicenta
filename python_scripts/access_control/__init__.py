@@ -5,6 +5,7 @@ from .models import (
     MriCaseRecord,
     SubjectAccessRecord,
     SubjectRecord,
+    SubjectSummaryRecord,
     SubjectWithCases,
     UserRecord,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "ROLE_LEVELS",
     "SubjectAccessRecord",
     "SubjectRecord",
+    "SubjectSummaryRecord",
     "SubjectWithCases",
     "UserRecord",
     "WorkspaceGateway",

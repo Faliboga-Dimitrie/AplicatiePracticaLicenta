@@ -6,7 +6,7 @@ from typing import Any
 
 from .config import DatabaseConfig
 from .database import MySqlDatabase
-from .models import MriCaseRecord, SubjectRecord, SubjectWithCases, UserRecord
+from .models import MriCaseRecord, SubjectRecord, SubjectSummaryRecord, SubjectWithCases, UserRecord
 from .password_hashing import PasswordHasher
 from .repositories import (
     MriCaseRepository,
@@ -437,6 +437,38 @@ class AccessControlService:
     # ------------------------------------------------------------------
     # authorized searches
     # ------------------------------------------------------------------
+
+
+    def list_accessible_subject_summaries(
+        self,
+        user_id: int,
+    ) -> DbResult[list[SubjectSummaryRecord]]:
+        """
+        Return visible subjects for list screens without loading full case rows.
+
+        The repository uses COUNT(c.id), so this is cheaper than
+        list_accessible_subjects(..., include_cases=True) when the API only
+        needs case_count.
+        """
+        rows = self.search.list_subject_summaries_for_user(user_id)
+        if not rows.success:
+            return DbResult.fail(rows.error or "Could not load subject summaries.")
+
+        summaries = [
+            SubjectSummaryRecord(
+                subject=SubjectRecord(
+                    id=str(row["subject_id"]),
+                    name=row.get("subject_name"),
+                    age=row.get("subject_age"),
+                    notes=row.get("subject_notes"),
+                ),
+                role=str(row["access_role"]),
+                case_count=int(row.get("case_count") or 0),
+            )
+            for row in rows.data or []
+        ]
+
+        return DbResult.ok(summaries)
 
     def list_accessible_subjects(
         self,

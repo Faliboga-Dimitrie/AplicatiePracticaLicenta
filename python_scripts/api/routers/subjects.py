@@ -13,7 +13,7 @@ from ..schemas import (
     MriCaseResponse,
     UpdateSubjectRequest,
 )
-from ..serialization import mri_case_to_dict, subject_to_dict, subject_with_cases_to_dict
+from ..serialization import mri_case_to_dict, subject_summary_to_dict, subject_to_dict, subject_with_cases_to_dict
 from ..services import SubjectService
 
 router = APIRouter()
@@ -31,15 +31,12 @@ def list_subjects(
     does not know how authorization works; it asks SubjectService for the
     current user's visible subjects.
     """
-    result = subjects.list_for_user(current_user, include_cases=True)
+    result = subjects.list_summaries_for_user(current_user)
 
     if not result.success:
         raise HTTPException(status_code=400, detail=result.error or "Could not load subjects.")
 
-    return [
-        subject_with_cases_to_dict(subject_with_cases, include_cases=False)
-        for subject_with_cases in result.data or []
-    ]
+    return [subject_summary_to_dict(subject_summary) for subject_summary in result.data or []]
 
 
 @router.get("/{subject_id}", response_model=AuthorizedSubjectResponse)

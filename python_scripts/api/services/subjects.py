@@ -4,6 +4,7 @@ from ...access_control import (
     AccessControlService,
     DbResult,
     MriCaseRecord,
+    SubjectSummaryRecord,
     SubjectWithCases,
     UserRecord,
 )
@@ -20,6 +21,19 @@ class SubjectService:
 
     def __init__(self, access: AccessControlService):
         self.access = access
+
+
+    def list_summaries_for_user(
+        self,
+        user: UserRecord,
+    ) -> DbResult[list[SubjectSummaryRecord]]:
+        """
+        Lightweight subject list for React.
+
+        This returns one row per visible subject, with case_count computed by SQL,
+        instead of loading all cases and then dropping them from the response.
+        """
+        return self.access.list_accessible_subject_summaries(user.id)
 
     def list_for_user(
         self,
