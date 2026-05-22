@@ -4,10 +4,12 @@ from ...access_control import (
     AccessControlService,
     DbResult,
     MriCaseRecord,
+    SubjectRecord,
     SubjectSummaryRecord,
     SubjectWithCases,
     UserRecord,
 )
+from ...access_control.utils import UNSET
 
 
 class SubjectService:
@@ -67,6 +69,35 @@ class SubjectService:
             return DbResult.ok(None)
 
         return DbResult.ok(subjects[0])
+
+
+    def get_subject(
+        self,
+        subject_id: str,
+    ) -> DbResult[SubjectRecord]:
+        return self.access.get_subject(subject_id)
+
+    def update_subject(
+        self,
+        subject_id: str,
+        *,
+        name: str | None | object = UNSET,
+        age: int | None | object = UNSET,
+        notes: str | None | object = UNSET,
+    ) -> DbResult[bool]:
+        return self.access.update_subject(
+            subject_id,
+            name=name,
+            age=age,
+            notes=notes,
+        )
+
+    def delete_for_user(
+        self,
+        user: UserRecord,
+        subject_id: str,
+    ) -> DbResult[bool]:
+        return self.access.delete_subject_for_user(user.id, subject_id)
 
     def list_cases_for_subject(
         self,

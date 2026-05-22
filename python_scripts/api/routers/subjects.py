@@ -3,9 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...access_control import UserRecord
-from ...access_control.access_control_service import AccessControlService
 from ...access_control.utils import UNSET
-from ..dependencies import get_access_service, get_current_user, get_subject_service
+from ..dependencies import get_current_user, get_subject_service
 from ..errors import unwrap_bool_result, unwrap_result
 from ..schemas import (
     AuthorizedSubjectResponse,
@@ -111,12 +110,13 @@ def create_subject(
 def update_subject(
     subject_id: str,
     request: UpdateSubjectRequest,
-    access: AccessControlService = Depends(get_access_service),
+    _current_user: UserRecord = Depends(get_current_user),
+    subjects: SubjectService = Depends(get_subject_service),
 ):
-    """Temporary test/admin endpoint."""
+    """React-facing endpoint for editing subject metadata."""
     payload = request.model_dump(exclude_unset=True)
 
-    result = access.update_subject(
+    result = subjects.update_subject(
         subject_id,
         name=payload.get("name", UNSET),
         age=payload.get("age", UNSET),
@@ -125,7 +125,7 @@ def update_subject(
 
     unwrap_bool_result(result, not_found_message="Subject not found or nothing changed.")
 
-    refreshed = access.get_subject(subject_id)
+    refreshed = subjects.get_subject(subject_id)
     subject = unwrap_result(refreshed, not_found_message="Subject not found after update.")
 
     return {
@@ -137,17 +137,13 @@ def update_subject(
 @router.delete("/{subject_id}")
 def delete_subject(
     subject_id: str,
-    access: AccessControlService = Depends(get_access_service),
+    current_user: UserRecord = Depends(get_current_user),
+    subjects: SubjectService = Depends(get_subject_service),
 ):
-    """
-    Temporary test/admin endpoint.
+    """React-facing endpoint for deleting a subject owned by the current user."""
+    result = subjects.delete_for_user(current_user, subject_id)
 
-    This may also delete filesystem workspaces through AccessControlService's
-    workspace gateway.
-    """
-    result = access.delete_subject(subject_id)
-
-    unwrap_bool_result(result, not_found_message="Subject not found.")
+    unwrap_bool_result(result, not_found_message="Subject not found or not authorized.")
 
     return {
         "deleted": True,

@@ -4,13 +4,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from ..access_control.models import SubjectSummaryRecord, UserRecord, SubjectWithCases, SubjectRecord, MriCaseRecord
-from .services.jobs import JobRecord
 
-from ..project_core.workspace import CaseWorkspace
-
-
-def workspace_to_dict(workspace: CaseWorkspace | None) -> dict[str, object] | None:
+def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
     if workspace is None:
         return None
 
@@ -70,14 +65,14 @@ def workspace_to_dict(workspace: CaseWorkspace | None) -> dict[str, object] | No
     }
 
 
-def user_to_dict(user: UserRecord) -> dict[str, object]:
+def user_to_dict(user: Any) -> dict[str, object]:
     return {
         "id": user.id,
         "email": user.email,
     }
 
 
-def subject_to_dict(subject: SubjectRecord) -> dict[str, object]:
+def subject_to_dict(subject: Any) -> dict[str, object]:
     return {
         "id": subject.id,
         "name": subject.name,
@@ -86,7 +81,7 @@ def subject_to_dict(subject: SubjectRecord) -> dict[str, object]:
     }
 
 
-def mri_case_to_dict(case: MriCaseRecord) -> dict[str, object]:
+def mri_case_to_dict(case: Any) -> dict[str, object]:
     acquisition_date = case.acquisition_date
     if hasattr(acquisition_date, "isoformat"):
         acquisition_date = acquisition_date.isoformat()
@@ -102,7 +97,7 @@ def mri_case_to_dict(case: MriCaseRecord) -> dict[str, object]:
     }
 
 
-def subject_summary_to_dict(subject_summary: SubjectSummaryRecord) -> dict[str, object]:
+def subject_summary_to_dict(subject_summary: Any) -> dict[str, object]:
     subject = subject_summary.subject
 
     return {
@@ -115,7 +110,7 @@ def subject_summary_to_dict(subject_summary: SubjectSummaryRecord) -> dict[str, 
     }
 
 def subject_with_cases_to_dict(
-    subject_with_cases: SubjectWithCases,
+    subject_with_cases: Any,
     *,
     include_cases: bool = True,
 ) -> dict[str, object]:
@@ -154,7 +149,7 @@ def _json_safe(value):
     return str(value)
 
 
-def job_to_dict(job: JobRecord) -> dict[str, Any]:
+def job_to_dict(job) -> dict[str, Any]:
     return {
         "id": job.id,
         "type": job.type,
@@ -174,7 +169,7 @@ def job_to_dict(job: JobRecord) -> dict[str, Any]:
 
 
 
-def artifact_to_dict(artifact: Any) -> dict[str, Any]:
+def artifact_to_dict(artifact) -> dict[str, Any]:
     ref = artifact.ref
     return {
         "name": ref.name,
@@ -186,7 +181,7 @@ def artifact_to_dict(artifact: Any) -> dict[str, Any]:
     }
 
 
-def case_artifacts_to_dict(bundle: Any) -> dict[str, Any]:
+def case_artifacts_to_dict(bundle) -> dict[str, Any]:
     return {
         "case_id": bundle.case_db_id,
         "case_key": bundle.case_key,

@@ -177,13 +177,55 @@ class AccessControlService:
                 return result
 
             if self.workspace_gateway is None:
-                    raise RuntimeError("delete_workspaces=True requires a workspace_gateway.")
+                raise RuntimeError("delete_workspaces=True requires a workspace_gateway.")
 
             self.workspace_gateway.delete_subject_workspaces(
                 subject_id=subject_id,
-            ) 
+            )
 
             return result
+
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
+    def delete_subject_for_user(self, user_id: int, subject_id: str) -> DbResult[bool]:
+        """
+        Delete a subject from a normal user-facing flow.
+
+        This mirrors the API's create_for_user flow: the operation is performed
+        in the context of a logged-in user, so the user's subject_access row is
+        explicitly removed before deleting the subject row itself. That keeps the
+        subject_access table clean even when the database schema was created
+        before ON DELETE CASCADE was added.
+        """
+        try:
+            subject_id = normalize_required_text(subject_id, "subject_id")
+
+            existing_access = self.access.get(user_id, subject_id)
+            if not existing_access.success:
+                return DbResult.fail(existing_access.error or "Could not check subject access before delete.")
+            if existing_access.data is None:
+                return DbResult.ok(False)
+
+            revoked = self.access.revoke(user_id, subject_id)
+            if not revoked.success:
+                return DbResult.fail(revoked.error or "Could not revoke subject access before delete.")
+
+            deleted = self.subjects.delete(subject_id)
+            if not deleted.success or not deleted.data:
+                # Best-effort rollback: if the subject was not deleted, restore
+                # the access row that this method removed first.
+                self.access.grant(user_id, subject_id, existing_access.data.role)
+                return deleted
+
+            if self.workspace_gateway is None:
+                raise RuntimeError("delete_workspaces=True requires a workspace_gateway.")
+
+            self.workspace_gateway.delete_subject_workspaces(
+                subject_id=subject_id,
+            )
+
+            return DbResult.ok(True)
 
         except Exception as exc:
             return DbResult.fail(str(exc))
