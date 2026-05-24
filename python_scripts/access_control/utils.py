@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Any
 
 from .models import (
+    AuthSessionRecord,
     MriCaseRecord,
     SubjectAccessRecord,
     SubjectRecord,
@@ -60,6 +61,18 @@ def date_from_db(value: Any) -> date:
     raise ValueError(f"Unsupported database date value: {value!r}")
 
 
+def auth_session_from_row(row: dict[str, Any]) -> AuthSessionRecord:
+    return AuthSessionRecord(
+        id=int(row["id"]),
+        user_id=int(row["user_id"]),
+        refresh_token_hash=str(row["refresh_token_hash"]),
+        created_at=row["created_at"],
+        expires_at=row["expires_at"],
+        revoked_at=row.get("revoked_at"),
+        last_used_at=row.get("last_used_at"),
+    )
+
+
 def user_from_row(row: dict[str, Any]) -> UserRecord:
     return UserRecord(id=int(row["id"]), email=str(row["email"]))
 
@@ -101,6 +114,7 @@ def access_from_row(row: dict[str, Any]) -> SubjectAccessRecord:
 
 
 __all__ = [
+    "auth_session_from_row",
     "UNSET",
     "access_from_row",
     "date_from_db",

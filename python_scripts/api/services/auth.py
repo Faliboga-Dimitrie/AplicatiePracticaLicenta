@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -28,20 +29,17 @@ class AuthenticatedSession:
     token_type: str
     expires_at: datetime
     user: UserRecord
+    refresh_token: str | None = None
+    refresh_expires_at: datetime | None = None
 
 
 class TokenService:
     """
-    Small HS256 bearer-token service.
+    Small HS256 bearer-token service plus refresh-token helpers.
 
-    This intentionally uses only the Python standard library, so the project does
-    not need PyJWT/python-jose yet. The token format is JWT-compatible enough for
-    our own backend: header.payload.signature, signed with HMAC-SHA256.
-
-    React does not need to understand the token contents. It only stores the
-    string and sends it back as:
-
-        Authorization: Bearer <token>
+    Access tokens are signed, stateless bearer tokens used on normal API calls.
+    Refresh tokens are random opaque strings. The raw refresh token is sent only
+    to the browser as an HttpOnly cookie; the database stores only an HMAC hash.
     """
 
     def __init__(
@@ -50,15 +48,23 @@ class TokenService:
         secret_key: str,
         issuer: str = "brain-mri-api",
         access_token_minutes: int = 8 * 60,
+        refresh_token_days: int = 7,
     ):
         if not secret_key:
             raise ValueError("secret_key must not be empty.")
         if access_token_minutes <= 0:
             raise ValueError("access_token_minutes must be positive.")
+        if refresh_token_days <= 0:
+            raise ValueError("refresh_token_days must be positive.")
 
         self.secret_key = secret_key.encode("utf-8")
         self.issuer = issuer
         self.access_token_minutes = access_token_minutes
+        self.refresh_token_days = refresh_token_days
+
+    @property
+    def refresh_token_max_age_seconds(self) -> int:
+        return int(timedelta(days=self.refresh_token_days).total_seconds())
 
     def create_access_token(self, user: UserRecord) -> tuple[str, datetime]:
         now = datetime.now(timezone.utc)
@@ -121,6 +127,21 @@ class TokenService:
             expires_at=expires_at,
         )
 
+    def create_refresh_token(self) -> tuple[str, str, datetime]:
+        """Return raw refresh token, database hash, and UTC expiration."""
+        raw_token = secrets.token_urlsafe(64)
+        token_hash = self.hash_refresh_token(raw_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=self.refresh_token_days)
+        return raw_token, token_hash, expires_at
+
+    def hash_refresh_token(self, refresh_token: str) -> str:
+        digest = hmac.new(
+            self.secret_key,
+            refresh_token.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return digest
+
     def _sign(self, signing_input: bytes) -> str:
         digest = hmac.new(self.secret_key, signing_input, hashlib.sha256).digest()
         return self._b64url_encode(digest)
@@ -154,9 +175,9 @@ class AuthService:
     """
     Web-facing authentication service.
 
-    AccessControlService remains responsible for checking email/password.
-    AuthService is responsible for web concerns: login response, bearer-token
-    creation, bearer-token verification, and loading the current user.
+    AccessControlService remains responsible for checking email/password and
+    storing refresh sessions. AuthService handles web auth semantics: access
+    token creation, refresh-token rotation, and current-user loading.
     """
 
     def __init__(
@@ -182,15 +203,59 @@ class AuthService:
         if user_result.data is None:
             return DbResult.fail("Authenticated user no longer exists.")
 
-        token, expires_at = self.token_service.create_access_token(user_result.data)
+        return self._create_session_for_user(user_result.data)
+
+    def refresh(self, refresh_token: str | None) -> DbResult[AuthenticatedSession]:
+        if not refresh_token:
+            return DbResult.ok(None)
+
+        old_hash = self.token_service.hash_refresh_token(refresh_token)
+        session_result = self.access.get_active_auth_session_by_hash(old_hash)
+        if not session_result.success:
+            return DbResult.fail(session_result.error or "Could not load refresh session.")
+        if session_result.data is None:
+            return DbResult.ok(None)
+
+        user_result = self.access.get_user_by_id(session_result.data.user_id)
+        if not user_result.success:
+            return DbResult.fail(user_result.error or "Could not load refresh-session user.")
+        if user_result.data is None:
+            return DbResult.ok(None)
+
+        new_refresh_token, new_refresh_hash, new_refresh_expires_at = self.token_service.create_refresh_token()
+        rotated = self.access.rotate_auth_session(
+            session_id=session_result.data.id,
+            old_refresh_token_hash=old_hash,
+            new_refresh_token_hash=new_refresh_hash,
+            new_expires_at=self._to_database_datetime(new_refresh_expires_at),
+        )
+        if not rotated.success:
+            return DbResult.fail(rotated.error or "Could not rotate refresh session.")
+        if not rotated.data:
+            # A concurrent refresh may already have rotated or revoked this token.
+            return DbResult.ok(None)
+
+        access_token, access_expires_at = self.token_service.create_access_token(user_result.data)
         return DbResult.ok(
             AuthenticatedSession(
-                access_token=token,
+                access_token=access_token,
                 token_type="bearer",
-                expires_at=expires_at,
+                expires_at=access_expires_at,
                 user=user_result.data,
+                refresh_token=new_refresh_token,
+                refresh_expires_at=new_refresh_expires_at,
             )
         )
+
+    def logout(self, refresh_token: str | None) -> DbResult[bool]:
+        if not refresh_token:
+            return DbResult.ok(False)
+
+        token_hash = self.token_service.hash_refresh_token(refresh_token)
+        return self.access.revoke_auth_session_by_hash(token_hash)
+
+    def logout_all(self, user: UserRecord) -> DbResult[bool]:
+        return self.access.revoke_all_auth_sessions_for_user(user.id)
 
     def get_current_user(self, token: str) -> DbResult[UserRecord]:
         try:
@@ -210,6 +275,35 @@ class AuthService:
             return DbResult.fail("Token user data is stale.")
 
         return DbResult.ok(user_result.data)
+
+    def _create_session_for_user(self, user: UserRecord) -> DbResult[AuthenticatedSession]:
+        access_token, access_expires_at = self.token_service.create_access_token(user)
+        refresh_token, refresh_hash, refresh_expires_at = self.token_service.create_refresh_token()
+
+        session_result = self.access.create_auth_session(
+            user_id=user.id,
+            refresh_token_hash=refresh_hash,
+            expires_at=self._to_database_datetime(refresh_expires_at),
+        )
+        if not session_result.success:
+            return DbResult.fail(session_result.error or "Could not create refresh session.")
+
+        return DbResult.ok(
+            AuthenticatedSession(
+                access_token=access_token,
+                token_type="bearer",
+                expires_at=access_expires_at,
+                user=user,
+                refresh_token=refresh_token,
+                refresh_expires_at=refresh_expires_at,
+            )
+        )
+
+    @staticmethod
+    def _to_database_datetime(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 __all__ = [

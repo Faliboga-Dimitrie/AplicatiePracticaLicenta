@@ -113,10 +113,12 @@ def build_default_token_service() -> TokenService:
         "dev-only-change-this-secret-before-deployment",
     )
     access_token_minutes = int(os.getenv("MRI_API_ACCESS_TOKEN_MINUTES", "480"))
+    refresh_token_days = int(os.getenv("MRI_API_REFRESH_TOKEN_DAYS", "7"))
 
     return TokenService(
         secret_key=secret_key,
         access_token_minutes=access_token_minutes,
+        refresh_token_days=refresh_token_days,
     )
 
 

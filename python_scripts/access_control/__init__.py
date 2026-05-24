@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .config import DatabaseConfig
 from .models import (
+    AuthSessionRecord,
     MriCaseRecord,
     SubjectAccessRecord,
     SubjectRecord,
@@ -17,6 +18,7 @@ from .workspace_gateway import ProjectCaseWorkspaceGateway, WorkspaceGateway
 
 
 __all__ = [
+    "AuthSessionRecord",
     "AccessControlService",
     "AuthResult",
     "DatabaseConfig",

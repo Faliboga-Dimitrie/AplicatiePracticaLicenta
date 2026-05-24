@@ -6,9 +6,10 @@ from typing import Any
 
 from .config import DatabaseConfig
 from .database import MySqlDatabase
-from .models import MriCaseRecord, SubjectRecord, SubjectSummaryRecord, SubjectWithCases, UserRecord
+from .models import AuthSessionRecord, MriCaseRecord, SubjectRecord, SubjectSummaryRecord, SubjectWithCases, UserRecord
 from .password_hashing import PasswordHasher
 from .repositories import (
+    AuthSessionRepository,
     MriCaseRepository,
     SubjectAccessRepository,
     SubjectRepository,
@@ -57,6 +58,7 @@ class AccessControlService:
         self.db = MySqlDatabase(config)
         self.schema = SchemaManager(self.db, config)
         self.users = UserRepository(self.db)
+        self.sessions = AuthSessionRepository(self.db)
         self.subjects = SubjectRepository(self.db)
         self.cases = MriCaseRepository(self.db)
         self.access = SubjectAccessRepository(self.db)
@@ -131,6 +133,50 @@ class AccessControlService:
                 email=credentials.data.email,
             )
         )
+
+    # ------------------------------------------------------------------
+    # refresh-token sessions
+    # ------------------------------------------------------------------
+
+    def create_auth_session(
+        self,
+        *,
+        user_id: int,
+        refresh_token_hash: str,
+        expires_at: Any,
+    ) -> DbResult[AuthSessionRecord]:
+        return self.sessions.create(
+            user_id=user_id,
+            refresh_token_hash=refresh_token_hash,
+            expires_at=expires_at,
+        )
+
+    def get_active_auth_session_by_hash(
+        self,
+        refresh_token_hash: str,
+    ) -> DbResult[AuthSessionRecord]:
+        return self.sessions.get_active_by_hash(refresh_token_hash)
+
+    def rotate_auth_session(
+        self,
+        *,
+        session_id: int,
+        old_refresh_token_hash: str,
+        new_refresh_token_hash: str,
+        new_expires_at: Any,
+    ) -> DbResult[bool]:
+        return self.sessions.rotate(
+            session_id=session_id,
+            old_refresh_token_hash=old_refresh_token_hash,
+            new_refresh_token_hash=new_refresh_token_hash,
+            new_expires_at=new_expires_at,
+        )
+
+    def revoke_auth_session_by_hash(self, refresh_token_hash: str) -> DbResult[bool]:
+        return self.sessions.revoke_by_hash(refresh_token_hash)
+
+    def revoke_all_auth_sessions_for_user(self, user_id: int) -> DbResult[bool]:
+        return self.sessions.revoke_all_for_user(user_id)
 
     # ------------------------------------------------------------------
     # subject CRUD

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 
@@ -23,6 +23,23 @@ class UserCredentialsRecord:
     id: int
     email: str
     password_hash: str
+
+
+@dataclass(frozen=True)
+class AuthSessionRecord:
+    """Database-backed refresh-token session.
+
+    The raw refresh token is never stored. Only refresh_token_hash is persisted,
+    so a database leak does not directly expose usable refresh tokens.
+    """
+
+    id: int
+    user_id: int
+    refresh_token_hash: str
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+    last_used_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -76,6 +93,7 @@ class SubjectSummaryRecord:
 
 
 __all__ = [
+    "AuthSessionRecord",
     "MriCaseRecord",
     "SubjectAccessRecord",
     "SubjectRecord",
