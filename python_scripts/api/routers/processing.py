@@ -8,7 +8,7 @@ from ..dependencies import (
     get_mesh_analysis_service,
     get_preprocessing_service,
 )
-from ..errors import unwrap_result
+from ..errors import raise_api_error, unwrap_result
 from ..schemas import JobResponse
 from ..serialization import job_to_dict
 from ..services import MeshAnalysisService, PreprocessingService
@@ -30,6 +30,9 @@ def start_preprocessing_job(
     completed or failed.
     """
     result = preprocessing.start_for_case(current_user, case_id)
+    if not result.success and result.error == preprocessing.ACTIVE_JOB_MESSAGE:
+        raise_api_error(409, result.error, code="ACTIVE_JOB_EXISTS")
+
     job = unwrap_result(
         result,
         not_found_message="MRI case not found or not enough permissions to preprocess it.",
@@ -51,6 +54,9 @@ def start_mesh_analysis_job(
     for the generated GLB files/metrics JSON.
     """
     result = mesh_analysis.start_for_case(current_user, case_id)
+    if not result.success and result.error == mesh_analysis.ACTIVE_JOB_MESSAGE:
+        raise_api_error(409, result.error, code="ACTIVE_JOB_EXISTS")
+
     job = unwrap_result(
         result,
         not_found_message="MRI case not found or not enough permissions to run mesh analysis.",

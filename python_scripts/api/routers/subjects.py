@@ -110,13 +110,14 @@ def create_subject(
 def update_subject(
     subject_id: str,
     request: UpdateSubjectRequest,
-    _current_user: UserRecord = Depends(get_current_user),
+    current_user: UserRecord = Depends(get_current_user),
     subjects: SubjectService = Depends(get_subject_service),
 ):
     """React-facing endpoint for editing subject metadata."""
     payload = request.model_dump(exclude_unset=True)
 
-    result = subjects.update_subject(
+    result = subjects.update_subject_for_user(
+        current_user,
         subject_id,
         name=payload.get("name", UNSET),
         age=payload.get("age", UNSET),

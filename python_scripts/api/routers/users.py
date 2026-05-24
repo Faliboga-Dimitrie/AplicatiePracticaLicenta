@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...access_control.access_control_service import AccessControlService
+from ...access_control.models import UserRecord
 from ..dependencies import get_access_service
 from ..errors import unwrap_bool_result, unwrap_result
 from ..schemas import CreateUserRequest, UpdateUserRequest
@@ -93,7 +94,7 @@ def delete_user(
 ):
     user_result = access.get_user_by_email(email)
 
-    user = unwrap_result(user_result, not_found_message="User not found for deletion.")
+    user: UserRecord = unwrap_result(user_result, not_found_message="User not found for deletion.")
     result = access.delete_user(user.id)
     unwrap_bool_result(result, not_found_message="User not found.")
 

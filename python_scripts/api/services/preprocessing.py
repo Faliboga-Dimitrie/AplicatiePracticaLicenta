@@ -40,6 +40,7 @@ class PreprocessingService:
     """
 
     JOB_TYPE = "preprocessing"
+    ACTIVE_JOB_MESSAGE = "A preprocessing job is already running for this case."
 
     def __init__(
         self,
@@ -80,6 +81,16 @@ class PreprocessingService:
             return DbResult.fail(case_result.error or "Could not load MRI case.")
         if case_result.data is None:
             return DbResult.ok(None)
+
+        active = self.jobs.active_for_user_case_type(
+            user,
+            job_type=self.JOB_TYPE,
+            case_id=case_id,
+        )
+        if not active.success:
+            return DbResult.fail(active.error or "Could not check active preprocessing jobs.")
+        if active.data is not None:
+            return DbResult.fail(self.ACTIVE_JOB_MESSAGE)
 
         queued = self.cases.set_status_for_user(
             user,
@@ -180,6 +191,7 @@ class PreprocessingService:
                 raise RuntimeError(completed.error or "Could not mark preprocessing as completed.")
 
             payload = self._result_to_dict(
+                case_db_id=case_id,
                 subject_id=domain_case.subject_id,
                 workspace=workspace,
                 reorientation=reorientation,
@@ -229,6 +241,7 @@ class PreprocessingService:
     def _result_to_dict(
         self,
         *,
+        case_db_id: int,
         subject_id: str,
         workspace: Any,
         reorientation: Any,
@@ -238,13 +251,17 @@ class PreprocessingService:
         return {
             "subject_id": subject_id,
             "acquisition_date": workspace.acquisition_date,
-            "case_id": workspace.case_id,
-            "raw_path": workspace.raw_path,
-            "reoriented_path": reorientation.output_path,
-            "skull_stripped_path": skull_strip.image_path,
-            "segmentation_path": segmentation.seg_path,
-            "pve_paths": dict(segmentation.pve_paths),
-            "qc_paths": workspace.existing_qc_paths,
+            "case_key": workspace.case_id,
+            "case_id": case_db_id,
+            "artifacts_url": f"/cases/{case_db_id}/artifacts",
+            "outputs": {
+                "raw_exists": workspace.raw_path.exists(),
+                "reoriented": reorientation.output_path.exists(),
+                "skull_stripped": skull_strip.image_path.exists(),
+                "segmentation": segmentation.seg_path.exists(),
+                "fast_pve_outputs": all(path.exists() for path in segmentation.pve_paths.values()),
+                "qc_images": bool(workspace.existing_qc_paths),
+            },
         }
 
 

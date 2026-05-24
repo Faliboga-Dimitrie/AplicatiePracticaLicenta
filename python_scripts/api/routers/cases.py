@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+import shutil
+import tempfile
+from datetime import date
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from ...access_control import UserRecord
 from ...access_control.utils import UNSET
 from ..dependencies import get_case_service, get_current_user
-from ..errors import unwrap_result
+from ..errors import raise_api_error, unwrap_result
 from ..schemas import CreateMriCaseRequest, MriCaseResponse, UpdateMriCaseRequest
 from ..serialization import mri_case_to_dict
 from ..services import CaseService
@@ -48,9 +53,9 @@ def create_case(
     """
     Create a case for a subject the logged-in user can edit.
 
-    This still uses source_raw_path for now because the browser upload endpoint
-    is a separate next step. React will eventually send UploadFile instead of a
-    server-side path.
+    This server-side-path endpoint is useful for backend tests and scripts.
+    React should usually use POST /cases/upload instead, because browsers send
+    file bytes instead of local Windows/Linux paths.
     """
     result = cases.create_for_user(
         current_user,
@@ -71,6 +76,65 @@ def create_case(
         "case": mri_case_to_dict(case),
     }
 
+
+def _safe_upload_filename(filename: str | None) -> str:
+    name = Path(filename or "raw_mri.nii.gz").name.strip()
+    if not name:
+        name = "raw_mri.nii.gz"
+
+    lower = name.lower()
+    if not (lower.endswith(".nii") or lower.endswith(".nii.gz")):
+        raise_api_error(
+            400,
+            "Raw MRI upload must be a NIfTI file ending in .nii or .nii.gz.",
+            code="INVALID_UPLOAD_FILE",
+        )
+
+    return name
+
+
+@router.post("/upload")
+def create_case_with_upload(
+    subject_id: str = Form(...),
+    acquisition_date: date = Form(...),
+    notes: str | None = Form(None),
+    status: str | None = Form("registered"),
+    file: UploadFile = File(...),
+    current_user: UserRecord = Depends(get_current_user),
+    cases: CaseService = Depends(get_case_service),
+):
+    """Create an MRI case from a browser multipart upload.
+
+    React sends file bytes here, not a local filesystem path. The API writes the
+    upload to a temporary file, then reuses CaseService.create_for_user so the
+    same authorization, duplicate-date check and workspace-copy logic still run.
+    """
+    filename = _safe_upload_filename(file.filename)
+
+    with tempfile.TemporaryDirectory(prefix="mri_api_upload_") as tmpdir:
+        temp_path = Path(tmpdir) / filename
+        with temp_path.open("wb") as target:
+            file.file.seek(0)
+            shutil.copyfileobj(file.file, target)
+
+        result = cases.create_for_user(
+            current_user,
+            subject_id=subject_id,
+            acquisition_date=acquisition_date,
+            notes=notes,
+            status=status,
+            source_raw_path=temp_path,
+        )
+
+    case = unwrap_result(
+        result,
+        not_found_message="Subject not found or not enough permissions to create a case.",
+    )
+
+    return {
+        "created": True,
+        "case": mri_case_to_dict(case),
+    }
 
 @router.get("/by-subject/{subject_id}", response_model=MriCaseResponse)
 def get_first_case_for_subject(
@@ -134,24 +198,6 @@ def update_case_by_subject_date(
         "updated": True,
         "case": mri_case_to_dict(case),
     }
-
-
-@router.put("/subjects/{subject_id}/cases/{acquisition_date}")
-def update_case_by_subject_date_legacy_path(
-    subject_id: str,
-    acquisition_date: str,
-    request: UpdateMriCaseRequest,
-    current_user: UserRecord = Depends(get_current_user),
-    cases: CaseService = Depends(get_case_service),
-):
-    """Compatibility alias for the previous test route."""
-    return update_case_by_subject_date(
-        subject_id=subject_id,
-        acquisition_date=acquisition_date,
-        request=request,
-        current_user=current_user,
-        cases=cases,
-    )
 
 
 @router.delete("/by-subject-date/{subject_id}/{acquisition_date}")

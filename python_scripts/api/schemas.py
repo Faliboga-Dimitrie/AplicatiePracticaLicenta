@@ -87,6 +87,7 @@ class MriCaseResponse(BaseModel):
     status: str | None = None
     case_key: str | None = None
     workspace: dict[str, Any] | None = None
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
 
 class AuthorizedSubjectResponse(BaseModel):

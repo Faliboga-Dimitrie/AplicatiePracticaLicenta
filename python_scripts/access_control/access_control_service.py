@@ -169,6 +169,27 @@ class AccessControlService:
             return DbResult.fail("Subject age cannot be negative.")
         return self.subjects.update(subject_id, name=name, age=age, notes=notes)
 
+    def update_subject_for_user(
+        self,
+        user_id: int,
+        subject_id: str,
+        *,
+        name: str | None | object = UNSET,
+        age: int | None | object = UNSET,
+        notes: str | None | object = UNSET,
+    ) -> DbResult[bool]:
+        if age is not UNSET and age is not None and int(age) < 0:
+            return DbResult.fail("Subject age cannot be negative.")
+        access = self.access.get(user_id, subject_id)
+        if not access.success:
+            return DbResult.fail(access.error or "Could not check subject access.")
+        if access.data is None:
+            return DbResult.ok(False)
+        if not role_allows(access.data.role, "editor"):
+            return DbResult.ok(False)
+
+        return self.subjects.update(subject_id, name=name, age=age, notes=notes)
+
     def delete_subject(self, subject_id: str) -> DbResult[bool]:
         try:
             result = self.subjects.delete(subject_id)

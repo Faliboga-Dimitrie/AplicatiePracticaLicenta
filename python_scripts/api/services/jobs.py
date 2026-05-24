@@ -174,6 +174,30 @@ class JobService:
         jobs.sort(key=lambda job: job.created_at, reverse=True)
         return DbResult.ok(jobs)
 
+    def active_for_user_case_type(
+        self,
+        user: UserRecord,
+        *,
+        job_type: str,
+        case_id: int,
+    ) -> DbResult[JobRecord]:
+        """Return the newest non-terminal job of this type for this user's case."""
+        with self._lock:
+            matches = [
+                job
+                for job in self._jobs.values()
+                if job.user_id == user.id
+                and job.case_id == case_id
+                and job.type == job_type
+                and job.status not in JobStatus.TERMINAL
+            ]
+
+        if not matches:
+            return DbResult.ok(None)
+
+        matches.sort(key=lambda job: job.created_at, reverse=True)
+        return DbResult.ok(matches[0])
+
     def cancel_for_user(self, user: UserRecord, job_id: str) -> DbResult[JobRecord]:
         job = self.get(job_id)
         if job is None or job.user_id != user.id:

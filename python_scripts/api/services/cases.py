@@ -124,7 +124,7 @@ class CaseService:
         source_raw_path: Path | None = None,
     ) -> DbResult[MriCaseRecord]:
         if source_raw_path is None:
-            return DbResult.fail("source_raw_path is required until the upload endpoint is implemented.")
+            return DbResult.fail("source_raw_path is required for this server-side create flow. Use POST /cases/upload for browser uploads.")
 
         allowed = self._user_has_subject_access(
             user,

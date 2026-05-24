@@ -38,6 +38,7 @@ class MeshAnalysisService:
     """
 
     JOB_TYPE = "mesh_analysis"
+    ACTIVE_JOB_MESSAGE = "A mesh-analysis job is already running for this case."
 
     def __init__(
         self,
@@ -76,6 +77,16 @@ class MeshAnalysisService:
             return DbResult.fail(case_result.error or "Could not load MRI case.")
         if case_result.data is None:
             return DbResult.ok(None)
+
+        active = self.jobs.active_for_user_case_type(
+            user,
+            job_type=self.JOB_TYPE,
+            case_id=case_id,
+        )
+        if not active.success:
+            return DbResult.fail(active.error or "Could not check active mesh-analysis jobs.")
+        if active.data is not None:
+            return DbResult.fail(self.ACTIVE_JOB_MESSAGE)
 
         case = case_result.data
         workspace = case.workspace

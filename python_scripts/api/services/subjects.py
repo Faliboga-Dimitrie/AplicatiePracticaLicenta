@@ -91,6 +91,31 @@ class SubjectService:
             age=age,
             notes=notes,
         )
+    
+    def update_subject_for_user(
+        self,
+        user: UserRecord,
+        subject_id: str,
+        *,
+        name: str | None | object = UNSET,
+        age: int | None | object = UNSET,
+        notes: str | None | object = UNSET,
+    ) -> DbResult[bool]:
+        """
+        Update subject metadata, but only if the user has access to that subject.
+
+        This is the user-facing alternative to the old admin/test CRUD route. The
+        important rule is that the same operation updates the subject row and
+        checks the subject_access row, otherwise a user would be able to update
+        subjects they don't have access to by guessing their IDs.
+        """
+        return self.access.update_subject_for_user(
+            user.id,
+            subject_id,
+            name=name,
+            age=age,
+            notes=notes,
+        )
 
     def delete_for_user(
         self,

@@ -6,62 +6,109 @@ from typing import Any
 
 
 def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
+    """Return frontend-safe workspace state without local filesystem paths."""
     if workspace is None:
         return None
+
+    raw_exists = workspace.raw_path.exists()
+    reoriented_exists = workspace.reoriented_path.exists()
+    skull_stripped_exists = workspace.skull_stripped_path.exists()
+    skull_mask_exists = workspace.skull_stripped_mask_path.exists()
+    fast_seg_exists = workspace.fast_seg_path.exists()
+    fast_pve_outputs_exist = bool(getattr(workspace, "has_fast_pve_outputs", False))
+    fast_outputs_exist = bool(getattr(workspace, "has_fast_outputs", False))
+    metrics_exists = workspace.metrics_json_path.exists()
+    any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_outputs", False))
+    complete_mesh_outputs_exist = bool(getattr(workspace, "has_complete_mesh_outputs", False))
+    any_wireframe_outputs_exist = bool(getattr(workspace, "has_any_wireframe_outputs", False))
+    complete_wireframe_outputs_exist = bool(getattr(workspace, "has_complete_wireframe_outputs", False))
 
     return {
         "case_id": getattr(workspace, "case_id", None),
         "subject_id": getattr(workspace, "subject_id", None),
         "acquisition_date": getattr(workspace, "acquisition_date", None),
-
-        "raw_path": str(workspace.raw_path),
-        "raw_exists": workspace.raw_path.exists(),
-
+        "exists": bool(getattr(workspace, "workspace_exists", False)),
+        "raw_exists": raw_exists,
         "directories": {
-            "input_mri_dir": {
-                "path": str(workspace.input_mri_dir),
-                "exists": workspace.input_mri_dir.exists(),
-            },
-            "reoriented_dir": {
-                "path": str(workspace.reoriented_dir),
-                "exists": workspace.reoriented_dir.exists(),
-            },
-            "hd_bet_dir": {
-                "path": str(workspace.hd_bet_dir),
-                "exists": workspace.hd_bet_dir.exists(),
-            },
-            "fast_dir": {
-                "path": str(workspace.fast_dir),
-                "exists": workspace.fast_dir.exists(),
-            },
-            "qc_dir": {
-                "path": str(workspace.qc_dir),
-                "exists": workspace.qc_dir.exists(),
-            },
-            "mesh_dir": {
-                "path": str(workspace.mesh_dir),
-                "exists": workspace.mesh_dir.exists(),
-            },
+            "input_mri": workspace.input_mri_dir.exists(),
+            "reoriented": workspace.reoriented_dir.exists(),
+            "hd_bet": workspace.hd_bet_dir.exists(),
+            "fast": workspace.fast_dir.exists(),
+            "qc": workspace.qc_dir.exists(),
+            "mesh": workspace.mesh_dir.exists(),
         },
+        "outputs": {
+            "reoriented": reoriented_exists,
+            "skull_stripped": skull_stripped_exists,
+            "skull_stripped_mask": skull_mask_exists,
+            "fast_segmentation": fast_seg_exists,
+            "fast_pve_outputs": fast_pve_outputs_exist,
+            "fast_outputs": fast_outputs_exist,
+            "metrics_json": metrics_exists,
+            "any_mesh_outputs": any_mesh_outputs_exist,
+            "complete_mesh_outputs": complete_mesh_outputs_exist,
+            "any_wireframe_outputs": any_wireframe_outputs_exist,
+            "complete_wireframe_outputs": complete_wireframe_outputs_exist,
+        },
+    }
 
-        "known_outputs": {
-            "reoriented_path": {
-                "path": str(workspace.reoriented_path),
-                "exists": workspace.reoriented_path.exists(),
-            },
-            "skull_stripped_path": {
-                "path": str(workspace.skull_stripped_path),
-                "exists": workspace.skull_stripped_path.exists(),
-            },
-            "fast_seg_path": {
-                "path": str(workspace.fast_seg_path),
-                "exists": workspace.fast_seg_path.exists(),
-            },
-            "metrics_json_path": {
-                "path": str(workspace.metrics_json_path),
-                "exists": workspace.metrics_json_path.exists(),
-            },
-        },
+
+def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
+    workspace = getattr(case, "workspace", None)
+    status = (getattr(case, "status", None) or "").lower()
+
+    active_statuses = {
+        "preprocessing_queued",
+        "preprocessing",
+        "mesh_queued",
+        "mesh_analysis",
+    }
+    is_busy = status in active_statuses
+
+    if workspace is None:
+        return {
+            "raw_uploaded": False,
+            "can_start_preprocessing": False,
+            "can_start_mesh_analysis": False,
+            "can_view_artifacts": False,
+            "can_view_meshes": False,
+            "can_view_metrics": False,
+            "is_busy": is_busy,
+        }
+
+    raw_exists = workspace.raw_path.exists()
+    has_fast_pve_outputs = bool(getattr(workspace, "has_fast_pve_outputs", False))
+    has_any_mesh_outputs = bool(getattr(workspace, "has_any_mesh_outputs", False))
+    has_any_wireframe_outputs = bool(getattr(workspace, "has_any_wireframe_outputs", False))
+    has_metrics = workspace.metrics_json_path.exists()
+    has_qc_images = bool(getattr(workspace, "existing_qc_paths", {}))
+    can_view_artifacts = any([
+        raw_exists,
+        workspace.reoriented_path.exists(),
+        workspace.skull_stripped_path.exists(),
+        has_fast_pve_outputs,
+        has_any_mesh_outputs,
+        has_any_wireframe_outputs,
+        has_metrics,
+        has_qc_images,
+    ])
+
+    return {
+        "raw_uploaded": raw_exists,
+        "has_reoriented": workspace.reoriented_path.exists(),
+        "has_skull_stripped": workspace.skull_stripped_path.exists(),
+        "has_fast_outputs": bool(getattr(workspace, "has_fast_outputs", False)),
+        "has_fast_pve_outputs": has_fast_pve_outputs,
+        "has_meshes": has_any_mesh_outputs,
+        "has_wireframes": has_any_wireframe_outputs,
+        "has_metrics": has_metrics,
+        "has_qc_images": has_qc_images,
+        "can_start_preprocessing": raw_exists and not is_busy,
+        "can_start_mesh_analysis": has_fast_pve_outputs and not is_busy,
+        "can_view_artifacts": can_view_artifacts,
+        "can_view_meshes": has_any_mesh_outputs or has_any_wireframe_outputs,
+        "can_view_metrics": has_metrics,
+        "is_busy": is_busy,
     }
 
 
@@ -94,6 +141,7 @@ def mri_case_to_dict(case: Any) -> dict[str, object]:
         "status": case.status,
         "case_key": getattr(case, "case_key", None),
         "workspace": workspace_to_dict(getattr(case, "workspace", None)),
+        "capabilities": case_capabilities_to_dict(case),
     }
 
 
