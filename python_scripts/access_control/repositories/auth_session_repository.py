@@ -49,6 +49,26 @@ class AuthSessionRepository:
         except Exception as exc:
             return DbResult.fail(str(exc))
 
+
+    def get_active_by_id(self, *, session_id: int, user_id: int) -> DbResult[AuthSessionRecord]:
+        try:
+            row = self.db.fetch_one(
+                """
+                SELECT
+                    id, user_id, refresh_token_hash, created_at, expires_at,
+                    revoked_at, last_used_at
+                FROM auth_session
+                WHERE id = %s
+                  AND user_id = %s
+                  AND revoked_at IS NULL
+                  AND expires_at > UTC_TIMESTAMP()
+                """,
+                (session_id, user_id),
+            )
+            return DbResult.ok(auth_session_from_row(row) if row else None)
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
     def get_active_by_hash(self, refresh_token_hash: str) -> DbResult[AuthSessionRecord]:
         try:
             row = self.db.fetch_one(

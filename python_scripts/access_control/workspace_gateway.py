@@ -64,12 +64,46 @@ class ProjectCaseWorkspaceGateway:
             if directory.exists():
                 shutil.rmtree(directory)
 
+    def _safe_case_segment(self, value: str) -> str:
+        """Mirror project_core workspace path segment safety for lookups."""
+        return value.replace("/", "_").replace("\\", "_").strip()
+
+    def _find_existing_raw_input(self, *, subject_id: str, acquisition_date: date) -> Path | None:
+        """Return the first staged raw NIfTI file for this case, if one exists.
+
+        CaseWorkspace.raw_path depends on the raw filename. During creation we
+        know the uploaded filename, but during later lookup we only know
+        subject_id + acquisition_date from the database. Without rediscovering
+        the staged input file, workspace.raw_path would point to a placeholder
+        name and raw_uploaded would incorrectly become false after refresh.
+        """
+        input_dir = (
+            Path(self.settings.input_mri_dir)
+            / self._safe_case_segment(subject_id)
+            / self._safe_case_segment(acquisition_date.isoformat())
+        )
+        if not input_dir.exists() or not input_dir.is_dir():
+            return None
+
+        for candidate in input_dir.iterdir():
+            if not candidate.is_file():
+                continue
+            name = candidate.name.lower()
+            if name.endswith(".nii") or name.endswith(".nii.gz"):
+                return candidate
+
+        return None
+
     def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
-        placeholder_raw = Path("__lookup_case_placeholder__.nii.gz")
+        raw_path = self._find_existing_raw_input(
+            subject_id=subject_id,
+            acquisition_date=acquisition_date,
+        ) or Path("__lookup_case_placeholder__.nii.gz")
+
         case = MRICase(
             subject_id=subject_id,
             acquisition_date=acquisition_date.isoformat(),
-            raw_path=placeholder_raw,
+            raw_path=raw_path,
         )
         return build_case_workspace(case, self.settings)
     

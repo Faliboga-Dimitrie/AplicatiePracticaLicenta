@@ -157,6 +157,14 @@ class AccessControlService:
     ) -> DbResult[AuthSessionRecord]:
         return self.sessions.get_active_by_hash(refresh_token_hash)
 
+    def get_active_auth_session_by_id(
+        self,
+        *,
+        session_id: int,
+        user_id: int,
+    ) -> DbResult[AuthSessionRecord]:
+        return self.sessions.get_active_by_id(session_id=session_id, user_id=user_id)
+
     def rotate_auth_session(
         self,
         *,
