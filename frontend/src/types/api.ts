@@ -22,11 +22,14 @@ export type ApiErrorPayload = {
   }
 }
 
-export type AuthorizedSubject = {
+export type Subject = {
   id: string
   name: string | null
   age: number | null
   notes: string | null
+}
+
+export type AuthorizedSubject = Subject & {
   role: string
   case_count: number
   cases?: MriCase[] | null
@@ -78,6 +81,18 @@ export type CreateSubjectInput = {
   notes?: string | null
 }
 
+export type UpdateSubjectInput = {
+  name?: string | null
+  age?: number | null
+  notes?: string | null
+}
+
+export type UpdateCaseInput = {
+  acquisition_date?: string | null
+  notes?: string | null
+  status?: string | null
+}
+
 export type JobStatus =
   | 'queued'
   | 'running'
@@ -126,5 +141,8 @@ export type MutationResponse<TName extends string, TPayload> = {
 } & TPayload
 
 export type CreatedCaseResponse = MutationResponse<'created', { case: MriCase }>
+export type UpdatedCaseResponse = MutationResponse<'updated', { case: MriCase }>
+export type DeletedCaseResponse = MutationResponse<'deleted', { case: MriCase }>
 export type CreatedSubjectResponse = AuthorizedSubject
-export type DeletedResponse = { deleted: boolean }
+export type UpdatedSubjectResponse = MutationResponse<'updated', { subject: Subject }>
+export type DeletedSubjectResponse = { deleted: boolean; subject_id: string }

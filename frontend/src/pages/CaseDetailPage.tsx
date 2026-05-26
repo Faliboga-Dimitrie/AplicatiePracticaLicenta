@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
-import { getCase } from '../api/casesApi'
+import { deleteCase, getCase, updateCase } from '../api/casesApi'
 import { listArtifacts } from '../api/artifactsApi'
 import { startMeshAnalysisJob, startPreprocessingJob } from '../api/jobsApi'
 import { ArtifactList } from '../components/ArtifactList'
@@ -12,17 +13,34 @@ type CaseDetailPageProps = {
   onBack: () => void
 }
 
+type CaseEditorState = {
+  acquisitionDate: string
+  notes: string
+  status: string
+}
+
 function capabilityText(value: boolean | undefined): string {
   return value ? 'yes' : 'no'
 }
 
+function toCaseEditorState(mriCase: MriCase): CaseEditorState {
+  return {
+    acquisitionDate: mriCase.acquisition_date,
+    notes: mriCase.notes ?? '',
+    status: mriCase.status ?? '',
+  }
+}
+
 export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
   const [mriCase, setMriCase] = useState<MriCase | null>(null)
+  const [caseDraft, setCaseDraft] = useState<CaseEditorState | null>(null)
   const [artifacts, setArtifacts] = useState<CaseArtifacts | null>(null)
   const [activeJob, setActiveJob] = useState<Job | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isStartingPreprocessing, setIsStartingPreprocessing] = useState(false)
   const [isStartingMesh, setIsStartingMesh] = useState(false)
+  const [isUpdatingCase, setIsUpdatingCase] = useState(false)
+  const [isDeletingCase, setIsDeletingCase] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refreshCase = useCallback(async () => {
@@ -88,25 +106,72 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
     }
   }
 
-  async function handleJobFinished() {
+  const handleJobFinished = useCallback(async () => {
     await refreshAll()
+  }, [refreshAll])
+
+  async function handleUpdateCase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!caseDraft) {
+      return
+    }
+
+    setIsUpdatingCase(true)
+    setError(null)
+    try {
+      const response = await updateCase(caseId, {
+        acquisition_date: caseDraft.acquisitionDate,
+        notes: caseDraft.notes.trim() || null,
+        status: caseDraft.status.trim() || null,
+      })
+      setMriCase(response.case)
+      setCaseDraft(null)
+      await refreshArtifacts()
+    } catch (updateError) {
+      setError(apiMessage(updateError))
+    } finally {
+      setIsUpdatingCase(false)
+    }
+  }
+
+  async function handleDeleteCase() {
+    if (!mriCase) {
+      return
+    }
+    const confirmed = window.confirm(
+      `Delete case #${mriCase.id} from ${mriCase.acquisition_date}? This deletes the database row and its local workspace files.`,
+    )
+    if (!confirmed) {
+      return
+    }
+
+    setIsDeletingCase(true)
+    setError(null)
+    try {
+      await deleteCase(mriCase.id)
+      onBack()
+    } catch (deleteError) {
+      setError(apiMessage(deleteError))
+    } finally {
+      setIsDeletingCase(false)
+    }
   }
 
   const capabilities = mriCase?.capabilities
 
   return (
     <main className="page stack">
-      <button type="button" className="link-button" onClick={onBack}>← Back to cases</button>
-
-      <div className="row-between">
+      <section className="page-header-card">
         <div>
-          <p className="eyebrow">Step 3</p>
+          <button type="button" className="link-button" onClick={onBack}>← Back to cases</button>
+          <p className="eyebrow">Case workspace</p>
           <h1>Case #{caseId}</h1>
+          <p className="muted">Inspect metadata, start processing jobs, download artifacts, or edit/delete this case.</p>
         </div>
         <button type="button" className="secondary" onClick={refreshAll} disabled={isLoading}>
           Refresh
         </button>
-      </div>
+      </section>
 
       {error && <p className="error-text">{error}</p>}
       {isLoading && <p className="muted">Loading case...</p>}
@@ -114,7 +179,10 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
       {mriCase && (
         <section className="grid-two">
           <article className="card stack">
-            <h2>Case details</h2>
+            <div className="row-between">
+              <h2>Case details</h2>
+              <span className="badge">{mriCase.status || 'no status'}</span>
+            </div>
             <dl className="details-list">
               <div><dt>Subject</dt><dd>{mriCase.subject_id}</dd></div>
               <div><dt>Acquisition date</dt><dd>{mriCase.acquisition_date}</dd></div>
@@ -122,6 +190,14 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
               <div><dt>Case key</dt><dd>{mriCase.case_key || 'none'}</dd></div>
               <div><dt>Notes</dt><dd>{mriCase.notes || 'none'}</dd></div>
             </dl>
+            <div className="button-row">
+              <button type="button" className="secondary" onClick={() => setCaseDraft(toCaseEditorState(mriCase))}>
+                Edit metadata
+              </button>
+              <button type="button" className="danger-button" onClick={handleDeleteCase} disabled={isDeletingCase}>
+                {isDeletingCase ? 'Deleting...' : 'Delete case'}
+              </button>
+            </div>
           </article>
 
           <article className="card stack">
@@ -135,6 +211,60 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
             </div>
           </article>
         </section>
+      )}
+
+      {caseDraft && (
+        <form className="card form-grid" onSubmit={handleUpdateCase}>
+          <div className="row-between">
+            <div>
+              <p className="eyebrow">Edit case</p>
+              <h2>Metadata</h2>
+            </div>
+            <button type="button" className="secondary" onClick={() => setCaseDraft(null)}>
+              Cancel
+            </button>
+          </div>
+          <label>
+            Acquisition date
+            <input
+              type="date"
+              value={caseDraft.acquisitionDate}
+              onChange={(event) => setCaseDraft({ ...caseDraft, acquisitionDate: event.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Status
+            <select
+              value={caseDraft.status}
+              onChange={(event) => setCaseDraft({ ...caseDraft, status: event.target.value })}
+            >
+              <option value="">No status</option>
+              <option value="registered">registered</option>
+              <option value="preprocessing_queued">preprocessing_queued</option>
+              <option value="preprocessing">preprocessing</option>
+              <option value="preprocessed">preprocessed</option>
+              <option value="mesh_queued">mesh_queued</option>
+              <option value="mesh_analysis">mesh_analysis</option>
+              <option value="mesh_completed">mesh_completed</option>
+              <option value="failed">failed</option>
+              <option value="preprocessing_cancelled">preprocessing_cancelled</option>
+              <option value="mesh_cancelled">mesh_cancelled</option>
+            </select>
+          </label>
+          <p className="muted small-note">Status is normally changed by backend jobs. Manual editing is mostly for correction/testing.</p>
+          <label>
+            Notes
+            <textarea
+              value={caseDraft.notes}
+              onChange={(event) => setCaseDraft({ ...caseDraft, notes: event.target.value })}
+              rows={4}
+            />
+          </label>
+          <button type="submit" disabled={isUpdatingCase}>
+            {isUpdatingCase ? 'Saving...' : 'Save case changes'}
+          </button>
+        </form>
       )}
 
       {mriCase && (
@@ -159,6 +289,11 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
           <p className="muted">
             Buttons are disabled when the backend says the case is not ready or is already busy.
           </p>
+          <div className="button-row disabled-action-row">
+            <button type="button" disabled>Open 3D view</button>
+            <button type="button" disabled>Open statistics</button>
+            <button type="button" disabled>Compare over time</button>
+          </div>
         </section>
       )}
 
