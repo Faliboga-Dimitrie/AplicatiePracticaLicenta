@@ -11,6 +11,7 @@ from .cases import CaseService
 from .jobs import JobService
 from .mesh_analysis import MeshAnalysisService
 from .preprocessing import PreprocessingService
+from .public_processing import PublicProcessingService
 
 
 def build_default_preprocessing_service(
@@ -81,6 +82,13 @@ def build_default_mesh_analysis_service(
     )
 
 
+
+def build_default_public_processing_service(
+    *,
+    settings_obj: Settings = project_settings,
+) -> PublicProcessingService:
+    return PublicProcessingService(settings_obj=settings_obj)
+
 def build_default_artifact_service(
     *,
     cases: CaseService,
@@ -127,5 +135,6 @@ __all__ = [
     "build_default_job_service",
     "build_default_mesh_analysis_service",
     "build_default_preprocessing_service",
+    "build_default_public_processing_service",
     "build_default_token_service",
 ]

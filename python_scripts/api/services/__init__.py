@@ -19,6 +19,7 @@ from .factories import (
 from .jobs import JobContext, JobRecord, JobService, JobStatus
 from .mesh_analysis import MeshAnalysisService, MeshAnalysisStatus
 from .preprocessing import PreprocessingService, PreprocessingStatus
+from .public_processing import PublicProcessingService
 from .subjects import SubjectService
 
 
@@ -36,6 +37,7 @@ __all__ = [
     "JobStatus",
     "PreprocessingService",
     "PreprocessingStatus",
+    "PublicProcessingService",
     "MeshAnalysisService",
     "MeshAnalysisStatus",
     "ArtifactFile",

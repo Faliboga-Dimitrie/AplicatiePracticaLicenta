@@ -21,7 +21,6 @@ class TokenPayload:
     user_id: int
     email: str
     expires_at: datetime
-    session_id: int
 
 
 @dataclass(frozen=True)
@@ -67,7 +66,7 @@ class TokenService:
     def refresh_token_max_age_seconds(self) -> int:
         return int(timedelta(days=self.refresh_token_days).total_seconds())
 
-    def create_access_token(self, user: UserRecord, *, session_id: int) -> tuple[str, datetime]:
+    def create_access_token(self, user: UserRecord) -> tuple[str, datetime]:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=self.access_token_minutes)
 
@@ -78,7 +77,6 @@ class TokenService:
         payload = {
             "sub": str(user.id),
             "email": user.email,
-            "sid": str(session_id),
             "iat": int(now.timestamp()),
             "exp": int(expires_at.timestamp()),
             "iss": self.issuer,
@@ -115,7 +113,6 @@ class TokenService:
         try:
             user_id = int(payload["sub"])
             email = str(payload["email"])
-            session_id = int(payload["sid"])
             exp = int(payload["exp"])
         except Exception as exc:
             raise AuthError("Invalid token payload.") from exc
@@ -128,7 +125,6 @@ class TokenService:
             user_id=user_id,
             email=email,
             expires_at=expires_at,
-            session_id=session_id,
         )
 
     def create_refresh_token(self) -> tuple[str, str, datetime]:
@@ -192,6 +188,15 @@ class AuthService:
         self.access = access
         self.token_service = token_service
 
+
+    def register(self, email: str, password: str) -> DbResult[AuthenticatedSession]:
+        created = self.access.create_user(email, password)
+        if not created.success:
+            return DbResult.fail(created.error or "Could not create user.")
+        if created.data is None:
+            return DbResult.fail("User was not created.")
+        return self._create_session_for_user(created.data)
+
     def login(self, email: str, password: str) -> DbResult[AuthenticatedSession]:
         auth_result = self.access.authenticate(email, password)
         if not auth_result.success:
@@ -239,10 +244,7 @@ class AuthService:
             # A concurrent refresh may already have rotated or revoked this token.
             return DbResult.ok(None)
 
-        access_token, access_expires_at = self.token_service.create_access_token(
-            user_result.data,
-            session_id=session_result.data.id,
-        )
+        access_token, access_expires_at = self.token_service.create_access_token(user_result.data)
         return DbResult.ok(
             AuthenticatedSession(
                 access_token=access_token,
@@ -281,18 +283,10 @@ class AuthService:
         if user_result.data.email != payload.email:
             return DbResult.fail("Token user data is stale.")
 
-        session_result = self.access.get_active_auth_session_by_id(
-            session_id=payload.session_id,
-            user_id=payload.user_id,
-        )
-        if not session_result.success:
-            return DbResult.fail(session_result.error or "Could not validate token session.")
-        if session_result.data is None:
-            return DbResult.fail("Token session is expired, revoked, or invalid.")
-
         return DbResult.ok(user_result.data)
 
     def _create_session_for_user(self, user: UserRecord) -> DbResult[AuthenticatedSession]:
+        access_token, access_expires_at = self.token_service.create_access_token(user)
         refresh_token, refresh_hash, refresh_expires_at = self.token_service.create_refresh_token()
 
         session_result = self.access.create_auth_session(
@@ -302,13 +296,6 @@ class AuthService:
         )
         if not session_result.success:
             return DbResult.fail(session_result.error or "Could not create refresh session.")
-        if session_result.data is None:
-            return DbResult.fail("Could not create refresh session.")
-
-        access_token, access_expires_at = self.token_service.create_access_token(
-            user,
-            session_id=session_result.data.id,
-        )
 
         return DbResult.ok(
             AuthenticatedSession(

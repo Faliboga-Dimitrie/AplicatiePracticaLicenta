@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { cancelJob, getJob } from '../api/jobsApi'
 import type { Job } from '../types/api'
@@ -14,7 +14,6 @@ export function JobStatusCard({ initialJob, onFinished }: JobStatusCardProps) {
   const [job, setJob] = useState(initialJob)
   const [error, setError] = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
-  const finishedNotificationSentFor = useRef<string | null>(null)
 
   const isTerminal = TERMINAL_STATUSES.has(job.status)
   const progressLabel = useMemo(() => {
@@ -25,25 +24,8 @@ export function JobStatusCard({ initialJob, onFinished }: JobStatusCardProps) {
   }, [job.progress])
 
   useEffect(() => {
-    setJob(initialJob)
-    finishedNotificationSentFor.current = null
-  }, [initialJob])
-
-  useEffect(() => {
-    if (!isTerminal) {
-      return
-    }
-
-    if (finishedNotificationSentFor.current === job.id) {
-      return
-    }
-
-    finishedNotificationSentFor.current = job.id
-    onFinished?.(job)
-  }, [isTerminal, job, onFinished])
-
-  useEffect(() => {
     if (isTerminal) {
+      onFinished?.(job)
       return undefined
     }
 
@@ -54,6 +36,9 @@ export function JobStatusCard({ initialJob, onFinished }: JobStatusCardProps) {
         if (!stopped) {
           setJob(freshJob)
           setError(null)
+          if (TERMINAL_STATUSES.has(freshJob.status)) {
+            onFinished?.(freshJob)
+          }
         }
       } catch (pollError) {
         if (!stopped) {
@@ -66,7 +51,7 @@ export function JobStatusCard({ initialJob, onFinished }: JobStatusCardProps) {
       stopped = true
       window.clearInterval(interval)
     }
-  }, [isTerminal, job.id])
+  }, [isTerminal, job, onFinished])
 
   async function handleCancel() {
     setIsCancelling(true)

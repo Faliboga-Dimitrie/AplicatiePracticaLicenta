@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .errors import error_payload, normalize_error_detail
-from .routers import artifacts, auth, cases, health, jobs, processing, subjects
+from .routers import artifacts, auth, cases, health, jobs, processing, public, subjects
 
 
 def create_app() -> FastAPI:
@@ -51,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(cases.router, prefix="/cases", tags=["cases"])
     app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
     app.include_router(processing.router, prefix="/processing", tags=["processing"])
+    app.include_router(public.router, prefix="/public", tags=["public"])
     app.include_router(artifacts.router, prefix="/cases", tags=["artifacts"])
 
     return app

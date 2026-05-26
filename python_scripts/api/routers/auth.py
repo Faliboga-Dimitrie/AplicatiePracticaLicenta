@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from ...access_control import UserRecord
 from ..dependencies import get_auth_service, get_current_user
 from ..errors import raise_api_error
-from ..schemas import CurrentUserResponse, LoginRequest, LoginResponse, UserResponse
+from ..schemas import CurrentUserResponse, LoginRequest, LoginResponse, RegisterRequest, UserResponse
 from ..services import AuthService
 
 router = APIRouter()
@@ -59,6 +59,35 @@ def _session_response(session) -> LoginResponse:
         expires_at=session.expires_at,
         user=user_response(session.user),
     )
+
+
+@router.post("/register", response_model=LoginResponse)
+def register(
+    request: RegisterRequest,
+    response: Response,
+    auth: AuthService = Depends(get_auth_service),
+):
+    result = auth.register(request.email, request.password)
+
+    if not result.success:
+        detail = result.error or "Could not create account."
+        status_code = status.HTTP_409_CONFLICT if "Duplicate" in detail or "duplicate" in detail or "UNIQUE" in detail else status.HTTP_400_BAD_REQUEST
+        raise_api_error(
+            status_code,
+            detail,
+            code="REGISTER_FAILED",
+        )
+
+    session = result.data
+    if session is None:
+        raise_api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "Could not create account.",
+            code="REGISTER_FAILED",
+        )
+
+    _set_refresh_cookie(response, auth, session.refresh_token)
+    return _session_response(session)
 
 
 @router.post("/login", response_model=LoginResponse)

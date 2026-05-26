@@ -17,6 +17,7 @@ from .services import (
     JobService,
     MeshAnalysisService,
     PreprocessingService,
+    PublicProcessingService,
     SubjectService,
     TokenService,
     build_default_artifact_service,
@@ -26,6 +27,7 @@ from .services import (
     build_default_token_service,
 )
 
+from .services.factories import build_default_public_processing_service
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -97,6 +99,11 @@ def get_mesh_analysis_service(
         settings_obj=settings,
     )
 
+
+
+@lru_cache
+def get_public_processing_service() -> PublicProcessingService:
+    return build_default_public_processing_service(settings_obj=settings)
 
 def get_artifact_service(
     cases: CaseService = Depends(get_case_service),

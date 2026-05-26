@@ -1,6 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { getCurrentUser, login as loginRequest, logout as logoutRequest, logoutAll as logoutAllRequest, refreshSession } from '../api/authApi'
+import { getCurrentUser, login as loginRequest, logout as logoutRequest, logoutAll as logoutAllRequest, refreshSession, register as registerRequest } from '../api/authApi'
 import { apiMessage, clearAccessToken, getStoredAccessToken } from '../api/client'
 import type { User } from '../types/api'
 
@@ -10,6 +10,7 @@ type AuthContextValue = {
   authError: string | null
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   logoutAll: () => Promise<void>
   clearAuthError: () => void
@@ -33,6 +34,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = useCallback(async (email: string, password: string) => {
     setAuthError(null)
     const session = await loginRequest(email, password)
+    setUser(session.user)
+  }, [])
+
+  const register = useCallback(async (email: string, password: string) => {
+    setAuthError(null)
+    const session = await registerRequest(email, password)
     setUser(session.user)
   }, [])
 
@@ -95,11 +102,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       authError,
       isAuthenticated: user !== null,
       login,
+      register,
       logout,
       logoutAll,
       clearAuthError,
     }),
-    [authError, clearAuthError, isCheckingSession, login, logout, logoutAll, user],
+    [authError, clearAuthError, isCheckingSession, login, register, logout, logoutAll, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

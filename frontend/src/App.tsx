@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AuthProvider } from './auth/AuthProvider'
 import { useAuth } from './auth/useAuth'
-import { LoginPage } from './pages/LoginPage'
+import { WelcomePage } from './pages/WelcomePage'
 import { SubjectsPage } from './pages/SubjectsPage'
 import { SubjectCasesPage } from './pages/SubjectCasesPage'
 import { CaseDetailPage } from './pages/CaseDetailPage'
@@ -28,7 +28,7 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />
+    return <WelcomePage />
   }
 
   async function handleLogout() {

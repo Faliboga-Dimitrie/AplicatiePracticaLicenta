@@ -88,10 +88,9 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
     }
   }
 
-  const handleJobFinished = useCallback(async (finishedJob: Job) => {
-    setActiveJob(finishedJob)
+  async function handleJobFinished() {
     await refreshAll()
-  }, [refreshAll])
+  }
 
   const capabilities = mriCase?.capabilities
 

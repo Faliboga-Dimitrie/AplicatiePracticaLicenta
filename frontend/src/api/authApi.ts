@@ -1,6 +1,16 @@
 import { apiRequest, clearAccessToken, storeAccessToken } from './client'
 import type { CurrentUserResponse, LoginResponse } from '../types/api'
 
+export async function register(email: string, password: string): Promise<LoginResponse> {
+  const session = await apiRequest<LoginResponse>('/auth/register', {
+    method: 'POST',
+    body: { email, password },
+    auth: false,
+  })
+  storeAccessToken(session.access_token, session.expires_at)
+  return session
+}
+
 export async function login(email: string, password: string): Promise<LoginResponse> {
   const session = await apiRequest<LoginResponse>('/auth/login', {
     method: 'POST',

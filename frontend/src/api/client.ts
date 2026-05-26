@@ -184,6 +184,23 @@ export async function apiDownload(path: string): Promise<Blob> {
   return response.blob()
 }
 
+export async function apiPublicDownload(
+  path: string,
+  options: { method?: string; formData?: FormData } = {},
+): Promise<Blob> {
+  const response = await fetch(buildUrl(path), {
+    method: options.method ?? 'GET',
+    body: options.formData,
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw await readError(response)
+  }
+
+  return response.blob()
+}
+
 export function apiMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return error.message
