@@ -6,11 +6,14 @@ type SettingsPageProps = {
   onBackHome: () => void
   onLogout: () => Promise<void>
   onLogoutAll: () => Promise<void>
+  onDeleteAccount: () => Promise<void>
 }
 
-export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll }: SettingsPageProps) {
+export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDeleteAccount }: SettingsPageProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -27,6 +30,26 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll }: Settin
       await onLogoutAll()
     } finally {
       setIsLoggingOutAll(false)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmation !== user.email) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Delete this account permanently? Subjects without a remaining editor/admin/owner will also be deleted with their cases and local workspaces.',
+    )
+    if (!confirmed) {
+      return
+    }
+
+    setIsDeletingAccount(true)
+    try {
+      await onDeleteAccount()
+    } finally {
+      setIsDeletingAccount(false)
     }
   }
 
@@ -82,11 +105,27 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll }: Settin
             <p className="eyebrow">Danger zone</p>
             <h2>Account deletion</h2>
             <p className="muted">
-              Placeholder for a future endpoint that should remove the user, refresh sessions, subject access
-              rows and decide what happens with owned subjects/cases.
+              This permanently deletes your user account and refresh sessions. Subjects are deleted only if,
+              after removing your account, no remaining user has editor/admin/owner access. Subjects with
+              another maintainer are kept.
             </p>
           </div>
-          <button type="button" disabled>Delete account — coming soon</button>
+          <label>
+            Type your email to confirm
+            <input
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+              placeholder={user.email}
+            />
+          </label>
+          <button
+            type="button"
+            className="danger-button"
+            onClick={handleDeleteAccount}
+            disabled={deleteConfirmation !== user.email || isDeletingAccount}
+          >
+            {isDeletingAccount ? 'Deleting account...' : 'Delete account permanently'}
+          </button>
         </article>
       </section>
     </main>

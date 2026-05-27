@@ -38,6 +38,12 @@ class CurrentUserResponse(BaseModel):
     user: UserResponse
 
 
+class AccountDeletionResponse(BaseModel):
+    deleted: bool
+    deleted_subject_ids: list[str] = Field(default_factory=list)
+    kept_subject_ids: list[str] = Field(default_factory=list)
+
+
 # -----------------------------------------------------------------------------
 # shared
 # -----------------------------------------------------------------------------

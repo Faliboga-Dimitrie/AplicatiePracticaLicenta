@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { deleteCase, getCase, updateCase } from '../api/casesApi'
 import { listArtifacts } from '../api/artifactsApi'
-import { startMeshAnalysisJob, startPreprocessingJob } from '../api/jobsApi'
+import { listJobs, startMeshAnalysisJob, startPreprocessingJob } from '../api/jobsApi'
 import { ArtifactList } from '../components/ArtifactList'
 import { JobStatusCard } from '../components/JobStatusCard'
 import type { CaseArtifacts, Job, MriCase } from '../types/api'
@@ -21,6 +21,10 @@ type CaseEditorState = {
 
 function capabilityText(value: boolean | undefined): string {
   return value ? 'yes' : 'no'
+}
+
+function isTerminalJob(job: Job): boolean {
+  return ['completed', 'failed', 'cancelled'].includes(job.status)
 }
 
 function toCaseEditorState(mriCase: MriCase): CaseEditorState {
@@ -61,18 +65,26 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
     }
   }, [caseId])
 
+  const refreshActiveJob = useCallback(async () => {
+    const jobs = await listJobs(caseId)
+    const active = jobs.find((job) => !isTerminalJob(job)) ?? null
+    setActiveJob(active)
+    return active
+  }, [caseId])
+
   const refreshAll = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
       await refreshCase()
       await refreshArtifacts()
+      await refreshActiveJob()
     } catch (loadError) {
       setError(apiMessage(loadError))
     } finally {
       setIsLoading(false)
     }
-  }, [refreshArtifacts, refreshCase])
+  }, [refreshActiveJob, refreshArtifacts, refreshCase])
 
   useEffect(() => {
     refreshAll()

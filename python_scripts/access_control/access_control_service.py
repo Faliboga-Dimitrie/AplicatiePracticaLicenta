@@ -110,6 +110,86 @@ class AccessControlService:
     def delete_user(self, user_id: int) -> DbResult[bool]:
         return self.users.delete(user_id)
 
+    def delete_user_account(self, user_id: int) -> DbResult[dict[str, Any]]:
+        """Delete a user account and cascade orphaned/unmaintained subjects.
+
+        Rule used by the React settings screen:
+        - the user row and all of that user's refresh sessions/access rows are removed;
+        - every subject visible to that user is inspected before the user is deleted;
+        - if, after removing this user, at least one remaining account has editor/admin/owner access,
+          the subject is kept;
+        - if no remaining account has editor-or-higher access, the subject and its cases/workspaces
+          are deleted too. This includes subjects with no remaining accounts and subjects with only
+          viewer accounts left.
+        """
+        try:
+            user = self.users.get_by_id(user_id)
+            if not user.success:
+                return DbResult.fail(user.error or "Could not load user before account deletion.")
+            if user.data is None:
+                return DbResult.ok({
+                    "deleted": False,
+                    "deleted_subject_ids": [],
+                    "kept_subject_ids": [],
+                })
+
+            subject_ids_result = self.access.list_subject_ids_for_user(user_id)
+            if not subject_ids_result.success:
+                return DbResult.fail(subject_ids_result.error or "Could not load user subjects before account deletion.")
+
+            subject_ids = subject_ids_result.data or []
+            deleted_subject_ids: list[str] = []
+            kept_subject_ids: list[str] = []
+
+            for subject_id in subject_ids:
+                remaining_result = self.access.list_for_subject_except_user(subject_id, user_id)
+                if not remaining_result.success:
+                    return DbResult.fail(remaining_result.error or f"Could not inspect remaining access for subject '{subject_id}'.")
+
+                remaining_access = remaining_result.data or []
+                has_remaining_maintainer = any(
+                    role_allows(access.role, "editor")
+                    for access in remaining_access
+                )
+
+                if has_remaining_maintainer:
+                    kept_subject_ids.append(subject_id)
+                else:
+                    deleted_subject_ids.append(subject_id)
+
+            # Revoking sessions is technically covered by app_user ON DELETE CASCADE,
+            # but doing it explicitly makes the account deletion intent obvious.
+            sessions = self.revoke_all_auth_sessions_for_user(user_id)
+            if not sessions.success:
+                return DbResult.fail(sessions.error or "Could not revoke user sessions before account deletion.")
+
+            deleted_user = self.users.delete(user_id)
+            if not deleted_user.success:
+                return DbResult.fail(deleted_user.error or "Could not delete user account.")
+            if not deleted_user.data:
+                return DbResult.ok({
+                    "deleted": False,
+                    "deleted_subject_ids": [],
+                    "kept_subject_ids": kept_subject_ids,
+                })
+
+            for subject_id in deleted_subject_ids:
+                deleted_subject = self.subjects.delete(subject_id)
+                if not deleted_subject.success:
+                    return DbResult.fail(deleted_subject.error or f"User was deleted, but subject '{subject_id}' could not be deleted.")
+
+                if deleted_subject.data and self.workspace_gateway is not None:
+                    self.workspace_gateway.delete_subject_workspaces(subject_id=subject_id)
+
+            return DbResult.ok({
+                "deleted": True,
+                "deleted_subject_ids": deleted_subject_ids,
+                "kept_subject_ids": kept_subject_ids,
+            })
+
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
     def authenticate(self, email: str, password: str) -> DbResult[AuthResult]:
         """Verify credentials. This does not create sessions or tokens."""
         credentials = self.users.get_credentials_by_email(normalize_email(email))

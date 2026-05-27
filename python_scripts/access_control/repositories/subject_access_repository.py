@@ -46,6 +46,40 @@ class SubjectAccessRepository:
         except Exception as exc:
             return DbResult.fail(str(exc))
 
+
+
+    def list_subject_ids_for_user(self, user_id: int) -> DbResult[list[str]]:
+        """Return subject ids linked to a user before account deletion cascades run."""
+        try:
+            rows = self.db.fetch_all(
+                """
+                SELECT subject_id
+                FROM subject_access
+                WHERE user_id = %s
+                ORDER BY subject_id
+                """,
+                (user_id,),
+            )
+            return DbResult.ok([str(row["subject_id"]) for row in rows])
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
+    def list_for_subject_except_user(self, subject_id: str, excluded_user_id: int) -> DbResult[list[SubjectAccessRecord]]:
+        """Return access rows that would remain for a subject after one user is removed."""
+        try:
+            rows = self.db.fetch_all(
+                """
+                SELECT user_id, subject_id, role
+                FROM subject_access
+                WHERE subject_id = %s AND user_id <> %s
+                ORDER BY user_id
+                """,
+                (subject_id, excluded_user_id),
+            )
+            return DbResult.ok([access_from_row(row) for row in rows])
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
     def user_case_role(self, user_id: int, case_id: int) -> DbResult[str]:
         try:
             row = self.db.fetch_one(

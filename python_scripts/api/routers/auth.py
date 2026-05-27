@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from ...access_control import UserRecord
 from ..dependencies import get_auth_service, get_current_user
 from ..errors import raise_api_error
-from ..schemas import CurrentUserResponse, LoginRequest, LoginResponse, RegisterRequest, UserResponse
+from ..schemas import AccountDeletionResponse, CurrentUserResponse, LoginRequest, LoginResponse, RegisterRequest, UserResponse
 from ..services import AuthService
 
 router = APIRouter()
@@ -207,3 +207,33 @@ def logout_all(
         )
 
     return {"logged_out": True, "all_sessions": True}
+
+
+@router.delete("/account", response_model=AccountDeletionResponse)
+def delete_account(
+    response: Response,
+    current_user: UserRecord = Depends(get_current_user),
+    auth: AuthService = Depends(get_auth_service),
+):
+    """Delete the current user account and cascade unmaintained subjects.
+
+    Subjects are deleted only when no remaining user has editor/admin/owner
+    access. Subjects that still have a maintainer are kept and only this user's
+    access is removed by the user deletion cascade.
+    """
+    result = auth.delete_account(current_user)
+    _clear_refresh_cookie(response)
+
+    if not result.success:
+        raise_api_error(
+            status.HTTP_400_BAD_REQUEST,
+            result.error or "Could not delete account.",
+            code="ACCOUNT_DELETE_FAILED",
+        )
+
+    payload = result.data or {
+        "deleted": False,
+        "deleted_subject_ids": [],
+        "kept_subject_ids": [],
+    }
+    return AccountDeletionResponse(**payload)

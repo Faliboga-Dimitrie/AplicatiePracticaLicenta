@@ -17,7 +17,7 @@ type ViewState =
   | { name: 'settings' }
 
 function AppContent() {
-  const { user, isCheckingSession, isAuthenticated, logout, logoutAll } = useAuth()
+  const { user, isCheckingSession, isAuthenticated, logout, logoutAll, deleteAccount } = useAuth()
   const [view, setView] = useState<ViewState>({ name: 'home' })
 
   if (isCheckingSession) {
@@ -42,6 +42,11 @@ function AppContent() {
 
   async function handleLogoutAll() {
     await logoutAll()
+    setView({ name: 'home' })
+  }
+
+  async function handleDeleteAccount() {
+    await deleteAccount()
     setView({ name: 'home' })
   }
 
@@ -137,6 +142,7 @@ function AppContent() {
             onBackHome={() => setView({ name: 'home' })}
             onLogout={handleLogout}
             onLogoutAll={handleLogoutAll}
+            onDeleteAccount={handleDeleteAccount}
           />
         )}
       </div>

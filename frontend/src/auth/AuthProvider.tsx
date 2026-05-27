@@ -1,6 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { getCurrentUser, login as loginRequest, logout as logoutRequest, logoutAll as logoutAllRequest, refreshSession, register as registerRequest } from '../api/authApi'
+import { getCurrentUser, login as loginRequest, logout as logoutRequest, deleteAccount as deleteAccountRequest, logoutAll as logoutAllRequest, refreshSession, register as registerRequest } from '../api/authApi'
 import { apiMessage, clearAccessToken, getStoredAccessToken } from '../api/client'
 import type { User } from '../types/api'
 
@@ -13,6 +13,7 @@ type AuthContextValue = {
   register: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   logoutAll: () => Promise<void>
+  deleteAccount: () => Promise<void>
   clearAuthError: () => void
 }
 
@@ -52,6 +53,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logoutAll = useCallback(async () => {
     setAuthError(null)
     await logoutAllRequest()
+    setUser(null)
+  }, [])
+
+  const deleteAccount = useCallback(async () => {
+    setAuthError(null)
+    await deleteAccountRequest()
     setUser(null)
   }, [])
 
@@ -105,9 +112,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       register,
       logout,
       logoutAll,
+      deleteAccount,
       clearAuthError,
     }),
-    [authError, clearAuthError, isCheckingSession, login, register, logout, logoutAll, user],
+    [authError, clearAuthError, isCheckingSession, login, register, logout, logoutAll, deleteAccount, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

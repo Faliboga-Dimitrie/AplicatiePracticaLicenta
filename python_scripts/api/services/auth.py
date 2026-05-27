@@ -20,6 +20,7 @@ class AuthError(RuntimeError):
 class TokenPayload:
     user_id: int
     email: str
+    session_id: int
     expires_at: datetime
 
 
@@ -66,7 +67,7 @@ class TokenService:
     def refresh_token_max_age_seconds(self) -> int:
         return int(timedelta(days=self.refresh_token_days).total_seconds())
 
-    def create_access_token(self, user: UserRecord) -> tuple[str, datetime]:
+    def create_access_token(self, user: UserRecord, *, session_id: int) -> tuple[str, datetime]:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=self.access_token_minutes)
 
@@ -77,6 +78,7 @@ class TokenService:
         payload = {
             "sub": str(user.id),
             "email": user.email,
+            "sid": str(session_id),
             "iat": int(now.timestamp()),
             "exp": int(expires_at.timestamp()),
             "iss": self.issuer,
@@ -113,6 +115,7 @@ class TokenService:
         try:
             user_id = int(payload["sub"])
             email = str(payload["email"])
+            session_id = int(payload["sid"])
             exp = int(payload["exp"])
         except Exception as exc:
             raise AuthError("Invalid token payload.") from exc
@@ -124,6 +127,7 @@ class TokenService:
         return TokenPayload(
             user_id=user_id,
             email=email,
+            session_id=session_id,
             expires_at=expires_at,
         )
 
@@ -244,7 +248,7 @@ class AuthService:
             # A concurrent refresh may already have rotated or revoked this token.
             return DbResult.ok(None)
 
-        access_token, access_expires_at = self.token_service.create_access_token(user_result.data)
+        access_token, access_expires_at = self.token_service.create_access_token(user_result.data, session_id=session_result.data.id)
         return DbResult.ok(
             AuthenticatedSession(
                 access_token=access_token,
@@ -283,10 +287,21 @@ class AuthService:
         if user_result.data.email != payload.email:
             return DbResult.fail("Token user data is stale.")
 
+        session_result = self.access.get_active_auth_session_by_id(
+            session_id=payload.session_id,
+            user_id=payload.user_id,
+        )
+        if not session_result.success:
+            return DbResult.fail(session_result.error or "Could not validate token session.")
+        if session_result.data is None:
+            return DbResult.fail("Token session is expired, revoked, or invalid.")
+
         return DbResult.ok(user_result.data)
 
+    def delete_account(self, user: UserRecord) -> DbResult[dict[str, Any]]:
+        return self.access.delete_user_account(user.id)
+
     def _create_session_for_user(self, user: UserRecord) -> DbResult[AuthenticatedSession]:
-        access_token, access_expires_at = self.token_service.create_access_token(user)
         refresh_token, refresh_hash, refresh_expires_at = self.token_service.create_refresh_token()
 
         session_result = self.access.create_auth_session(
@@ -296,6 +311,13 @@ class AuthService:
         )
         if not session_result.success:
             return DbResult.fail(session_result.error or "Could not create refresh session.")
+        if session_result.data is None:
+            return DbResult.fail("Refresh session was not created.")
+
+        access_token, access_expires_at = self.token_service.create_access_token(
+            user,
+            session_id=session_result.data.id,
+        )
 
         return DbResult.ok(
             AuthenticatedSession(

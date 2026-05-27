@@ -54,3 +54,15 @@ export async function logoutAll(): Promise<void> {
     clearAccessToken()
   }
 }
+
+
+export async function deleteAccount(): Promise<{ deleted: boolean; deleted_subject_ids: string[]; kept_subject_ids: string[] }> {
+  try {
+    return await apiRequest<{ deleted: boolean; deleted_subject_ids: string[]; kept_subject_ids: string[] }>(
+      '/auth/account',
+      { method: 'DELETE' },
+    )
+  } finally {
+    clearAccessToken()
+  }
+}
