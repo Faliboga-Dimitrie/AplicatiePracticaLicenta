@@ -11,6 +11,7 @@ import type { CaseArtifacts, Job, MriCase } from '../types/api'
 type CaseDetailPageProps = {
   caseId: number
   onBack: () => void
+  onOpenViewer: () => void
 }
 
 type CaseEditorState = {
@@ -35,7 +36,7 @@ function toCaseEditorState(mriCase: MriCase): CaseEditorState {
   }
 }
 
-export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
+export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageProps) {
   const [mriCase, setMriCase] = useState<MriCase | null>(null)
   const [caseDraft, setCaseDraft] = useState<CaseEditorState | null>(null)
   const [artifacts, setArtifacts] = useState<CaseArtifacts | null>(null)
@@ -302,7 +303,13 @@ export function CaseDetailPage({ caseId, onBack }: CaseDetailPageProps) {
             Buttons are disabled when the backend says the case is not ready or is already busy.
           </p>
           <div className="button-row disabled-action-row">
-            <button type="button" disabled>Open 3D view</button>
+            <button
+              type="button"
+              onClick={onOpenViewer}
+              disabled={!mriCase.capabilities.can_view_meshes}
+            >
+              Open 3D view
+            </button>
             <button type="button" disabled>Open statistics</button>
             <button type="button" disabled>Compare over time</button>
           </div>

@@ -740,3 +740,146 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+.viewer-page {
+  min-height: 100%;
+}
+
+.viewer-header-card {
+  background: linear-gradient(135deg, #07111f, #17306a 62%, #2454d6);
+  color: #ffffff;
+}
+
+.viewer-header-card .muted,
+.viewer-header-card .eyebrow {
+  color: #dbeafe;
+}
+
+.viewer-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.viewer-controls-panel {
+  max-height: calc(100vh - 190px);
+  overflow: auto;
+}
+
+.viewer-toggle-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #344054;
+  font-weight: 800;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.compact-stack {
+  gap: 0.75rem;
+}
+
+.tissue-control {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 0.75rem;
+}
+
+.tissue-dot {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+}
+
+.range-label {
+  display: grid;
+  gap: 0.35rem;
+  color: #475569;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.range-label input {
+  width: 100%;
+}
+
+.viewer-help-card {
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  padding: 0.85rem;
+}
+
+.viewer-help-card p {
+  margin: 0.35rem 0 0;
+  color: #315083;
+  font-size: 0.9rem;
+}
+
+.viewer-canvas-card {
+  min-height: calc(100vh - 190px);
+  display: grid;
+  grid-template-rows: auto minmax(520px, 1fr);
+  padding: 0;
+  overflow: hidden;
+}
+
+.viewer-canvas-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.9rem 1rem;
+}
+
+.viewer-canvas-wrap {
+  position: relative;
+  min-height: 520px;
+  background: #08111f;
+}
+
+.viewer-canvas-wrap canvas {
+  display: block;
+}
+
+.viewer-empty-state {
+  display: grid;
+  min-height: 520px;
+  place-items: center;
+  text-align: center;
+  padding: 2rem;
+}
+
+.viewer-empty-state h2 {
+  color: #ffffff;
+}
+
+.viewer-empty-state .muted {
+  color: #bfdbfe;
+}
+
+@media (max-width: 1100px) {
+  .viewer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .viewer-controls-panel {
+    max-height: none;
+  }
+}

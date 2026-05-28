@@ -7,6 +7,7 @@ import { SubjectsPage } from './pages/SubjectsPage'
 import { SubjectCasesPage } from './pages/SubjectCasesPage'
 import { CaseDetailPage } from './pages/CaseDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { Case3DViewerPage } from './pages/Case3DViewerPage'
 import './App.css'
 
 type ViewState =
@@ -14,6 +15,7 @@ type ViewState =
   | { name: 'subjects' }
   | { name: 'subjectCases'; subjectId: string }
   | { name: 'caseDetail'; subjectId: string; caseId: number }
+  | { name: 'caseViewer'; subjectId: string; caseId: number }
   | { name: 'settings' }
 
 function AppContent() {
@@ -50,7 +52,7 @@ function AppContent() {
     setView({ name: 'home' })
   }
 
-  const currentSection = view.name === 'subjects' || view.name === 'subjectCases' || view.name === 'caseDetail'
+  const currentSection = view.name === 'subjects' || view.name === 'subjectCases' || view.name === 'caseDetail' || view.name === 'caseViewer'
     ? 'workspace'
     : view.name
 
@@ -133,6 +135,14 @@ function AppContent() {
           <CaseDetailPage
             caseId={view.caseId}
             onBack={() => setView({ name: 'subjectCases', subjectId: view.subjectId })}
+            onOpenViewer={() => setView({ name: 'caseViewer', subjectId: view.subjectId, caseId: view.caseId })}
+          />
+        )}
+
+        {view.name === 'caseViewer' && (
+          <Case3DViewerPage
+            caseId={view.caseId}
+            onBack={() => setView({ name: 'caseDetail', subjectId: view.subjectId, caseId: view.caseId })}
           />
         )}
 
