@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
-import { createArtifactObjectUrl, listArtifacts } from '../api/artifactsApi'
+import { createArtifactObjectUrl, listViewerArtifacts } from '../api/artifactsApi'
 import { getCase } from '../api/casesApi'
 import { Brain3DViewer, inferViewerModeFromName, inferViewerTissueFromName, isGlbName } from '../components/Brain3DViewer'
 import type { BrainViewerItem } from '../components/Brain3DViewer'
@@ -47,10 +47,16 @@ export function Case3DViewerPage({ caseId, onBack }: Case3DViewerPageProps) {
     const createdUrls: string[] = []
 
     try {
-      const [loadedCase, artifactBundle] = await Promise.all([getCase(caseId), listArtifacts(caseId)])
+      const [loadedCase, artifactBundle] = await Promise.all([getCase(caseId), listViewerArtifacts(caseId)])
       setMriCase(loadedCase)
 
-      for (const artifact of artifactBundle.artifacts) {
+      const glbArtifacts = artifactBundle.artifacts.filter((artifact) => {
+        const mode = inferViewerModeFromName(artifact.kind) ?? inferViewerModeFromName(artifact.name)
+        const tissue = inferViewerTissueFromName(artifact.name, artifact.metadata?.tissue)
+        return Boolean(mode && tissue && isGlbName(artifact.name, artifact.mime_type))
+      })
+
+      for (const artifact of glbArtifacts) {
         const objectUrl = await createArtifactObjectUrl(artifact)
         const viewerItem = toViewerItem(artifact, objectUrl)
 
