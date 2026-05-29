@@ -13,6 +13,11 @@ export type BrainViewerItem = {
   tissue: ViewerTissue
   mode: ViewerArtifactMode
   objectUrl: string
+  /**
+   * Keep colors/materials authored inside the GLB. Useful for comparison GLBs
+   * where the backend encodes baseline/target colors directly.
+   */
+  preserveMaterials?: boolean
 }
 
 type TissueControls = Record<ViewerTissue, {
@@ -89,7 +94,6 @@ function ModelLayer({
   showMeshes,
   showWireframes,
   doubleSided,
-  preserveSourceMaterials,
 }: {
   item: BrainViewerItem
   controls: TissueControls
@@ -97,7 +101,6 @@ function ModelLayer({
   showMeshes: boolean
   showWireframes: boolean
   doubleSided: boolean
-  preserveSourceMaterials: boolean
 }) {
   const gltf = useGLTF(item.objectUrl)
   const control = controls[item.tissue]
@@ -116,24 +119,26 @@ function ModelLayer({
         const cloned = material.clone()
         cloned.side = doubleSided ? THREE.DoubleSide : THREE.FrontSide
 
-        if (!preserveSourceMaterials) {
-          const opacity = item.mode === 'wireframe'
-            ? Math.min(1, Math.max(0.25, control.opacity + 0.25))
-            : control.opacity
+        if (item.preserveMaterials) {
+          return cloned
+        }
 
-          cloned.transparent = opacity < 1 || item.mode === 'wireframe'
-          cloned.opacity = opacity
-          cloned.depthWrite = opacity >= 0.95
+        const opacity = item.mode === 'wireframe'
+          ? Math.min(1, Math.max(0.25, control.opacity + 0.25))
+          : control.opacity
 
-          const materialWithColor = cloned as THREE.Material & { color?: THREE.Color }
-          if (materialWithColor.color instanceof THREE.Color) {
-            materialWithColor.color.set(control.color)
-          }
+        cloned.transparent = opacity < 1 || item.mode === 'wireframe'
+        cloned.opacity = opacity
+        cloned.depthWrite = opacity >= 0.95
 
-          const materialWithWireframe = cloned as THREE.Material & { wireframe?: boolean }
-          if (typeof materialWithWireframe.wireframe === 'boolean') {
-            materialWithWireframe.wireframe = item.mode === 'wireframe'
-          }
+        const materialWithColor = cloned as THREE.Material & { color?: THREE.Color }
+        if (materialWithColor.color instanceof THREE.Color) {
+          materialWithColor.color.set(control.color)
+        }
+
+        const materialWithWireframe = cloned as THREE.Material & { wireframe?: boolean }
+        if (typeof materialWithWireframe.wireframe === 'boolean') {
+          materialWithWireframe.wireframe = item.mode === 'wireframe'
         }
 
         return cloned
@@ -142,7 +147,7 @@ function ModelLayer({
       object.material = Array.isArray(sourceMaterial) ? clonedMaterials : clonedMaterials[0]
     })
     return clone
-  }, [control.color, control.opacity, doubleSided, gltf.scene, item.mode, preserveSourceMaterials])
+  }, [control.color, control.opacity, doubleSided, gltf.scene, item.mode])
 
   useEffect(() => {
     return () => {
@@ -240,7 +245,6 @@ function BrainGlbScene({
   autoRotate,
   resetSignal,
   gridUnit,
-  preserveSourceMaterials,
 }: {
   items: BrainViewerItem[]
   controls: TissueControls
@@ -251,7 +255,6 @@ function BrainGlbScene({
   autoRotate: boolean
   resetSignal: number
   gridUnit: GridUnit
-  preserveSourceMaterials: boolean
 }) {
   return (
     <Canvas camera={{ position: [0, -260, 130], fov: 45 }} dpr={[1, 2]}>
@@ -273,7 +276,6 @@ function BrainGlbScene({
                 showMeshes={showMeshes}
                 showWireframes={showWireframes}
                 doubleSided={doubleSided}
-                preserveSourceMaterials={preserveSourceMaterials}
               />
             ))}
           </AutoRotateGroup>
@@ -296,9 +298,6 @@ export function Brain3DViewer({
   isLoading = false,
   error = null,
   onReload,
-  preserveSourceMaterials = false,
-  showTissueControls = true,
-  showLayerControls = true,
 }: {
   items: BrainViewerItem[]
   title: string
@@ -307,9 +306,6 @@ export function Brain3DViewer({
   isLoading?: boolean
   error?: string | null
   onReload?: () => void
-  preserveSourceMaterials?: boolean
-  showTissueControls?: boolean
-  showLayerControls?: boolean
 }) {
   const [controls, setControls] = useState<TissueControls>(defaultTissueControls)
   const [showMeshes, setShowMeshes] = useState(true)
@@ -359,18 +355,14 @@ export function Brain3DViewer({
         )}
 
         <div className="viewer-toggle-grid">
-          {showLayerControls && (
-            <>
-              <label className="checkbox-row">
-                <input type="checkbox" checked={showMeshes} disabled={!hasMeshes} onChange={(event) => setShowMeshes(event.target.checked)} />
-                Meshes
-              </label>
-              <label className="checkbox-row">
-                <input type="checkbox" checked={showWireframes} disabled={!hasWireframes} onChange={(event) => setShowWireframes(event.target.checked)} />
-                Wireframes
-              </label>
-            </>
-          )}
+          <label className="checkbox-row">
+            <input type="checkbox" checked={showMeshes} disabled={!hasMeshes} onChange={(event) => setShowMeshes(event.target.checked)} />
+            Meshes
+          </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={showWireframes} disabled={!hasWireframes} onChange={(event) => setShowWireframes(event.target.checked)} />
+            Wireframes
+          </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={doubleSided} onChange={(event) => setDoubleSided(event.target.checked)} />
             Double-sided material
@@ -381,43 +373,41 @@ export function Brain3DViewer({
           </label>
         </div>
 
-        {showTissueControls && (
-          <div className="stack compact-stack">
-            <h3>Tissues</h3>
-            {(['gm', 'wm', 'csf'] as ViewerTissue[]).map((tissue) => (
-              <div className="tissue-control" key={tissue}>
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={controls[tissue].visible}
-                    onChange={(event) => updateTissue(tissue, { visible: event.target.checked })}
-                  />
-                  <span className="tissue-dot" style={{ background: controls[tissue].color }} />
-                  {tissueLabels[tissue]}
-                </label>
-                <label className="range-label">
-                  Color
-                  <input
-                    type="color"
-                    value={controls[tissue].color}
-                    onChange={(event) => updateTissue(tissue, { color: event.target.value })}
-                  />
-                </label>
-                <label className="range-label">
-                  Opacity {Math.round(controls[tissue].opacity * 100)}%
-                  <input
-                    type="range"
-                    min="0.05"
-                    max="1"
-                    step="0.05"
-                    value={controls[tissue].opacity}
-                    onChange={(event) => updateTissue(tissue, { opacity: Number(event.target.value) })}
-                  />
-                </label>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="stack compact-stack">
+          <h3>Tissues</h3>
+          {(['gm', 'wm', 'csf'] as ViewerTissue[]).map((tissue) => (
+            <div className="tissue-control" key={tissue}>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={controls[tissue].visible}
+                  onChange={(event) => updateTissue(tissue, { visible: event.target.checked })}
+                />
+                <span className="tissue-dot" style={{ background: controls[tissue].color }} />
+                {tissueLabels[tissue]}
+              </label>
+              <label className="range-label">
+                Color
+                <input
+                  type="color"
+                  value={controls[tissue].color}
+                  onChange={(event) => updateTissue(tissue, { color: event.target.value })}
+                />
+              </label>
+              <label className="range-label">
+                Opacity {Math.round(controls[tissue].opacity * 100)}%
+                <input
+                  type="range"
+                  min="0.05"
+                  max="1"
+                  step="0.05"
+                  value={controls[tissue].opacity}
+                  onChange={(event) => updateTissue(tissue, { opacity: Number(event.target.value) })}
+                />
+              </label>
+            </div>
+          ))}
+        </div>
 
         <div className="stack compact-stack">
           <h3>Grid scale</h3>
@@ -509,7 +499,6 @@ export function Brain3DViewer({
               autoRotate={autoRotate}
               resetSignal={resetSignal}
               gridUnit={gridUnit}
-              preserveSourceMaterials={preserveSourceMaterials}
             />
           ) : (
             <div className="viewer-empty-state">

@@ -1,5 +1,5 @@
 import { apiDownload, apiRequest } from './client'
-import type { CaseMetricsResponse, EvolutionDatesResponse, EvolutionReport, TissueKey } from '../types/api'
+import type { CaseMetricsResponse, EvolutionDatesResponse, EvolutionReport } from '../types/api'
 
 export function getCaseMetrics(caseId: number): Promise<CaseMetricsResponse> {
   return apiRequest<CaseMetricsResponse>(`/cases/${caseId}/metrics`)
@@ -18,25 +18,33 @@ export function getEvolutionReport(
   return apiRequest<EvolutionReport>(`/processing/subjects/${encodeURIComponent(subjectId)}/evolution?${params}`)
 }
 
-export function getEvolutionVisualComparisonGlb(
-  subjectId: string,
-  startDate: string,
-  endDate: string,
-  options: { targetDate?: string; tissues?: TissueKey[]; includeWireframes?: boolean } = {},
-): Promise<Blob> {
+export type EvolutionVisualOptions = {
+  subjectId: string
+  startDate: string
+  endDate: string
+  targetDate?: string
+  tissue?: string
+  includeMeshes?: boolean
+  includeWireframes?: boolean
+}
+
+export async function createEvolutionVisualComparisonObjectUrl(options: EvolutionVisualOptions): Promise<string> {
   const params = new URLSearchParams({
-    start_date: startDate,
-    end_date: endDate,
+    start_date: options.startDate,
+    end_date: options.endDate,
+    include_meshes: String(options.includeMeshes ?? false),
     include_wireframes: String(options.includeWireframes ?? true),
   })
 
   if (options.targetDate) {
     params.set('target_date', options.targetDate)
   }
-
-  for (const tissue of options.tissues ?? []) {
-    params.append('tissues', tissue)
+  if (options.tissue) {
+    params.append('tissues', options.tissue)
   }
 
-  return apiDownload(`/processing/subjects/${encodeURIComponent(subjectId)}/evolution/visual?${params}`)
+  const blob = await apiDownload(
+    `/processing/subjects/${encodeURIComponent(options.subjectId)}/evolution/visual?${params.toString()}`,
+  )
+  return URL.createObjectURL(blob)
 }

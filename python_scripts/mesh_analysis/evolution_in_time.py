@@ -88,15 +88,17 @@ class EvolutionMriArtifacts:
         self,
         *,
         tissues: Iterable[str] | None = None,
+        include_meshes: bool = True,
         include_wireframes: bool = True,
     ) -> list[Path]:
         selected_tissues = _normalize_tissues(tissues)
         missing: list[Path] = []
 
         for tissue in selected_tissues:
-            mesh_path = self.mesh_paths[tissue]
-            if not mesh_path.exists():
-                missing.append(mesh_path)
+            if include_meshes:
+                mesh_path = self.mesh_paths[tissue]
+                if not mesh_path.exists():
+                    missing.append(mesh_path)
 
             if include_wireframes:
                 wireframe_path = self.wireframe_paths[tissue]
@@ -184,9 +186,9 @@ class MriEvolutionInTime:
 
         The baseline is the MRI whose acquisition_date is start_date. Every later
         MRI is compared to that baseline. Previous-date comparison starts from the
-        second MRI in the selected interval. For the second point, previous and
-        baseline comparison are intentionally identical, which keeps the API table
-        shape consistent for the UI.
+        second MRI in the selected interval. For the second MRI, the previous
+        comparison is intentionally identical to the baseline comparison, because
+        the previous date is the baseline date itself.
         """
         selected = self._selected_mris()
         self._validate_metric_inputs(selected)
@@ -218,7 +220,7 @@ class MriEvolutionInTime:
                 "change_from_baseline_percent": "(current_value - baseline_value) / baseline_value * 100",
                 "change_from_previous_percent": (
                     "computed from the second selected MRI onward; for the second MRI, "
-                    "previous comparison is intentionally identical to baseline comparison"
+                    "the previous comparison is identical to the baseline comparison"
                 ),
                 "std_dev": "population standard deviation",
             },
@@ -233,6 +235,7 @@ class MriEvolutionInTime:
         *,
         target_date: str | None = None,
         tissues: Iterable[str] | None = None,
+        include_meshes: bool = False,
         include_wireframes: bool = True,
     ) -> bytes:
         """
@@ -242,9 +245,9 @@ class MriEvolutionInTime:
         FastAPI endpoint that returns Response(content=bytes, media_type="model/gltf-binary").
 
         The current implementation is a robust first visual comparison strategy:
-        baseline meshes and target meshes are rendered together with different
-        transparent materials. This shows anatomical differences by overlap/mismatch
-        without relying on fragile mesh boolean subtraction.
+        baseline and target GLB layers are rendered together with different
+        materials. By default, it uses wireframes only, because they make shape
+        mismatch easier to inspect than two filled translucent surfaces.
         """
         try:
             import numpy as np
@@ -254,6 +257,9 @@ class MriEvolutionInTime:
                 "Visual comparison requires trimesh and numpy to be installed."
             ) from exc
 
+        if not include_meshes and not include_wireframes:
+            raise ValueError("Visual comparison requires at least one of include_meshes/include_wireframes to be true.")
+
         selected = self._selected_mris()
         if len(selected) < 2:
             raise ValueError("Visual comparison requires at least two MRI acquisitions in the selected interval.")
@@ -262,8 +268,18 @@ class MriEvolutionInTime:
         target = self._get_target_visual_mri(selected, target_date)
         selected_tissues = _normalize_tissues(tissues)
 
-        missing = baseline.missing_visual_paths(tissues=selected_tissues, include_wireframes=include_wireframes)
-        missing.extend(target.missing_visual_paths(tissues=selected_tissues, include_wireframes=include_wireframes))
+        missing = baseline.missing_visual_paths(
+            tissues=selected_tissues,
+            include_meshes=include_meshes,
+            include_wireframes=include_wireframes,
+        )
+        missing.extend(
+            target.missing_visual_paths(
+                tissues=selected_tissues,
+                include_meshes=include_meshes,
+                include_wireframes=include_wireframes,
+            )
+        )
         if missing:
             missing_str = "\n".join(str(path) for path in missing)
             raise FileNotFoundError(f"Cannot build visual comparison GLB. Missing files:\n{missing_str}")
@@ -275,22 +291,23 @@ class MriEvolutionInTime:
         target_wire_rgba = (255, 90, 60, 220)
 
         for tissue in selected_tissues:
-            self._add_loaded_glb_to_scene(
-                scene=scene,
-                path=baseline.mesh_paths[tissue],
-                prefix=f"baseline_{baseline.acquisition_date}_{tissue}_mesh",
-                rgba=base_rgba,
-                trimesh_module=trimesh,
-                numpy_module=np,
-            )
-            self._add_loaded_glb_to_scene(
-                scene=scene,
-                path=target.mesh_paths[tissue],
-                prefix=f"target_{target.acquisition_date}_{tissue}_mesh",
-                rgba=target_rgba,
-                trimesh_module=trimesh,
-                numpy_module=np,
-            )
+            if include_meshes:
+                self._add_loaded_glb_to_scene(
+                    scene=scene,
+                    path=baseline.mesh_paths[tissue],
+                    prefix=f"baseline_{baseline.acquisition_date}_{tissue}_mesh",
+                    rgba=base_rgba,
+                    trimesh_module=trimesh,
+                    numpy_module=np,
+                )
+                self._add_loaded_glb_to_scene(
+                    scene=scene,
+                    path=target.mesh_paths[tissue],
+                    prefix=f"target_{target.acquisition_date}_{tissue}_mesh",
+                    rgba=target_rgba,
+                    trimesh_module=trimesh,
+                    numpy_module=np,
+                )
 
             if include_wireframes:
                 self._add_loaded_glb_to_scene(

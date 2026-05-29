@@ -134,37 +134,38 @@ def build_evolution_report(
         not_found_message="Subject not found or not enough metric-ready dates.",
     )
 
-
 @router.get("/subjects/{subject_id}/evolution/visual")
-def build_evolution_visual_comparison(
+def build_evolution_visual(
     subject_id: str,
     start_date: str,
     end_date: str,
     target_date: str | None = None,
-    tissues: list[str] | None = Query(None),
+    tissues: list[str] | None = Query(default=None),
+    include_meshes: bool = False,
     include_wireframes: bool = True,
     current_user: UserRecord = Depends(get_current_user),
     statistics: StatisticsService = Depends(get_statistics_service),
 ):
-    """Return a volatile GLB overlay comparing the baseline and target MRI dates."""
-    result = statistics.visual_comparison_for_subject(
+    """Return an in-memory GLB comparing baseline and target MRI geometry."""
+    result = statistics.evolution_visual_for_subject(
         current_user,
         subject_id,
         start_date=start_date,
         end_date=end_date,
         target_date=target_date,
         tissues=tissues,
+        include_meshes=include_meshes,
         include_wireframes=include_wireframes,
     )
     glb_bytes = unwrap_result(
         result,
         not_found_message="Subject not found or not enough visual-ready dates.",
     )
-    safe_subject = subject_id.replace("/", "_").replace("\\", "_")
-    target = target_date or end_date
-    filename = f"{safe_subject}_{start_date}_to_{target}_comparison.glb"
     return Response(
         content=glb_bytes,
         media_type="model/gltf-binary",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{subject_id}_{start_date}_to_{target_date or end_date}_comparison.glb"'
+        },
     )
+
