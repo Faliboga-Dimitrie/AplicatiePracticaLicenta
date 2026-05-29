@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
-import { getEvolutionReport, listEvolutionDates } from '../api/metricsApi'
+import { getEvolutionReport, getEvolutionVisualComparisonGlb, listEvolutionDates } from '../api/metricsApi'
+import { Brain3DViewer } from '../components/Brain3DViewer'
+import type { BrainViewerItem } from '../components/Brain3DViewer'
 import type { EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
 
 type TimeComparisonPageProps = {
@@ -74,7 +76,18 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const [selectedTissue, setSelectedTissue] = useState<TissueKey>('gm')
   const [isLoadingDates, setIsLoadingDates] = useState(true)
   const [isLoadingReport, setIsLoadingReport] = useState(false)
+  const [isLoadingVisual, setIsLoadingVisual] = useState(false)
+  const [visualError, setVisualError] = useState<string | null>(null)
+  const [visualItems, setVisualItems] = useState<BrainViewerItem[]>([])
   const [error, setError] = useState<string | null>(null)
+  const visualObjectUrlRef = useRef<string | null>(null)
+
+  const revokeVisualObjectUrl = useCallback(() => {
+    if (visualObjectUrlRef.current) {
+      URL.revokeObjectURL(visualObjectUrlRef.current)
+      visualObjectUrlRef.current = null
+    }
+  }, [])
 
   async function loadDates() {
     setIsLoadingDates(true)
@@ -96,7 +109,10 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     loadDates()
   }, [subjectId])
 
+  useEffect(() => () => revokeVisualObjectUrl(), [revokeVisualObjectUrl])
+
   const readyDates = useMemo(() => dateEntries.filter((entry) => entry.ready_for_json), [dateEntries])
+  const visualReadyDates = useMemo(() => dateEntries.filter((entry) => entry.ready_for_visual), [dateEntries])
 
   async function buildReport() {
     if (!startDate || !endDate) {
@@ -105,6 +121,8 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     }
     setIsLoadingReport(true)
     setError(null)
+    setVisualItems([])
+    revokeVisualObjectUrl()
     try {
       setReport(await getEvolutionReport(subjectId, startDate, endDate))
     } catch (loadError) {
@@ -112,6 +130,40 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
       setError(apiMessage(loadError))
     } finally {
       setIsLoadingReport(false)
+    }
+  }
+
+  async function loadVisualComparison() {
+    if (!report) {
+      setVisualError('Build the JSON report first, then open the visual comparison.')
+      return
+    }
+
+    setIsLoadingVisual(true)
+    setVisualError(null)
+    try {
+      const blob = await getEvolutionVisualComparisonGlb(subjectId, report.start_date, report.end_date, {
+        targetDate: report.end_date,
+        includeWireframes: true,
+      })
+      revokeVisualObjectUrl()
+      const objectUrl = URL.createObjectURL(blob)
+      visualObjectUrlRef.current = objectUrl
+      setVisualItems([
+        {
+          id: `comparison-${report.start_date}-${report.end_date}`,
+          name: `${subjectId} ${report.start_date} to ${report.end_date}`,
+          tissue: 'gm',
+          mode: 'mesh',
+          objectUrl,
+        },
+      ])
+    } catch (loadError) {
+      setVisualItems([])
+      revokeVisualObjectUrl()
+      setVisualError(apiMessage(loadError))
+    } finally {
+      setIsLoadingVisual(false)
     }
   }
 
@@ -140,7 +192,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             {dateEntries.map((entry) => (
               <span className={`date-chip ${entry.ready_for_json ? 'ready' : ''}`} key={entry.case_id}>
                 <strong>{entry.acquisition_date}</strong>
-                <small>{entry.ready_for_json ? 'metrics ready' : 'no metrics'}</small>
+                <small>{entry.ready_for_json ? 'metrics ready' : 'no metrics'} · {entry.ready_for_visual ? 'visual ready' : 'no visual'}</small>
               </span>
             ))}
           </div>
@@ -182,6 +234,15 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                 <select value={selectedTissue} onChange={(event) => setSelectedTissue(event.target.value as TissueKey)}>
                   {TISSUES.map((tissue) => <option key={tissue.key} value={tissue.key}>{tissue.label}</option>)}
                 </select>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={loadVisualComparison}
+                  disabled={isLoadingVisual || visualReadyDates.length < 2}
+                  title={visualReadyDates.length < 2 ? 'At least two visual-ready dates are required.' : 'Build visual comparison GLB'}
+                >
+                  {isLoadingVisual ? 'Loading visual...' : 'Open 3D visual comparison'}
+                </button>
               </div>
             </div>
             <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} />
@@ -215,6 +276,23 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
               </table>
             </div>
           </section>
+
+          {(visualError || visualItems.length > 0 || isLoadingVisual) && (
+            <section className="stack">
+              <Brain3DViewer
+                items={visualItems}
+                title="Visual difference overlay"
+                subtitle={`Blue layers represent ${report.start_date}; red layers represent ${report.end_date}. Materials are generated by the backend visual comparison GLB.`}
+                loadingText="Loading visual comparison GLB..."
+                isLoading={isLoadingVisual}
+                error={visualError}
+                onReload={loadVisualComparison}
+                preserveSourceMaterials
+                showTissueControls={false}
+                showLayerControls={false}
+              />
+            </section>
+          )}
         </>
       )}
     </main>

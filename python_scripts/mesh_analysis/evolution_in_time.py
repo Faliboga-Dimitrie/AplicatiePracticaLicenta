@@ -184,8 +184,9 @@ class MriEvolutionInTime:
 
         The baseline is the MRI whose acquisition_date is start_date. Every later
         MRI is compared to that baseline. Previous-date comparison starts from the
-        third MRI in the selected interval, matching the current UI requirement:
-        the second MRI is already compared against the baseline.
+        second MRI in the selected interval. For the second point, previous and
+        baseline comparison are intentionally identical, which keeps the API table
+        shape consistent for the UI.
         """
         selected = self._selected_mris()
         self._validate_metric_inputs(selected)
@@ -197,7 +198,7 @@ class MriEvolutionInTime:
             self._build_metric_point(
                 current=current,
                 baseline=baseline,
-                previous=loaded[index - 1] if index >= 2 else None,
+                previous=loaded[index - 1] if index >= 1 else None,
                 index=index,
             )
             for index, current in enumerate(loaded)
@@ -216,8 +217,8 @@ class MriEvolutionInTime:
                 "ratio_to_baseline_percent": "current_value / baseline_value * 100",
                 "change_from_baseline_percent": "(current_value - baseline_value) / baseline_value * 100",
                 "change_from_previous_percent": (
-                    "computed only from the third selected MRI onward; the second MRI "
-                    "is skipped because its previous comparison is identical to the baseline comparison"
+                    "computed from the second selected MRI onward; for the second MRI, "
+                    "previous comparison is intentionally identical to baseline comparison"
                 ),
                 "std_dev": "population standard deviation",
             },

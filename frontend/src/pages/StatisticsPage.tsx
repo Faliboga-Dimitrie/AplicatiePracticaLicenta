@@ -9,6 +9,8 @@ type StatisticsPageProps = {
   onOpenViewer?: () => void
 }
 
+type MetricUnit = 'mm' | 'cm'
+
 const TISSUES: Array<{ key: TissueKey; label: string; volumeKey: string; surfaceKey: string }> = [
   { key: 'csf', label: 'CSF', volumeKey: 'csf_mm3', surfaceKey: 'csf_mm2' },
   { key: 'gm', label: 'Gray matter', volumeKey: 'gm_mm3', surfaceKey: 'gm_mm2' },
@@ -22,8 +24,22 @@ function formatNumber(value: number | null | undefined, fractionDigits = 2): str
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: fractionDigits }).format(value)
 }
 
-function cubicMmToMl(value: number | undefined): number | null {
-  return value === undefined ? null : value / 1000
+function convertVolume(valueMm3: number | undefined, unit: MetricUnit): number | null {
+  if (valueMm3 === undefined) return null
+  return unit === 'cm' ? valueMm3 / 1000 : valueMm3
+}
+
+function convertSurface(valueMm2: number | undefined, unit: MetricUnit): number | null {
+  if (valueMm2 === undefined) return null
+  return unit === 'cm' ? valueMm2 / 100 : valueMm2
+}
+
+function volumeUnitLabel(unit: MetricUnit): string {
+  return unit === 'cm' ? 'cm³' : 'mm³'
+}
+
+function surfaceUnitLabel(unit: MetricUnit): string {
+  return unit === 'cm' ? 'cm²' : 'mm²'
 }
 
 function percentage(value: number | undefined, total: number | undefined): string {
@@ -35,6 +51,7 @@ function percentage(value: number | undefined, total: number | undefined): strin
 
 export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageProps) {
   const [metrics, setMetrics] = useState<CaseMetricsResponse | null>(null)
+  const [unit, setUnit] = useState<MetricUnit>('mm')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,13 +74,16 @@ export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageP
 
   const maxVolume = useMemo(() => {
     if (!metrics) return 0
-    return Math.max(...TISSUES.map((tissue) => metrics.volumes[tissue.volumeKey] ?? 0))
-  }, [metrics])
+    return Math.max(...TISSUES.map((tissue) => convertVolume(metrics.volumes[tissue.volumeKey], unit) ?? 0))
+  }, [metrics, unit])
 
   const maxSurface = useMemo(() => {
     if (!metrics) return 0
-    return Math.max(...TISSUES.map((tissue) => metrics.surfaces[tissue.surfaceKey] ?? 0))
-  }, [metrics])
+    return Math.max(...TISSUES.map((tissue) => convertSurface(metrics.surfaces[tissue.surfaceKey], unit) ?? 0))
+  }, [metrics, unit])
+
+  const volumeLabel = volumeUnitLabel(unit)
+  const surfaceLabel = surfaceUnitLabel(unit)
 
   return (
     <main className="page stack">
@@ -75,6 +95,10 @@ export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageP
           <p className="muted">Volume and surface-area metrics produced by mesh analysis.</p>
         </div>
         <div className="button-row">
+          <div className="segmented-control compact-segmented" aria-label="Metric unit selector">
+            <button type="button" className={unit === 'mm' ? 'active' : ''} onClick={() => setUnit('mm')}>mm</button>
+            <button type="button" className={unit === 'cm' ? 'active' : ''} onClick={() => setUnit('cm')}>cm</button>
+          </div>
           {onOpenViewer && <button type="button" className="secondary" onClick={onOpenViewer}>Open 3D view</button>}
           <button type="button" className="secondary" onClick={loadMetrics} disabled={isLoading}>Refresh</button>
         </div>
@@ -88,12 +112,12 @@ export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageP
           <section className="metric-grid">
             <article className="metric-card">
               <span>Total volume</span>
-              <strong>{formatNumber(metrics.totals.volume_mm3)} mm³</strong>
+              <strong>{formatNumber(convertVolume(metrics.totals.volume_mm3, unit))} {volumeLabel}</strong>
               <p className="muted">{formatNumber(metrics.totals.volume_mm3 / 1000)} ml</p>
             </article>
             <article className="metric-card">
               <span>Total surface area</span>
-              <strong>{formatNumber(metrics.totals.surface_mm2)} mm²</strong>
+              <strong>{formatNumber(convertSurface(metrics.totals.surface_mm2, unit))} {surfaceLabel}</strong>
             </article>
             <article className="metric-card">
               <span>Largest volume</span>
@@ -110,13 +134,14 @@ export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageP
               <h2>Tissue volumes</h2>
               <div className="metric-bars">
                 {TISSUES.map((tissue) => {
-                  const value = metrics.volumes[tissue.volumeKey] ?? 0
+                  const rawValue = metrics.volumes[tissue.volumeKey] ?? 0
+                  const value = convertVolume(rawValue, unit) ?? 0
                   const width = maxVolume > 0 ? Math.max(4, (value / maxVolume) * 100) : 0
                   return (
                     <div className="metric-bar-row" key={tissue.key}>
-                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(value)} mm³</strong></div>
+                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(value)} {volumeLabel}</strong></div>
                       <div className="metric-track"><span style={{ width: `${width}%` }} /></div>
-                      <small>{formatNumber(cubicMmToMl(value))} ml · {percentage(value, metrics.totals.volume_mm3)}</small>
+                      <small>{formatNumber(rawValue / 1000)} ml · {percentage(rawValue, metrics.totals.volume_mm3)}</small>
                     </div>
                   )
                 })}
@@ -127,11 +152,12 @@ export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageP
               <h2>Tissue surface areas</h2>
               <div className="metric-bars">
                 {TISSUES.map((tissue) => {
-                  const value = metrics.surfaces[tissue.surfaceKey] ?? 0
+                  const rawValue = metrics.surfaces[tissue.surfaceKey] ?? 0
+                  const value = convertSurface(rawValue, unit) ?? 0
                   const width = maxSurface > 0 ? Math.max(4, (value / maxSurface) * 100) : 0
                   return (
                     <div className="metric-bar-row" key={tissue.key}>
-                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(value)} mm²</strong></div>
+                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(value)} {surfaceLabel}</strong></div>
                       <div className="metric-track surface-track"><span style={{ width: `${width}%` }} /></div>
                     </div>
                   )
@@ -145,7 +171,7 @@ export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageP
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
-                  <tr><th>Tissue</th><th>Volume (mm³)</th><th>Volume (ml)</th><th>Volume share</th><th>Surface area (mm²)</th></tr>
+                  <tr><th>Tissue</th><th>Volume ({volumeLabel})</th><th>Volume (ml)</th><th>Volume share</th><th>Surface area ({surfaceLabel})</th></tr>
                 </thead>
                 <tbody>
                   {TISSUES.map((tissue) => {
@@ -154,10 +180,10 @@ export function StatisticsPage({ caseId, onBack, onOpenViewer }: StatisticsPageP
                     return (
                       <tr key={tissue.key}>
                         <td>{tissue.label}</td>
-                        <td>{formatNumber(volume)}</td>
-                        <td>{formatNumber(cubicMmToMl(volume))}</td>
+                        <td>{formatNumber(convertVolume(volume, unit))}</td>
+                        <td>{formatNumber(volume === undefined ? null : volume / 1000)}</td>
                         <td>{percentage(volume, metrics.totals.volume_mm3)}</td>
-                        <td>{formatNumber(surface)}</td>
+                        <td>{formatNumber(convertSurface(surface, unit))}</td>
                       </tr>
                     )
                   })}
