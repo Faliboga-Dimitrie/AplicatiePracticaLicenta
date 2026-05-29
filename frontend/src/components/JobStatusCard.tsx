@@ -7,10 +7,11 @@ const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 
 type JobStatusCardProps = {
   initialJob: Job
+  onJobChanged?: (job: Job) => void
   onFinished?: (job: Job) => void
 }
 
-export function JobStatusCard({ initialJob, onFinished }: JobStatusCardProps) {
+export function JobStatusCard({ initialJob, onJobChanged, onFinished }: JobStatusCardProps) {
   const [job, setJob] = useState(initialJob)
   const [error, setError] = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
@@ -27,22 +28,39 @@ export function JobStatusCard({ initialJob, onFinished }: JobStatusCardProps) {
   useEffect(() => {
     setJob(initialJob)
     setError(null)
-    notifiedFinishedJobId.current = null
+    if (notifiedFinishedJobId.current !== initialJob.id) {
+      notifiedFinishedJobId.current = null
+    }
   }, [initialJob])
 
   useEffect(() => {
+    onJobChanged?.(job)
+  }, [job, onJobChanged])
+
+  useEffect(() => {
+    if (!isTerminal) {
+      return undefined
+    }
+
+    if (notifiedFinishedJobId.current !== job.id) {
+      notifiedFinishedJobId.current = job.id
+      onFinished?.(job)
+    }
+
+    return undefined
+  }, [isTerminal, job, onFinished])
+
+  useEffect(() => {
     if (isTerminal) {
-      if (notifiedFinishedJobId.current !== job.id) {
-        notifiedFinishedJobId.current = job.id
-        onFinished?.(job)
-      }
       return undefined
     }
 
     let stopped = false
-    const interval = window.setInterval(async () => {
+    const jobId = job.id
+
+    const poll = async () => {
       try {
-        const freshJob = await getJob(job.id)
+        const freshJob = await getJob(jobId)
         if (!stopped) {
           setJob(freshJob)
           setError(null)
@@ -52,13 +70,15 @@ export function JobStatusCard({ initialJob, onFinished }: JobStatusCardProps) {
           setError(apiMessage(pollError))
         }
       }
-    }, 3000)
+    }
+
+    const interval = window.setInterval(poll, 3000)
 
     return () => {
       stopped = true
       window.clearInterval(interval)
     }
-  }, [isTerminal, job, onFinished])
+  }, [isTerminal, job.id])
 
   async function handleCancel() {
     setIsCancelling(true)

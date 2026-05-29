@@ -8,6 +8,7 @@ import { SubjectCasesPage } from './pages/SubjectCasesPage'
 import { CaseDetailPage } from './pages/CaseDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Case3DViewerPage } from './pages/Case3DViewerPage'
+import { JobActivityProvider, useJobActivity } from './jobs/JobActivityProvider'
 import './App.css'
 
 type ViewState =
@@ -18,9 +19,17 @@ type ViewState =
   | { name: 'caseViewer'; subjectId: string; caseId: number }
   | { name: 'settings' }
 
+type RecentCase = {
+  subjectId: string
+  caseId: number
+}
+
 function AppContent() {
   const { user, isCheckingSession, isAuthenticated, logout, logoutAll, deleteAccount } = useAuth()
+  const { clearAllTrackedJobs } = useJobActivity()
   const [view, setView] = useState<ViewState>({ name: 'home' })
+  const [recentCase, setRecentCase] = useState<RecentCase | null>(null)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
   if (isCheckingSession) {
     return (
@@ -37,18 +46,31 @@ function AppContent() {
     return <WelcomePage />
   }
 
+  function openCaseDetail(subjectId: string, caseId: number) {
+    setRecentCase({ subjectId, caseId })
+    setView({ name: 'caseDetail', subjectId, caseId })
+  }
+
+  function openCaseViewer(subjectId: string, caseId: number) {
+    setRecentCase({ subjectId, caseId })
+    setView({ name: 'caseViewer', subjectId, caseId })
+  }
+
   async function handleLogout() {
     await logout()
+    clearAllTrackedJobs()
     setView({ name: 'home' })
   }
 
   async function handleLogoutAll() {
     await logoutAll()
+    clearAllTrackedJobs()
     setView({ name: 'home' })
   }
 
   async function handleDeleteAccount() {
     await deleteAccount()
+    clearAllTrackedJobs()
     setView({ name: 'home' })
   }
 
@@ -57,40 +79,63 @@ function AppContent() {
     : view.name
 
   return (
-    <div className="app-shell logged-in-shell">
+    <div className={`app-shell logged-in-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="brand-block">
           <span className="brand-mark">MRI</span>
-          <div>
-            <strong>Brain MRI</strong>
-            <p>Processing Suite</p>
-          </div>
+          {!isSidebarCollapsed && (
+            <div>
+              <strong>Brain MRI</strong>
+              <p>Processing Suite</p>
+            </div>
+          )}
         </div>
+
+        <button
+          type="button"
+          className="sidebar-toggle"
+          onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
+          aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {isSidebarCollapsed ? '»' : '«'}
+        </button>
 
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <button
             type="button"
             className={currentSection === 'home' ? 'active' : ''}
             onClick={() => setView({ name: 'home' })}
+            title="Home"
           >
-            Home
+            <span>Home</span>
           </button>
           <button
             type="button"
             className={currentSection === 'workspace' ? 'active' : ''}
             onClick={() => setView({ name: 'subjects' })}
+            title="Subjects & cases"
           >
-            Subjects & cases
+            <span>Subjects & cases</span>
           </button>
-          <button type="button" disabled>3D view</button>
-          <button type="button" disabled>Statistics</button>
-          <button type="button" disabled>Time comparison</button>
+          <button
+            type="button"
+            className={view.name === 'caseViewer' ? 'active' : ''}
+            disabled={!recentCase}
+            onClick={() => recentCase && openCaseViewer(recentCase.subjectId, recentCase.caseId)}
+            title={recentCase ? 'Open latest 3D viewer' : 'Open a case with meshes first'}
+          >
+            <span>3D view</span>
+          </button>
+          <button type="button" disabled title="Coming later"><span>Statistics</span></button>
+          <button type="button" disabled title="Coming later"><span>Time comparison</span></button>
           <button
             type="button"
             className={currentSection === 'settings' ? 'active' : ''}
             onClick={() => setView({ name: 'settings' })}
+            title="Settings"
           >
-            Settings
+            <span>Settings</span>
           </button>
         </nav>
       </aside>
@@ -127,7 +172,7 @@ function AppContent() {
           <SubjectCasesPage
             subjectId={view.subjectId}
             onBack={() => setView({ name: 'subjects' })}
-            onSelectCase={(caseId) => setView({ name: 'caseDetail', subjectId: view.subjectId, caseId })}
+            onSelectCase={(caseId) => openCaseDetail(view.subjectId, caseId)}
           />
         )}
 
@@ -135,14 +180,14 @@ function AppContent() {
           <CaseDetailPage
             caseId={view.caseId}
             onBack={() => setView({ name: 'subjectCases', subjectId: view.subjectId })}
-            onOpenViewer={() => setView({ name: 'caseViewer', subjectId: view.subjectId, caseId: view.caseId })}
+            onOpenViewer={() => openCaseViewer(view.subjectId, view.caseId)}
           />
         )}
 
         {view.name === 'caseViewer' && (
           <Case3DViewerPage
             caseId={view.caseId}
-            onBack={() => setView({ name: 'caseDetail', subjectId: view.subjectId, caseId: view.caseId })}
+            onBack={() => openCaseDetail(view.subjectId, view.caseId)}
           />
         )}
 
@@ -163,7 +208,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <JobActivityProvider>
+        <AppContent />
+      </JobActivityProvider>
     </AuthProvider>
   )
 }

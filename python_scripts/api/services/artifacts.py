@@ -96,6 +96,45 @@ class ArtifactService:
         except Exception as exc:
             return DbResult.fail(str(exc))
 
+    def list_viewer_for_case(
+        self,
+        user: UserRecord,
+        case_id: int,
+    ) -> DbResult[CaseArtifactBundle]:
+        """Return only artifacts needed by the interactive 3D viewer.
+
+        The normal artifact endpoint intentionally lists everything useful for
+        download/debugging. The viewer should be narrower: GLB meshes, GLB
+        wireframes and the metrics JSON reference. This avoids React considering
+        QC images or NIfTI files when opening the WebGL page.
+        """
+        bundle_result = self.list_for_case(user, case_id)
+        if not bundle_result.success:
+            return DbResult.fail(bundle_result.error or "Could not load case artifacts.")
+        if bundle_result.data is None:
+            return DbResult.ok(None)
+
+        viewer_kinds = {
+            ArtifactKind.MESH,
+            ArtifactKind.WIREFRAME,
+            ArtifactKind.METRICS,
+        }
+        viewer_artifacts = tuple(
+            artifact
+            for artifact in bundle_result.data.artifacts
+            if artifact.ref.kind in viewer_kinds
+        )
+
+        return DbResult.ok(
+            CaseArtifactBundle(
+                case_db_id=bundle_result.data.case_db_id,
+                subject_id=bundle_result.data.subject_id,
+                acquisition_date=bundle_result.data.acquisition_date,
+                case_key=bundle_result.data.case_key,
+                artifacts=viewer_artifacts,
+            )
+        )
+
     def get_file_for_case(
         self,
         user: UserRecord,

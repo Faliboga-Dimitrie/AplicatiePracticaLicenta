@@ -34,6 +34,26 @@ def list_case_artifacts(
     return case_artifacts_to_dict(bundle)
 
 
+@router.get("/{case_id}/viewer-artifacts", response_model=CaseArtifactsResponse)
+def list_case_viewer_artifacts(
+    case_id: int,
+    current_user: UserRecord = Depends(get_current_user),
+    artifacts: ArtifactService = Depends(get_artifact_service),
+):
+    """List only artifacts needed by the interactive 3D viewer.
+
+    This endpoint intentionally omits QC images and NIfTI preprocessing outputs.
+    It returns GLB meshes, GLB wireframes and metrics JSON metadata references,
+    so the viewer page does not preflight/download large irrelevant files.
+    """
+    result = artifacts.list_viewer_for_case(current_user, case_id)
+    bundle = unwrap_result(
+        result,
+        not_found_message="MRI case not found or not enough permissions to view 3D artifacts.",
+    )
+    return case_artifacts_to_dict(bundle)
+
+
 @router.get("/{case_id}/artifacts/{artifact_name:path}")
 def get_case_artifact(
     case_id: int,

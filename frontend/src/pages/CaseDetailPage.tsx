@@ -3,9 +3,10 @@ import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { deleteCase, getCase, updateCase } from '../api/casesApi'
 import { listArtifacts } from '../api/artifactsApi'
-import { listJobs, startMeshAnalysisJob, startPreprocessingJob } from '../api/jobsApi'
+import { startMeshAnalysisJob, startPreprocessingJob } from '../api/jobsApi'
 import { ArtifactList } from '../components/ArtifactList'
 import { JobStatusCard } from '../components/JobStatusCard'
+import { useJobActivity } from '../jobs/JobActivityProvider'
 import type { CaseArtifacts, Job, MriCase } from '../types/api'
 
 type CaseDetailPageProps = {
@@ -23,11 +24,6 @@ type CaseEditorState = {
 function capabilityText(value: boolean | undefined): string {
   return value ? 'yes' : 'no'
 }
-
-function isTerminalJob(job: Job): boolean {
-  return ['completed', 'failed', 'cancelled'].includes(job.status)
-}
-
 function toCaseEditorState(mriCase: MriCase): CaseEditorState {
   return {
     acquisitionDate: mriCase.acquisition_date,
@@ -40,13 +36,14 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
   const [mriCase, setMriCase] = useState<MriCase | null>(null)
   const [caseDraft, setCaseDraft] = useState<CaseEditorState | null>(null)
   const [artifacts, setArtifacts] = useState<CaseArtifacts | null>(null)
-  const [activeJob, setActiveJob] = useState<Job | null>(null)
+  const { getTrackedJobForCase, trackJob, clearCaseJob } = useJobActivity()
   const [isLoading, setIsLoading] = useState(true)
   const [isStartingPreprocessing, setIsStartingPreprocessing] = useState(false)
   const [isStartingMesh, setIsStartingMesh] = useState(false)
   const [isUpdatingCase, setIsUpdatingCase] = useState(false)
   const [isDeletingCase, setIsDeletingCase] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const activeJob = getTrackedJobForCase(caseId)
 
   const refreshCase = useCallback(async () => {
     setError(null)
@@ -66,12 +63,6 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
     }
   }, [caseId])
 
-  const refreshActiveJob = useCallback(async () => {
-    const jobs = await listJobs(caseId)
-    const active = jobs.find((job) => !isTerminalJob(job)) ?? null
-    setActiveJob(active)
-    return active
-  }, [caseId])
 
   const refreshAll = useCallback(async () => {
     setIsLoading(true)
@@ -79,13 +70,12 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
     try {
       await refreshCase()
       await refreshArtifacts()
-      await refreshActiveJob()
     } catch (loadError) {
       setError(apiMessage(loadError))
     } finally {
       setIsLoading(false)
     }
-  }, [refreshActiveJob, refreshArtifacts, refreshCase])
+  }, [refreshArtifacts, refreshCase])
 
   useEffect(() => {
     refreshAll()
@@ -96,7 +86,7 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
     setError(null)
     try {
       const job = await startPreprocessingJob(caseId)
-      setActiveJob(job)
+      trackJob(job)
       await refreshCase()
     } catch (startError) {
       setError(apiMessage(startError))
@@ -110,7 +100,7 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
     setError(null)
     try {
       const job = await startMeshAnalysisJob(caseId)
-      setActiveJob(job)
+      trackJob(job)
       await refreshCase()
     } catch (startError) {
       setError(apiMessage(startError))
@@ -120,8 +110,13 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
   }
 
   const handleJobFinished = useCallback(async () => {
+    clearCaseJob(caseId)
     await refreshAll()
-  }, [refreshAll])
+  }, [caseId, clearCaseJob, refreshAll])
+
+  const handleJobUpdated = useCallback((job: Job) => {
+    trackJob(job)
+  }, [trackJob])
 
   async function handleUpdateCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -316,7 +311,13 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
         </section>
       )}
 
-      {activeJob && <JobStatusCard initialJob={activeJob} onFinished={handleJobFinished} />}
+      {activeJob && (
+        <JobStatusCard
+          initialJob={activeJob}
+          onJobChanged={handleJobUpdated}
+          onFinished={handleJobFinished}
+        />
+      )}
 
       <section className="card stack">
         <div className="row-between">

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
-import { processPublicMri } from '../api/publicApi'
+import { extractViewerItemsFromPublicZip, processPublicMri } from '../api/publicApi'
 import { useAuth } from '../auth/useAuth'
+import { Brain3DViewer } from '../components/Brain3DViewer'
+import type { BrainViewerItem } from '../components/Brain3DViewer'
 
 type WelcomePageProps = {
   onRegistered?: () => void
@@ -31,6 +33,21 @@ export function WelcomePage(_props: WelcomePageProps) {
   const [isPublicProcessing, setIsPublicProcessing] = useState(false)
   const [publicError, setPublicError] = useState<string | null>(null)
   const [publicStatus, setPublicStatus] = useState<string | null>(null)
+  const [publicViewerItems, setPublicViewerItems] = useState<BrainViewerItem[]>([])
+  const [publicViewerTitle, setPublicViewerTitle] = useState<string>('Public MRI preview')
+  const publicObjectUrlsRef = useRef<string[]>([])
+
+  function clearPublicViewerItems() {
+    publicObjectUrlsRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+    publicObjectUrlsRef.current = []
+    setPublicViewerItems([])
+  }
+
+  useEffect(() => {
+    return () => {
+      publicObjectUrlsRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+    }
+  }, [])
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -61,12 +78,18 @@ export function WelcomePage(_props: WelcomePageProps) {
     setIsPublicProcessing(true)
     setPublicError(null)
     setPublicStatus('Uploading and processing MRI. This can take several minutes...')
+    clearPublicViewerItems()
 
     try {
       const blob = await processPublicMri(publicFile)
       const base = publicFile.name.replace(/\.nii(\.gz)?$/i, '') || 'brain_mri'
       downloadBlob(blob, `${base}_brain_mri_outputs.zip`)
-      setPublicStatus('Processing completed. Your ZIP download should start automatically.')
+
+      const viewerItems = await extractViewerItemsFromPublicZip(blob)
+      publicObjectUrlsRef.current = viewerItems.map((item) => item.objectUrl)
+      setPublicViewerItems(viewerItems)
+      setPublicViewerTitle(`${base} preview`)
+      setPublicStatus('Processing completed. Your ZIP download should start automatically, and the GLB preview is ready below.')
     } catch (error) {
       setPublicError(apiMessage(error))
       setPublicStatus(null)
@@ -110,7 +133,8 @@ export function WelcomePage(_props: WelcomePageProps) {
           <h2>Quick MRI processing</h2>
           <p className="muted">
             This route does not create a subject or case. The backend uses temporary files,
-            returns a ZIP, then discards the temporary workspace.
+            returns a ZIP, then discards the temporary workspace. The browser can also preview
+            the GLB files from that ZIP without storing them permanently.
           </p>
 
           <form className="form-grid" onSubmit={handlePublicSubmit}>
@@ -126,7 +150,7 @@ export function WelcomePage(_props: WelcomePageProps) {
             {publicStatus && <p className="info-text">{publicStatus}</p>}
             {publicError && <p className="error-text">{publicError}</p>}
             <button type="submit" disabled={isPublicProcessing || !publicFile}>
-              {isPublicProcessing ? 'Processing...' : 'Process and download ZIP'}
+              {isPublicProcessing ? 'Processing...' : 'Process, download ZIP and preview GLBs'}
             </button>
           </form>
         </article>
@@ -187,6 +211,24 @@ export function WelcomePage(_props: WelcomePageProps) {
           </form>
         </article>
       </section>
+
+      {publicViewerItems.length > 0 && (
+        <section className="page public-viewer-section">
+          <section className="page-header-card viewer-header-card">
+            <div>
+              <p className="eyebrow">Public 3D preview</p>
+              <h1>{publicViewerTitle}</h1>
+              <p className="muted">These object URLs are created in the browser from the downloaded ZIP and are discarded when you leave or process another file.</p>
+            </div>
+            <button type="button" className="secondary" onClick={clearPublicViewerItems}>Clear preview</button>
+          </section>
+          <Brain3DViewer
+            items={publicViewerItems}
+            title="Public GLB controls"
+            subtitle="Preview meshes and wireframes directly from the temporary public processing ZIP. No account, subject or case is involved."
+          />
+        </section>
+      )}
     </main>
   )
 }
