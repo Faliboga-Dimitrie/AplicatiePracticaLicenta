@@ -13,6 +13,8 @@ type CaseDetailPageProps = {
   caseId: number
   onBack: () => void
   onOpenViewer: () => void
+  onOpenStatistics: () => void
+  onOpenTimeComparison: () => void
 }
 
 type CaseEditorState = {
@@ -32,7 +34,7 @@ function toCaseEditorState(mriCase: MriCase): CaseEditorState {
   }
 }
 
-export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageProps) {
+export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics, onOpenTimeComparison }: CaseDetailPageProps) {
   const [mriCase, setMriCase] = useState<MriCase | null>(null)
   const [caseDraft, setCaseDraft] = useState<CaseEditorState | null>(null)
   const [artifacts, setArtifacts] = useState<CaseArtifacts | null>(null)
@@ -305,8 +307,20 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer }: CaseDetailPageP
             >
               Open 3D view
             </button>
-            <button type="button" disabled>Open statistics</button>
-            <button type="button" disabled>Compare over time</button>
+            <button
+              type="button"
+              onClick={onOpenStatistics}
+              disabled={!mriCase.capabilities.can_view_metrics}
+            >
+              Open statistics
+            </button>
+            <button
+              type="button"
+              onClick={onOpenTimeComparison}
+              disabled={!mriCase.capabilities.can_view_metrics}
+            >
+              Compare over time
+            </button>
           </div>
         </section>
       )}

@@ -10,6 +10,7 @@ type SubjectCasesPageProps = {
   subjectId: string
   onBack: () => void
   onSelectCase: (caseId: number) => void
+  onOpenTimeComparison?: () => void
 }
 
 type CaseEditorState = {
@@ -41,7 +42,7 @@ function readinessLabel(mriCase: MriCase): string {
   return 'missing raw file'
 }
 
-export function SubjectCasesPage({ subjectId, onBack, onSelectCase }: SubjectCasesPageProps) {
+export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeComparison }: SubjectCasesPageProps) {
   const [cases, setCases] = useState<MriCase[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -133,9 +134,20 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase }: SubjectCas
           <h1>{subjectId}</h1>
           <p className="muted">Manage dated acquisitions, raw uploads and processing readiness for this subject.</p>
         </div>
-        <button type="button" className="secondary" onClick={refreshCases} disabled={isLoading}>
-          Refresh
-        </button>
+        <div className="button-row">
+          {onOpenTimeComparison && (
+            <button
+              type="button"
+              onClick={onOpenTimeComparison}
+              disabled={readyCounts.mesh < 2}
+            >
+              Compare over time
+            </button>
+          )}
+          <button type="button" className="secondary" onClick={refreshCases} disabled={isLoading}>
+            Refresh
+          </button>
+        </div>
       </section>
 
       <section className="metric-grid">

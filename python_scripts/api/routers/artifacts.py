@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from ...access_control import UserRecord
-from ..dependencies import get_artifact_service, get_current_user
+from ..dependencies import get_artifact_service, get_current_user, get_statistics_service
 from ..errors import unwrap_result
 from ..schemas import CaseArtifactsResponse
 from ..serialization import case_artifacts_to_dict
-from ..services import ArtifactService
+from ..services import ArtifactService, StatisticsService
 
 router = APIRouter()
 
@@ -52,6 +52,20 @@ def list_case_viewer_artifacts(
         not_found_message="MRI case not found or not enough permissions to view 3D artifacts.",
     )
     return case_artifacts_to_dict(bundle)
+
+
+@router.get("/{case_id}/metrics")
+def get_case_metrics(
+    case_id: int,
+    current_user: UserRecord = Depends(get_current_user),
+    statistics: StatisticsService = Depends(get_statistics_service),
+):
+    """Return parsed mesh-analysis metrics for one authorized MRI case."""
+    result = statistics.metrics_for_case(current_user, case_id)
+    return unwrap_result(
+        result,
+        not_found_message="Metrics not found for this MRI case.",
+    )
 
 
 @router.get("/{case_id}/artifacts/{artifact_name:path}")

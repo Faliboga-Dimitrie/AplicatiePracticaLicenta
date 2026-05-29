@@ -18,12 +18,14 @@ from .services import (
     MeshAnalysisService,
     PreprocessingService,
     PublicProcessingService,
+    StatisticsService,
     SubjectService,
     TokenService,
     build_default_artifact_service,
     build_default_job_service,
     build_default_mesh_analysis_service,
     build_default_preprocessing_service,
+    build_default_statistics_service,
     build_default_token_service,
 )
 
@@ -104,6 +106,12 @@ def get_mesh_analysis_service(
 @lru_cache
 def get_public_processing_service() -> PublicProcessingService:
     return build_default_public_processing_service(settings_obj=settings)
+
+
+def get_statistics_service(
+    cases: CaseService = Depends(get_case_service),
+) -> StatisticsService:
+    return build_default_statistics_service(cases=cases)
 
 def get_artifact_service(
     cases: CaseService = Depends(get_case_service),

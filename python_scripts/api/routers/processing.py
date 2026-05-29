@@ -7,11 +7,12 @@ from ..dependencies import (
     get_current_user,
     get_mesh_analysis_service,
     get_preprocessing_service,
+    get_statistics_service,
 )
 from ..errors import raise_api_error, unwrap_result
 from ..schemas import JobResponse
 from ..serialization import job_to_dict
-from ..services import MeshAnalysisService, PreprocessingService
+from ..services import MeshAnalysisService, PreprocessingService, StatisticsService
 
 router = APIRouter()
 
@@ -96,4 +97,39 @@ def mesh_case_legacy_path(
         case_id=case_id,
         current_user=current_user,
         mesh_analysis=mesh_analysis,
+    )
+
+
+@router.get("/subjects/{subject_id}/evolution/dates")
+def list_evolution_dates(
+    subject_id: str,
+    current_user: UserRecord = Depends(get_current_user),
+    statistics: StatisticsService = Depends(get_statistics_service),
+):
+    """Return dates and readiness flags for a subject time-comparison UI."""
+    result = statistics.evolution_dates_for_subject(current_user, subject_id)
+    return unwrap_result(
+        result,
+        not_found_message="Subject not found or not authorized.",
+    )
+
+
+@router.get("/subjects/{subject_id}/evolution")
+def build_evolution_report(
+    subject_id: str,
+    start_date: str,
+    end_date: str,
+    current_user: UserRecord = Depends(get_current_user),
+    statistics: StatisticsService = Depends(get_statistics_service),
+):
+    """Return JSON volume/surface comparison for one subject across time."""
+    result = statistics.evolution_report_for_subject(
+        current_user,
+        subject_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return unwrap_result(
+        result,
+        not_found_message="Subject not found or not enough metric-ready dates.",
     )

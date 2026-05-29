@@ -8,6 +8,8 @@ import { SubjectCasesPage } from './pages/SubjectCasesPage'
 import { CaseDetailPage } from './pages/CaseDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Case3DViewerPage } from './pages/Case3DViewerPage'
+import { TimeComparisonPage } from './pages/TimeComparisonPage'
+import { StatisticsPage } from './pages/StatisticsPage'
 import { JobActivityProvider, useJobActivity } from './jobs/JobActivityProvider'
 import './App.css'
 
@@ -17,6 +19,8 @@ type ViewState =
   | { name: 'subjectCases'; subjectId: string }
   | { name: 'caseDetail'; subjectId: string; caseId: number }
   | { name: 'caseViewer'; subjectId: string; caseId: number }
+  | { name: 'statistics'; subjectId: string; caseId: number }
+  | { name: 'timeComparison'; subjectId: string }
   | { name: 'settings' }
 
 type RecentCase = {
@@ -29,6 +33,7 @@ function AppContent() {
   const { clearAllTrackedJobs } = useJobActivity()
   const [view, setView] = useState<ViewState>({ name: 'home' })
   const [recentCase, setRecentCase] = useState<RecentCase | null>(null)
+  const [recentSubjectId, setRecentSubjectId] = useState<string | null>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
   if (isCheckingSession) {
@@ -47,13 +52,27 @@ function AppContent() {
   }
 
   function openCaseDetail(subjectId: string, caseId: number) {
+    setRecentSubjectId(subjectId)
     setRecentCase({ subjectId, caseId })
     setView({ name: 'caseDetail', subjectId, caseId })
   }
 
   function openCaseViewer(subjectId: string, caseId: number) {
     setRecentCase({ subjectId, caseId })
+    setRecentSubjectId(subjectId)
     setView({ name: 'caseViewer', subjectId, caseId })
+  }
+
+
+  function openStatistics(subjectId: string, caseId: number) {
+    setRecentCase({ subjectId, caseId })
+    setRecentSubjectId(subjectId)
+    setView({ name: 'statistics', subjectId, caseId })
+  }
+
+  function openTimeComparison(subjectId: string) {
+    setRecentSubjectId(subjectId)
+    setView({ name: 'timeComparison', subjectId })
   }
 
   async function handleLogout() {
@@ -74,7 +93,7 @@ function AppContent() {
     setView({ name: 'home' })
   }
 
-  const currentSection = view.name === 'subjects' || view.name === 'subjectCases' || view.name === 'caseDetail' || view.name === 'caseViewer'
+  const currentSection = view.name === 'subjects' || view.name === 'subjectCases' || view.name === 'caseDetail' || view.name === 'caseViewer' || view.name === 'statistics' || view.name === 'timeComparison'
     ? 'workspace'
     : view.name
 
@@ -127,8 +146,24 @@ function AppContent() {
           >
             <span>3D view</span>
           </button>
-          <button type="button" disabled title="Coming later"><span>Statistics</span></button>
-          <button type="button" disabled title="Coming later"><span>Time comparison</span></button>
+          <button
+            type="button"
+            className={view.name === 'statistics' ? 'active' : ''}
+            disabled={!recentCase}
+            onClick={() => recentCase && openStatistics(recentCase.subjectId, recentCase.caseId)}
+            title={recentCase ? 'Open statistics for latest case' : 'Open a metric-ready case first'}
+          >
+            <span>Statistics</span>
+          </button>
+          <button
+            type="button"
+            className={view.name === 'timeComparison' ? 'active' : ''}
+            disabled={!recentSubjectId}
+            onClick={() => recentSubjectId && openTimeComparison(recentSubjectId)}
+            title={recentSubjectId ? 'Compare metric-ready dates for latest subject' : 'Open a subject first'}
+          >
+            <span>Time comparison</span>
+          </button>
           <button
             type="button"
             className={currentSection === 'settings' ? 'active' : ''}
@@ -165,7 +200,7 @@ function AppContent() {
         )}
 
         {view.name === 'subjects' && (
-          <SubjectsPage onSelectSubject={(subjectId) => setView({ name: 'subjectCases', subjectId })} />
+          <SubjectsPage onSelectSubject={(subjectId) => { setRecentSubjectId(subjectId); setView({ name: 'subjectCases', subjectId }) }} />
         )}
 
         {view.name === 'subjectCases' && (
@@ -173,6 +208,7 @@ function AppContent() {
             subjectId={view.subjectId}
             onBack={() => setView({ name: 'subjects' })}
             onSelectCase={(caseId) => openCaseDetail(view.subjectId, caseId)}
+            onOpenTimeComparison={() => openTimeComparison(view.subjectId)}
           />
         )}
 
@@ -181,6 +217,8 @@ function AppContent() {
             caseId={view.caseId}
             onBack={() => setView({ name: 'subjectCases', subjectId: view.subjectId })}
             onOpenViewer={() => openCaseViewer(view.subjectId, view.caseId)}
+            onOpenStatistics={() => openStatistics(view.subjectId, view.caseId)}
+            onOpenTimeComparison={() => openTimeComparison(view.subjectId)}
           />
         )}
 
@@ -188,6 +226,21 @@ function AppContent() {
           <Case3DViewerPage
             caseId={view.caseId}
             onBack={() => openCaseDetail(view.subjectId, view.caseId)}
+          />
+        )}
+
+        {view.name === 'statistics' && (
+          <StatisticsPage
+            caseId={view.caseId}
+            onBack={() => openCaseDetail(view.subjectId, view.caseId)}
+            onOpenViewer={() => openCaseViewer(view.subjectId, view.caseId)}
+          />
+        )}
+
+        {view.name === 'timeComparison' && (
+          <TimeComparisonPage
+            subjectId={view.subjectId}
+            onBack={() => setView({ name: 'subjectCases', subjectId: view.subjectId })}
           />
         )}
 

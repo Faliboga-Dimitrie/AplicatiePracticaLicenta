@@ -146,3 +146,92 @@ export type DeletedCaseResponse = MutationResponse<'deleted', { case: MriCase }>
 export type CreatedSubjectResponse = AuthorizedSubject
 export type UpdatedSubjectResponse = MutationResponse<'updated', { subject: Subject }>
 export type DeletedSubjectResponse = { deleted: boolean; subject_id: string }
+
+export type TissueKey = 'csf' | 'gm' | 'wm'
+
+export type CaseMetricValues = {
+  csf_mm3?: number
+  gm_mm3?: number
+  wm_mm3?: number
+  csf_mm2?: number
+  gm_mm2?: number
+  wm_mm2?: number
+  [key: string]: number | undefined
+}
+
+export type CaseMetricsResponse = {
+  case_id: number
+  case_key: string | null
+  subject_id: string
+  acquisition_date: string
+  status: string | null
+  volumes: Record<string, number>
+  surfaces: Record<string, number>
+  totals: {
+    volume_mm3: number
+    surface_mm2: number
+  }
+  raw?: Record<string, unknown>
+}
+
+export type EvolutionDateEntry = {
+  case_id: number
+  acquisition_date: string
+  status: string | null
+  ready_for_json: boolean
+  ready_for_visual: boolean
+  has_metrics: boolean
+  has_meshes: boolean
+  has_wireframes: boolean
+}
+
+export type EvolutionDatesResponse = {
+  subject_id: string
+  dates: EvolutionDateEntry[]
+}
+
+export type EvolutionMetricComparison = {
+  value: number
+  baseline_value: number
+  absolute_change_from_baseline: number
+  ratio_to_baseline_percent: number | null
+  change_from_baseline_percent: number | null
+  previous_value: number | null
+  absolute_change_from_previous: number | null
+  ratio_to_previous_percent: number | null
+  change_from_previous_percent: number | null
+}
+
+export type EvolutionPoint = {
+  index: number
+  acquisition_date: string
+  is_baseline: boolean
+  compared_to_baseline_date: string
+  compared_to_previous_date: string | null
+  volumes_mm3: Record<TissueKey, EvolutionMetricComparison>
+  surfaces_mm2: Record<TissueKey, EvolutionMetricComparison>
+}
+
+export type BasicStats = {
+  count: number
+  min: number | null
+  max: number | null
+  mean: number | null
+  median: number | null
+  std_dev: number | null
+}
+
+export type EvolutionReport = {
+  subject_id: string
+  start_date: string
+  end_date: string
+  baseline_date: string
+  dates: string[]
+  baseline_values: {
+    volumes_mm3: Record<TissueKey, number>
+    surfaces_mm2: Record<TissueKey, number>
+  }
+  points: EvolutionPoint[]
+  statistics: Record<string, Record<TissueKey, Record<string, BasicStats>>>
+  notes?: Record<string, string>
+}

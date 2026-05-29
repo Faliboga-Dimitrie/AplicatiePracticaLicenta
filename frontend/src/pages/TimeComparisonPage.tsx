@@ -1,0 +1,222 @@
+import { useEffect, useMemo, useState } from 'react'
+import { apiMessage } from '../api/client'
+import { getEvolutionReport, listEvolutionDates } from '../api/metricsApi'
+import type { EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
+
+type TimeComparisonPageProps = {
+  subjectId: string
+  onBack: () => void
+}
+
+type MetricGroup = 'volumes_mm3' | 'surfaces_mm2'
+
+const TISSUES: Array<{ key: TissueKey; label: string }> = [
+  { key: 'csf', label: 'CSF' },
+  { key: 'gm', label: 'Gray matter' },
+  { key: 'wm', label: 'White matter' },
+]
+
+function formatNumber(value: number | null | undefined, fractionDigits = 2): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '—'
+  }
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: fractionDigits }).format(value)
+}
+
+function metricLabel(group: MetricGroup): string {
+  return group === 'volumes_mm3' ? 'Volume' : 'Surface area'
+}
+
+function metricUnit(group: MetricGroup): string {
+  return group === 'volumes_mm3' ? 'mm³' : 'mm²'
+}
+
+function ComparisonLineChart({ report, metricGroup, tissue }: { report: EvolutionReport; metricGroup: MetricGroup; tissue: TissueKey }) {
+  const values = report.points.map((point) => point[metricGroup][tissue].value)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const width = 720
+  const height = 240
+  const padding = 34
+  const points = values.map((value, index) => {
+    const x = padding + (index / Math.max(1, values.length - 1)) * (width - padding * 2)
+    const y = height - padding - ((value - min) / range) * (height - padding * 2)
+    return { x, y, value, date: report.points[index].acquisition_date }
+  })
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(' ')
+
+  return (
+    <div className="chart-card">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${metricLabel(metricGroup)} over time`}>
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="chart-axis" />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="chart-axis" />
+        <polyline points={polyline} className="chart-line" fill="none" />
+        {points.map((point) => (
+          <g key={point.date}>
+            <circle cx={point.x} cy={point.y} r="5" className="chart-dot" />
+            <text x={point.x} y={height - 10} textAnchor="middle" className="chart-label">{point.date.slice(5)}</text>
+            <text x={point.x} y={point.y - 12} textAnchor="middle" className="chart-value">{formatNumber(point.value, 0)}</text>
+          </g>
+        ))}
+      </svg>
+      <p className="muted small-note">Y-axis is auto-scaled for the selected tissue and metric.</p>
+    </div>
+  )
+}
+
+export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProps) {
+  const [dateEntries, setDateEntries] = useState<EvolutionDateEntry[]>([])
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [report, setReport] = useState<EvolutionReport | null>(null)
+  const [metricGroup, setMetricGroup] = useState<MetricGroup>('volumes_mm3')
+  const [selectedTissue, setSelectedTissue] = useState<TissueKey>('gm')
+  const [isLoadingDates, setIsLoadingDates] = useState(true)
+  const [isLoadingReport, setIsLoadingReport] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function loadDates() {
+    setIsLoadingDates(true)
+    setError(null)
+    try {
+      const response = await listEvolutionDates(subjectId)
+      setDateEntries(response.dates)
+      const readyDates = response.dates.filter((entry) => entry.ready_for_json).map((entry) => entry.acquisition_date)
+      setStartDate((current) => current || readyDates[0] || '')
+      setEndDate((current) => current || readyDates[readyDates.length - 1] || '')
+    } catch (loadError) {
+      setError(apiMessage(loadError))
+    } finally {
+      setIsLoadingDates(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDates()
+  }, [subjectId])
+
+  const readyDates = useMemo(() => dateEntries.filter((entry) => entry.ready_for_json), [dateEntries])
+
+  async function buildReport() {
+    if (!startDate || !endDate) {
+      setError('Select a start and end date first.')
+      return
+    }
+    setIsLoadingReport(true)
+    setError(null)
+    try {
+      setReport(await getEvolutionReport(subjectId, startDate, endDate))
+    } catch (loadError) {
+      setReport(null)
+      setError(apiMessage(loadError))
+    } finally {
+      setIsLoadingReport(false)
+    }
+  }
+
+  return (
+    <main className="page stack">
+      <section className="page-header-card">
+        <div>
+          <button type="button" className="link-button" onClick={onBack}>← Back</button>
+          <p className="eyebrow">Time comparison</p>
+          <h1>{subjectId}</h1>
+          <p className="muted">Compare volume and surface metrics between multiple acquisition dates.</p>
+        </div>
+        <button type="button" className="secondary" onClick={loadDates} disabled={isLoadingDates}>Refresh dates</button>
+      </section>
+
+      {error && <p className="error-text">{error}</p>}
+
+      <section className="grid-two">
+        <article className="card stack">
+          <h2>Metric-ready dates</h2>
+          {isLoadingDates && <p className="muted">Loading dates...</p>}
+          {!isLoadingDates && readyDates.length < 2 && (
+            <p className="muted">At least two cases with mesh-analysis metrics are required for time comparison.</p>
+          )}
+          <div className="date-chip-grid">
+            {dateEntries.map((entry) => (
+              <span className={`date-chip ${entry.ready_for_json ? 'ready' : ''}`} key={entry.case_id}>
+                <strong>{entry.acquisition_date}</strong>
+                <small>{entry.ready_for_json ? 'metrics ready' : 'no metrics'}</small>
+              </span>
+            ))}
+          </div>
+        </article>
+
+        <form className="card form-grid" onSubmit={(event) => { event.preventDefault(); buildReport() }}>
+          <h2>Build comparison</h2>
+          <label>
+            Start date
+            <select value={startDate} onChange={(event) => setStartDate(event.target.value)}>
+              <option value="">Choose start</option>
+              {readyDates.map((entry) => <option value={entry.acquisition_date} key={entry.case_id}>{entry.acquisition_date}</option>)}
+            </select>
+          </label>
+          <label>
+            End date
+            <select value={endDate} onChange={(event) => setEndDate(event.target.value)}>
+              <option value="">Choose end</option>
+              {readyDates.map((entry) => <option value={entry.acquisition_date} key={entry.case_id}>{entry.acquisition_date}</option>)}
+            </select>
+          </label>
+          <button type="submit" disabled={readyDates.length < 2 || isLoadingReport}>{isLoadingReport ? 'Building...' : 'Build report'}</button>
+        </form>
+      </section>
+
+      {report && (
+        <>
+          <section className="card stack">
+            <div className="row-between">
+              <div>
+                <h2>Evolution report</h2>
+                <p className="muted">Baseline: {report.baseline_date}. Interval: {report.start_date} → {report.end_date}.</p>
+              </div>
+              <div className="button-row">
+                <select value={metricGroup} onChange={(event) => setMetricGroup(event.target.value as MetricGroup)}>
+                  <option value="volumes_mm3">Volumes</option>
+                  <option value="surfaces_mm2">Surfaces</option>
+                </select>
+                <select value={selectedTissue} onChange={(event) => setSelectedTissue(event.target.value as TissueKey)}>
+                  {TISSUES.map((tissue) => <option key={tissue.key} value={tissue.key}>{tissue.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} />
+          </section>
+
+          <section className="card stack">
+            <h2>Point-by-point comparison</h2>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>{metricLabel(metricGroup)} {metricUnit(metricGroup)}</th>
+                    <th>Change vs baseline</th>
+                    <th>Change vs previous</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.points.map((point) => {
+                    const metric = point[metricGroup][selectedTissue]
+                    return (
+                      <tr key={point.acquisition_date}>
+                        <td>{point.acquisition_date}{point.is_baseline ? ' · baseline' : ''}</td>
+                        <td>{formatNumber(metric.value)}</td>
+                        <td>{formatNumber(metric.absolute_change_from_baseline)} ({formatNumber(metric.change_from_baseline_percent, 2)}%)</td>
+                        <td>{metric.previous_value === null ? '—' : `${formatNumber(metric.absolute_change_from_previous)} (${formatNumber(metric.change_from_previous_percent, 2)}%)`}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+    </main>
+  )
+}

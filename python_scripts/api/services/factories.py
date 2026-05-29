@@ -12,6 +12,7 @@ from .jobs import JobService
 from .mesh_analysis import MeshAnalysisService
 from .preprocessing import PreprocessingService
 from .public_processing import PublicProcessingService
+from .statistics import StatisticsService
 
 
 def build_default_preprocessing_service(
@@ -103,6 +104,13 @@ def build_default_artifact_service(
     )
 
 
+
+def build_default_statistics_service(
+    *,
+    cases: CaseService,
+) -> StatisticsService:
+    return StatisticsService(cases=cases)
+
 def build_default_job_service() -> JobService:
     max_workers = int(os.getenv("MRI_API_JOB_WORKERS", "1"))
     return JobService(max_workers=max_workers)
@@ -135,6 +143,7 @@ __all__ = [
     "build_default_job_service",
     "build_default_mesh_analysis_service",
     "build_default_preprocessing_service",
+    "build_default_statistics_service",
     "build_default_public_processing_service",
     "build_default_token_service",
 ]
