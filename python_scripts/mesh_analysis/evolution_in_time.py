@@ -25,7 +25,6 @@ JsonDict = dict[str, object]
 @dataclass(frozen=True)
 class _ComparisonColors:
     baseline: tuple[int, int, int, int]
-    target: tuple[int, int, int, int]
     changed: tuple[int, int, int, int]
 
     @classmethod
@@ -33,12 +32,10 @@ class _ComparisonColors:
         cls,
         *,
         baseline_color: str,
-        target_color: str,
         changed_color: str,
     ) -> "_ComparisonColors":
         return cls(
             baseline=_hex_to_rgba(baseline_color, default_alpha=210),
-            target=_hex_to_rgba(target_color, default_alpha=150),
             changed=_hex_to_rgba(changed_color, default_alpha=220),
         )
 
@@ -285,24 +282,22 @@ class MriEvolutionInTime:
         pve_threshold: float = 0.2,
         distance_threshold_mm: float = 1.0,
         baseline_color: str = "#508cff",
-        target_color: str = "#b9c4d2",
         changed_color: str = "#ff2d2d",
-        include_changed_wireframe: bool = False,
         marching_cubes_step_size: int = 1,
-        wireframe_step_size: int | None = 3,
         template_path: Path | str | None = None,
     ) -> bytes:
         """
         Return an in-memory GLB comparing baseline and target acquisitions.
 
-        Supported methods:
-        * ``pve``: slow but more precise. Resamples baseline and target PVE maps
-          to the configured MNI152 template grid, subtracts them voxel-wise, and
-          exports the baseline surface with per-vertex colors: unchanged vertices
-          use baseline_color and changed vertices use changed_color.
-        * ``nearest_distance``: faster but less anatomically precise. Compares
-          baseline mesh vertices to the nearest target mesh vertex using a KD-tree
-          and exports the baseline mesh with per-vertex changed/unchanged colors.
+        The exported GLB contains one reference surface split into two mesh
+        layers:
+        * unchanged_<reference>_<tissue>_mesh
+        * changed_<reference>_<tissue>_mesh
+
+        The reference is normally the baseline mesh. If the tissue volume
+        increased, the target mesh is used instead so growth can be shown on the
+        larger object. The frontend can recolor and change opacity for each layer
+        without rebuilding the GLB.
         """
         try:
             import nibabel as nib
@@ -338,25 +333,11 @@ class MriEvolutionInTime:
         if marching_cubes_step_size < 1:
             raise ValueError("marching_cubes_step_size must be at least 1.")
 
-        normalized_wireframe_step_size: int | None = None
-        if include_changed_wireframe:
-            normalized_wireframe_step_size = int(wireframe_step_size or marching_cubes_step_size)
-            if normalized_wireframe_step_size < 1:
-                raise ValueError("wireframe_step_size must be at least 1 when wireframe export is enabled.")
-
-        marching_config = MarchingCubesConfig(
-            level=0.5,
-            solid_step_size=marching_cubes_step_size,
-            wireframe_step_size=normalized_wireframe_step_size,
-            create_wireframe_source=include_changed_wireframe,
-        )
-
         baseline = selected[0]
         target = self._get_target_visual_mri(selected, target_date)
         selected_tissues = _normalize_tissues(tissues)
         rgba = _ComparisonColors.from_hex(
             baseline_color=baseline_color,
-            target_color=target_color,
             changed_color=changed_color,
         )
 
@@ -367,7 +348,6 @@ class MriEvolutionInTime:
                 selected_tissues=selected_tissues,
                 distance_threshold_mm=distance_threshold_mm,
                 colors=rgba,
-                include_wireframe=include_changed_wireframe,
                 trimesh_module=trimesh,
                 numpy_module=np,
                 cKDTree_cls=cKDTree,
@@ -379,9 +359,7 @@ class MriEvolutionInTime:
             selected_tissues=selected_tissues,
             pve_threshold=pve_threshold,
             colors=rgba,
-            include_changed_wireframe=include_changed_wireframe,
-            marching_cubes_step_size=marching_config.solid_step_size,
-            wireframe_step_size=marching_config.wireframe_step_size,
+            marching_cubes_step_size=marching_cubes_step_size,
             nib_module=nib,
             trimesh_module=trimesh,
             numpy_module=np,
@@ -572,9 +550,7 @@ class MriEvolutionInTime:
         selected_tissues: Sequence[str],
         pve_threshold: float,
         colors: _ComparisonColors,
-        include_changed_wireframe: bool,
         marching_cubes_step_size: int,
-        wireframe_step_size: int | None,
         nib_module: Any,
         trimesh_module: Any,
         numpy_module: Any,
@@ -587,15 +563,15 @@ class MriEvolutionInTime:
         missing: list[Path] = []
         for mri in (baseline, target):
             missing.extend(mri.missing_pve_paths(tissues=selected_tissues))
+            missing.extend(mri.missing_metric_paths())
         if missing:
             missing_str = "\n".join(str(path) for path in missing)
-            raise FileNotFoundError(f"Cannot build PVE visual comparison GLB. Missing PVE files:\n{missing_str}")
+            raise FileNotFoundError(f"Cannot build PVE visual comparison GLB. Missing files:\n{missing_str}")
 
-        template_img = _load_resampling_template(
-            template_path,
-            nib_module=nib_module,
-        )
+        template_img = _load_resampling_template(template_path, nib_module=nib_module)
         template_target = (template_img.shape[:3], template_img.affine)
+        baseline_metrics = self._load_metrics(baseline)
+        target_metrics = self._load_metrics(target)
 
         scene = trimesh_module.Scene()
         added_geometry = False
@@ -623,14 +599,20 @@ class MriEvolutionInTime:
                 resample_from_to_fn=resample_from_to_fn,
                 numpy_module=numpy_module,
             )
-
             diff_data = numpy_module.abs(target_data - baseline_data)
-            baseline_mesh = _pve_data_to_mesh(
-                data=baseline_data,
+            baseline_volume = float(baseline_metrics.volumes[tissue])
+            target_volume = float(target_metrics.volumes[tissue])
+            use_target_reference = target_volume > baseline_volume
+            reference_label = "target" if use_target_reference else "baseline"
+            reference_date = target.acquisition_date if use_target_reference else baseline.acquisition_date
+            reference_data = target_data if use_target_reference else baseline_data
+
+            reference_mesh = _pve_data_to_mesh(
+                data=reference_data,
                 affine=template_img.affine,
                 level=0.5,
                 step_size=marching_cubes_step_size,
-                tissue_name=f"baseline {tissue}",
+                tissue_name=f"{reference_label} {tissue}",
                 trimesh_module=trimesh_module,
                 numpy_module=numpy_module,
                 apply_affine_fn=apply_affine_fn,
@@ -639,78 +621,48 @@ class MriEvolutionInTime:
             vertex_diff = _sample_volume_at_world_vertices(
                 diff_data,
                 affine=template_img.affine,
-                vertices=baseline_mesh.vertices,
+                vertices=reference_mesh.vertices,
                 numpy_module=numpy_module,
                 map_coordinates_fn=map_coordinates_fn,
             )
             changed_mask = vertex_diff >= pve_threshold
-            _apply_vertex_rgba_by_mask(
-                baseline_mesh,
-                changed_mask=changed_mask,
-                base_rgba=colors.baseline,
-                changed_rgba=colors.changed,
+            unchanged_mesh, changed_mesh = _split_mesh_by_vertex_mask(
+                reference_mesh,
+                changed_vertex_mask=changed_mask,
                 trimesh_module=trimesh_module,
                 numpy_module=numpy_module,
             )
-
-            geometries: list[Any] = [baseline_mesh]
-            wireframe = None
-            if include_changed_wireframe:
-                if wireframe_step_size is not None and wireframe_step_size != marching_cubes_step_size:
-                    wireframe_source = _pve_data_to_mesh(
-                        data=baseline_data,
-                        affine=template_img.affine,
-                        level=0.5,
-                        step_size=wireframe_step_size,
-                        tissue_name=f"baseline {tissue} wireframe",
-                        trimesh_module=trimesh_module,
-                        numpy_module=numpy_module,
-                        apply_affine_fn=apply_affine_fn,
-                        marching_cubes_fn=marching_cubes_fn,
-                    )
-                    wireframe_diff = _sample_volume_at_world_vertices(
-                        diff_data,
-                        affine=template_img.affine,
-                        vertices=wireframe_source.vertices,
-                        numpy_module=numpy_module,
-                        map_coordinates_fn=map_coordinates_fn,
-                    )
-                    wireframe_mask = wireframe_diff >= pve_threshold
-                else:
-                    wireframe_source = baseline_mesh
-                    wireframe_mask = changed_mask
-
-                wireframe = _mesh_to_colored_wireframe_path(
-                    wireframe_source,
-                    changed_mask=wireframe_mask,
-                    base_rgba=colors.baseline,
-                    changed_rgba=colors.changed,
-                    trimesh_module=trimesh_module,
-                    numpy_module=numpy_module,
-                )
-                geometries.append(wireframe)
+            geometries: list[Any] = []
+            if unchanged_mesh is not None:
+                geometries.append(unchanged_mesh)
+            if changed_mesh is not None:
+                geometries.append(changed_mesh)
+            if not geometries:
+                continue
 
             origin = _combined_geometry_center(geometries, numpy_module=numpy_module)
             for geometry in geometries:
                 _apply_shared_view_transform(geometry, origin=origin, trimesh_module=trimesh_module, numpy_module=numpy_module)
 
-            scene.add_geometry(
-                baseline_mesh,
-                node_name=f"baseline_{baseline.acquisition_date}_{tissue}_pve_colorcoded_mesh",
-                geom_name=f"baseline_{baseline.acquisition_date}_{tissue}_pve_colorcoded_mesh",
-            )
-            added_geometry = True
-
-            if wireframe is not None:
+            if unchanged_mesh is not None:
+                _apply_rgba(unchanged_mesh, colors.baseline, trimesh_module=trimesh_module, numpy_module=numpy_module)
                 scene.add_geometry(
-                    wireframe,
-                    node_name=f"baseline_{baseline.acquisition_date}_{tissue}_pve_colorcoded_wireframe",
-                    geom_name=f"baseline_{baseline.acquisition_date}_{tissue}_pve_colorcoded_wireframe",
+                    unchanged_mesh,
+                    node_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_pve_mesh",
+                    geom_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_pve_mesh",
                 )
+                added_geometry = True
+            if changed_mesh is not None:
+                _apply_rgba(changed_mesh, colors.changed, trimesh_module=trimesh_module, numpy_module=numpy_module)
+                scene.add_geometry(
+                    changed_mesh,
+                    node_name=f"changed_{reference_label}_{reference_date}_{tissue}_pve_mesh",
+                    geom_name=f"changed_{reference_label}_{reference_date}_{tissue}_pve_mesh",
+                )
+                added_geometry = True
 
         if not added_geometry:
             raise ValueError("No PVE comparison mesh could be built.")
-
         return _export_scene_to_glb_bytes(scene)
 
     def _build_nearest_distance_visual_glb(
@@ -721,89 +673,82 @@ class MriEvolutionInTime:
         selected_tissues: Sequence[str],
         distance_threshold_mm: float,
         colors: _ComparisonColors,
-        include_wireframe: bool,
         trimesh_module: Any,
         numpy_module: Any,
         cKDTree_cls: Any,
     ) -> bytes:
         missing: list[Path] = []
         for mri in (baseline, target):
-            # Meshes are required for the color-coded comparison. Wireframes are
-            # no longer required unless the user explicitly asks for an overlay.
             missing.extend(mri.missing_visual_paths(tissues=selected_tissues, include_meshes=True, include_wireframes=False))
-            if include_wireframe:
-                missing.extend(mri.missing_visual_paths(tissues=selected_tissues, include_meshes=False, include_wireframes=True))
+            missing.extend(mri.missing_metric_paths())
         if missing:
             missing_str = "\n".join(str(path) for path in missing)
-            raise FileNotFoundError(f"Cannot build nearest-distance comparison GLB. Missing visual files:\n{missing_str}")
+            raise FileNotFoundError(f"Cannot build nearest-distance comparison GLB. Missing files:\n{missing_str}")
 
+        baseline_metrics = self._load_metrics(baseline)
+        target_metrics = self._load_metrics(target)
         scene = trimesh_module.Scene()
         added_geometry = False
 
         for tissue in selected_tissues:
-            baseline_mesh = _load_first_trimesh(
-                baseline.mesh_paths[tissue],
-                trimesh_module=trimesh_module,
+            baseline_mesh = _load_first_trimesh(baseline.mesh_paths[tissue], trimesh_module=trimesh_module)
+            target_mesh = _load_first_trimesh(target.mesh_paths[tissue], trimesh_module=trimesh_module)
+            baseline_volume = float(baseline_metrics.volumes[tissue])
+            target_volume = float(target_metrics.volumes[tissue])
+            use_target_reference = target_volume > baseline_volume
+            reference_label = "target" if use_target_reference else "baseline"
+            reference_date = target.acquisition_date if use_target_reference else baseline.acquisition_date
+            reference_mesh = target_mesh.copy() if use_target_reference else baseline_mesh.copy()
+            comparison_vertices = numpy_module.asarray(
+                baseline_mesh.vertices if use_target_reference else target_mesh.vertices,
+                dtype=float,
             )
-            target_vertices = _load_glb_vertices(
-                target.mesh_paths[tissue],
-                trimesh_module=trimesh_module,
-                numpy_module=numpy_module,
-            )
-            if len(baseline_mesh.vertices) == 0:
-                raise ValueError(f"Baseline mesh for {tissue} contains no vertices.")
-            if len(target_vertices) == 0:
-                raise ValueError(f"Target mesh for {tissue} contains no vertices.")
+            if len(reference_mesh.vertices) == 0 or len(comparison_vertices) == 0:
+                raise ValueError(f"Mesh comparison for {tissue} contains no vertices.")
 
-            distances, _indices = cKDTree_cls(target_vertices).query(
-                numpy_module.asarray(baseline_mesh.vertices, dtype=float),
+            distances, _indices = cKDTree_cls(comparison_vertices).query(
+                numpy_module.asarray(reference_mesh.vertices, dtype=float),
                 k=1,
                 workers=-1,
             )
             changed_mask = distances > distance_threshold_mm
-            _apply_vertex_rgba_by_mask(
-                baseline_mesh,
-                changed_mask=changed_mask,
-                base_rgba=colors.baseline,
-                changed_rgba=colors.changed,
+            unchanged_mesh, changed_mesh = _split_mesh_by_vertex_mask(
+                reference_mesh,
+                changed_vertex_mask=changed_mask,
                 trimesh_module=trimesh_module,
                 numpy_module=numpy_module,
             )
-
-            geometries: list[Any] = [baseline_mesh]
-            wireframe = None
-            if include_wireframe:
-                wireframe = _mesh_to_colored_wireframe_path(
-                    baseline_mesh,
-                    changed_mask=changed_mask,
-                    base_rgba=colors.baseline,
-                    changed_rgba=colors.changed,
-                    trimesh_module=trimesh_module,
-                    numpy_module=numpy_module,
-                )
-                geometries.append(wireframe)
+            geometries: list[Any] = []
+            if unchanged_mesh is not None:
+                geometries.append(unchanged_mesh)
+            if changed_mesh is not None:
+                geometries.append(changed_mesh)
+            if not geometries:
+                continue
 
             origin = _combined_geometry_center(geometries, numpy_module=numpy_module)
             for geometry in geometries:
                 _apply_shared_view_transform(geometry, origin=origin, trimesh_module=trimesh_module, numpy_module=numpy_module)
 
-            scene.add_geometry(
-                baseline_mesh,
-                node_name=f"baseline_{baseline.acquisition_date}_{tissue}_nearest_colorcoded_mesh",
-                geom_name=f"baseline_{baseline.acquisition_date}_{tissue}_nearest_colorcoded_mesh",
-            )
-            added_geometry = True
-
-            if wireframe is not None:
+            if unchanged_mesh is not None:
+                _apply_rgba(unchanged_mesh, colors.baseline, trimesh_module=trimesh_module, numpy_module=numpy_module)
                 scene.add_geometry(
-                    wireframe,
-                    node_name=f"baseline_{baseline.acquisition_date}_{tissue}_nearest_colorcoded_wireframe",
-                    geom_name=f"baseline_{baseline.acquisition_date}_{tissue}_nearest_colorcoded_wireframe",
+                    unchanged_mesh,
+                    node_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
+                    geom_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
                 )
+                added_geometry = True
+            if changed_mesh is not None:
+                _apply_rgba(changed_mesh, colors.changed, trimesh_module=trimesh_module, numpy_module=numpy_module)
+                scene.add_geometry(
+                    changed_mesh,
+                    node_name=f"changed_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
+                    geom_name=f"changed_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
+                )
+                added_geometry = True
 
         if not added_geometry:
             raise ValueError("No nearest-distance comparison mesh could be built.")
-
         return _export_scene_to_glb_bytes(scene)
 
     def _add_loaded_glb_to_scene(
@@ -857,25 +802,6 @@ def _iter_loaded_geometries(loaded: Any) -> Iterable[Any]:
     yield loaded
 
 
-def _load_glb_vertices(
-    path: Path,
-    *,
-    trimesh_module: Any,
-    numpy_module: Any,
-) -> Any:
-    loaded = trimesh_module.load(str(path), force="scene")
-    vertex_chunks: list[Any] = []
-
-    for geometry in _iter_loaded_geometries(loaded):
-        if isinstance(geometry, trimesh_module.Trimesh) and len(geometry.vertices) > 0:
-            vertex_chunks.append(numpy_module.asarray(geometry.vertices, dtype=float))
-
-    if not vertex_chunks:
-        return numpy_module.empty((0, 3), dtype=float)
-
-    return numpy_module.vstack(vertex_chunks)
-
-
 def _load_first_trimesh(
     path: Path,
     *,
@@ -888,46 +814,6 @@ def _load_first_trimesh(
             return geometry.copy()
 
     raise ValueError(f"No mesh geometry found inside GLB file: {path}")
-
-
-def _load_wireframe_path(
-    path: Path,
-    *,
-    trimesh_module: Any,
-) -> Any:
-    loaded = trimesh_module.load(str(path), force="scene")
-
-    for geometry in _iter_loaded_geometries(loaded):
-        if hasattr(geometry, "entities") and hasattr(geometry, "vertices"):
-            return geometry.copy()
-
-    raise ValueError(f"No wireframe Path3D geometry found inside GLB file: {path}")
-
-
-def _changed_wireframe_from_path(
-    wireframe: Any,
-    *,
-    changed_mask: Any,
-    trimesh_module: Any,
-    numpy_module: Any,
-) -> Any | None:
-    vertices = numpy_module.asarray(wireframe.vertices, dtype=float)
-    segments: list[Any] = []
-
-    for entity in getattr(wireframe, "entities", []):
-        points = numpy_module.asarray(getattr(entity, "points", []), dtype=int)
-        if points.size < 2:
-            continue
-
-        for start, end in zip(points[:-1], points[1:]):
-            if bool(changed_mask[start]) or bool(changed_mask[end]):
-                segments.append(numpy_module.asarray([vertices[start], vertices[end]], dtype=float))
-
-    if not segments:
-        return None
-
-    return trimesh_module.load_path(numpy_module.asarray(segments, dtype=float))
-
 
 def _load_pve_image(
     path: Path,
@@ -1012,47 +898,32 @@ def _sample_volume_at_world_vertices(
         cval=0.0,
     )
 
-
-def _apply_vertex_rgba_by_mask(
+def _split_mesh_by_vertex_mask(
     mesh: Any,
     *,
-    changed_mask: Any,
-    base_rgba: tuple[int, int, int, int],
-    changed_rgba: tuple[int, int, int, int],
+    changed_vertex_mask: Any,
     trimesh_module: Any,
     numpy_module: Any,
-) -> None:
-    vertices = numpy_module.asarray(mesh.vertices)
-    colors = numpy_module.tile(numpy_module.array(base_rgba, dtype=numpy_module.uint8), (len(vertices), 1))
-    mask = numpy_module.asarray(changed_mask, dtype=bool)
-    if mask.shape[0] != len(vertices):
+) -> tuple[Any | None, Any | None]:
+    faces = numpy_module.asarray(mesh.faces, dtype=int)
+    if len(faces) == 0:
+        return None, None
+
+    mask = numpy_module.asarray(changed_vertex_mask, dtype=bool)
+    if mask.shape[0] != len(mesh.vertices):
         raise ValueError("Changed mask length does not match mesh vertex count.")
-    colors[mask] = numpy_module.array(changed_rgba, dtype=numpy_module.uint8)
-    mesh.visual = trimesh_module.visual.ColorVisuals(mesh=mesh, vertex_colors=colors)
 
+    changed_face_mask = numpy_module.any(mask[faces], axis=1)
+    unchanged_face_mask = ~changed_face_mask
+    unchanged_mesh = None
+    changed_mesh = None
 
-def _mesh_to_colored_wireframe_path(
-    mesh: Any,
-    *,
-    changed_mask: Any,
-    base_rgba: tuple[int, int, int, int],
-    changed_rgba: tuple[int, int, int, int],
-    trimesh_module: Any,
-    numpy_module: Any,
-) -> Any:
-    edges = getattr(mesh, "edges_unique", None)
-    if edges is None or len(edges) == 0:
-        raise ValueError("Cannot build wireframe from mesh with no edges.")
+    if numpy_module.any(unchanged_face_mask):
+        unchanged_mesh = mesh.submesh([numpy_module.where(unchanged_face_mask)[0]], append=True, repair=False)
+    if numpy_module.any(changed_face_mask):
+        changed_mesh = mesh.submesh([numpy_module.where(changed_face_mask)[0]], append=True, repair=False)
 
-    segments = mesh.vertices[edges]
-    wireframe = trimesh_module.load_path(numpy_module.asarray(segments, dtype=float))
-    mask = numpy_module.asarray(changed_mask, dtype=bool)
-    edge_changed = mask[edges[:, 0]] | mask[edges[:, 1]]
-    colors = numpy_module.tile(numpy_module.array(base_rgba, dtype=numpy_module.uint8), (len(edges), 1))
-    colors[edge_changed] = numpy_module.array(changed_rgba, dtype=numpy_module.uint8)
-    wireframe.colors = colors
-    return wireframe
-
+    return unchanged_mesh, changed_mesh
 
 def _pve_data_to_mesh(
     *,
@@ -1077,48 +948,6 @@ def _pve_data_to_mesh(
     verts_voxel, faces, _normals, _values = marching_cubes_fn(data, level=level, step_size=step_size)
     verts_world = apply_affine_fn(affine, verts_voxel)
     return trimesh_module.Trimesh(vertices=verts_world, faces=faces, process=False)
-
-
-def _binary_mask_to_mesh(
-    *,
-    mask: Any,
-    affine: Any,
-    label: str,
-    step_size: int,
-    trimesh_module: Any,
-    numpy_module: Any,
-    apply_affine_fn: Any,
-    marching_cubes_fn: Any,
-) -> Any | None:
-    mask_data = numpy_module.asarray(mask, dtype=numpy_module.float32)
-    if float(mask_data.max()) < 1.0:
-        return None
-
-    # Pad by one voxel so marching cubes can close surfaces that touch the
-    # original volume border. The affine is shifted by one voxel to preserve
-    # the original world coordinates after padding.
-    padded = numpy_module.pad(mask_data, pad_width=1, mode="constant", constant_values=0.0)
-    shifted_affine = numpy_module.array(affine, dtype=float, copy=True)
-    shifted_affine[:3, 3] = shifted_affine[:3, 3] - shifted_affine[:3, :3] @ numpy_module.ones(3)
-
-    try:
-        verts_voxel, faces, _normals, _values = marching_cubes_fn(padded, level=0.5, step_size=step_size)
-    except ValueError:
-        return None
-
-    verts_world = apply_affine_fn(shifted_affine, verts_voxel)
-    mesh = trimesh_module.Trimesh(vertices=verts_world, faces=faces, process=False)
-    if len(mesh.vertices) == 0 or len(mesh.faces) == 0:
-        return None
-    return mesh
-
-
-def _mesh_to_wireframe_path(mesh: Any, *, trimesh_module: Any, numpy_module: Any) -> Any:
-    edges = getattr(mesh, "edges_unique", None)
-    if edges is None or len(edges) == 0:
-        raise ValueError("Cannot build wireframe from mesh with no edges.")
-    segments = mesh.vertices[edges]
-    return trimesh_module.load_path(numpy_module.asarray(segments, dtype=float))
 
 
 def _geometry_vertices(geometry: Any, *, numpy_module: Any) -> Any:

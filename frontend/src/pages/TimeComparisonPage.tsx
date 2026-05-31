@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { createEvolutionVisualComparisonObjectUrl, getEvolutionReport, listEvolutionDates } from '../api/metricsApi'
 import type { EvolutionComparisonMethod } from '../api/metricsApi'
-import { Brain3DViewer } from '../components/Brain3DViewer'
-import type { BrainViewerItem } from '../components/Brain3DViewer'
+import { Comparison3DViewer } from '../components/Comparison3DViewer'
 import type { EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
 
 type TimeComparisonPageProps = {
@@ -82,17 +81,12 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const [comparisonMethod, setComparisonMethod] = useState<EvolutionComparisonMethod>('pve')
   const [pveThreshold, setPveThreshold] = useState(0.2)
   const [distanceThresholdMm, setDistanceThresholdMm] = useState(1)
-  const [comparisonBaselineColor, setComparisonBaselineColor] = useState('#508cff')
-  const [comparisonTargetColor] = useState('#b9c4d2')
-  const [comparisonChangedColor, setComparisonChangedColor] = useState('#ff2d2d')
-  const [includeChangedWireframe, setIncludeChangedWireframe] = useState(false)
   const [marchingCubesStepSize, setMarchingCubesStepSize] = useState(1)
-  const [wireframeStepSize, setWireframeStepSize] = useState(3)
   const [isLoadingDates, setIsLoadingDates] = useState(true)
   const [isLoadingReport, setIsLoadingReport] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [visualOpen, setVisualOpen] = useState(false)
-  const [visualItems, setVisualItems] = useState<BrainViewerItem[]>([])
+  const [visualObjectUrl, setVisualObjectUrl] = useState<string | null>(null)
   const [isLoadingVisual, setIsLoadingVisual] = useState(false)
   const [visualError, setVisualError] = useState<string | null>(null)
   const visualObjectUrlRef = useRef<string | null>(null)
@@ -144,7 +138,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     } catch (loadError) {
       setReport(null)
       setVisualOpen(false)
-      setVisualItems([])
+      setVisualObjectUrl(null)
       clearVisualObjectUrl()
       setError(apiMessage(loadError))
     } finally {
@@ -170,34 +164,20 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
         comparisonMethod,
         pveThreshold,
         distanceThresholdMm,
-        baselineColor: comparisonBaselineColor,
-        targetColor: comparisonTargetColor,
-        changedColor: comparisonChangedColor,
-        includeChangedWireframe,
         marchingCubesStepSize,
-        wireframeStepSize,
       })
 
       clearVisualObjectUrl()
       visualObjectUrlRef.current = objectUrl
-      setVisualItems([
-        {
-          id: `comparison-${comparisonMethod}-${selectedTissue}-${report.start_date}-${report.end_date}-${pveThreshold}-${distanceThresholdMm}-${comparisonBaselineColor}-${comparisonChangedColor}-${includeChangedWireframe}-${marchingCubesStepSize}-${wireframeStepSize}`,
-          name: `${selectedTissue}_comparison_${report.start_date}_to_${report.end_date}.glb`,
-          tissue: selectedTissue,
-          mode: 'mesh',
-          objectUrl,
-          preserveMaterials: true,
-        },
-      ])
+      setVisualObjectUrl(objectUrl)
     } catch (loadError) {
-      setVisualItems([])
+      setVisualObjectUrl(null)
       clearVisualObjectUrl()
       setVisualError(apiMessage(loadError))
     } finally {
       setIsLoadingVisual(false)
     }
-  }, [clearVisualObjectUrl, report, selectedTissue, subjectId, comparisonMethod, pveThreshold, distanceThresholdMm, comparisonBaselineColor, comparisonTargetColor, comparisonChangedColor, includeChangedWireframe, marchingCubesStepSize, wireframeStepSize])
+  }, [clearVisualObjectUrl, report, selectedTissue, subjectId, comparisonMethod, pveThreshold, distanceThresholdMm, marchingCubesStepSize])
 
   useEffect(() => {
     if (visualOpen && report) {
@@ -330,32 +310,6 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                     <span className="muted small-note">mm</span>
                   </label>
                 )}
-                <label className="inline-field">
-                  Base color
-                  <input type="color" value={comparisonBaselineColor} onChange={(event) => setComparisonBaselineColor(event.target.value)} />
-                </label>
-                <label className="inline-field">
-                  Changed color
-                  <input type="color" value={comparisonChangedColor} onChange={(event) => setComparisonChangedColor(event.target.value)} />
-                </label>
-                <label className="checkbox-row inline-checkbox">
-                  <input type="checkbox" checked={includeChangedWireframe} onChange={(event) => setIncludeChangedWireframe(event.target.checked)} />
-                  show wireframe overlay
-                </label>
-                {includeChangedWireframe && (
-                  <label className="inline-field">
-                    Wireframe step
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      step="1"
-                      value={wireframeStepSize}
-                      onChange={(event) => setWireframeStepSize(Math.max(1, Math.round(Number(event.target.value))))}
-                    />
-                    <span className="muted small-note">wire density</span>
-                  </label>
-                )}
                 <button type="button" className="secondary" onClick={handleOpenVisualComparison} disabled={isLoadingVisual}>
                   {visualOpen ? 'Reload 3D comparison' : 'Open 3D comparison'}
                 </button>
@@ -364,23 +318,22 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} />
             {visualOpen && (
               <p className="muted small-note">
-                The 3D comparison is rebuilt automatically when the selected tissue, method, threshold, color, mesh detail, or wireframe detail changes. Current tissue: {tissueLabel(selectedTissue)}. Method: {comparisonMethod === 'pve' ? 'PVE comparison' : 'nearest-distance comparison'}.
+                The 3D comparison is rebuilt automatically when the selected tissue, method, threshold, or mesh detail changes. Current tissue: {tissueLabel(selectedTissue)}. Method: {comparisonMethod === 'pve' ? 'PVE comparison' : 'nearest-distance comparison'}.
               </p>
             )}
           </section>
 
           {visualOpen && (
-            <Brain3DViewer
-              items={visualItems}
+            <Comparison3DViewer
+              objectUrl={visualObjectUrl}
               title="3D visual comparison"
               subtitle={comparisonMethod === 'pve'
-                ? `PVE comparison for ${tissueLabel(selectedTissue)}. The GLB is the baseline tissue mesh color-coded per vertex: base color = unchanged, changed color = PVE difference ≥ ${pveThreshold}.`
-                : `Nearest-distance comparison for ${tissueLabel(selectedTissue)}. The GLB is the baseline tissue mesh color-coded per vertex: base color = unchanged, changed color = nearest target distance > ${distanceThresholdMm} mm.`}
+                ? `PVE comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. PVE threshold: ${pveThreshold}.`
+                : `Nearest-distance comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. Distance threshold: ${distanceThresholdMm} mm.`}
               loadingText="Building comparison GLB..."
               isLoading={isLoadingVisual}
               error={visualError}
               onReload={loadVisualComparison}
-              controlMode="comparison"
             />
           )}
 

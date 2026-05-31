@@ -105,11 +105,8 @@ class StatisticsService:
         pve_threshold: float = 0.2,
         distance_threshold_mm: float = 1.0,
         baseline_color: str = "#508cff",
-        target_color: str = "#b9c4d2",
         changed_color: str = "#ff2d2d",
-        include_changed_wireframe: bool = False,
         marching_cubes_step_size: int = 1,
-        wireframe_step_size: int | None = 3,
     ) -> DbResult[bytes]:
         try:
             start_date = validate_acquisition_date(start_date)
@@ -155,11 +152,8 @@ class StatisticsService:
                     pve_threshold=pve_threshold,
                     distance_threshold_mm=distance_threshold_mm,
                     baseline_color=baseline_color,
-                    target_color=target_color,
                     changed_color=changed_color,
-                    include_changed_wireframe=include_changed_wireframe,
                     marching_cubes_step_size=marching_cubes_step_size,
-                    wireframe_step_size=wireframe_step_size,
                 )
             )
         except Exception as exc:

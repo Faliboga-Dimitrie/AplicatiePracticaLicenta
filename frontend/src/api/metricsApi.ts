@@ -30,11 +30,8 @@ export type EvolutionVisualOptions = {
   pveThreshold?: number
   distanceThresholdMm?: number
   baselineColor?: string
-  targetColor?: string
   changedColor?: string
-  includeChangedWireframe?: boolean
   marchingCubesStepSize?: number
-  wireframeStepSize?: number
 }
 
 export async function createEvolutionVisualComparisonObjectUrl(options: EvolutionVisualOptions): Promise<string> {
@@ -45,11 +42,8 @@ export async function createEvolutionVisualComparisonObjectUrl(options: Evolutio
     pve_threshold: String(options.pveThreshold ?? 0.2),
     distance_threshold_mm: String(options.distanceThresholdMm ?? 1),
     baseline_color: options.baselineColor ?? '#508cff',
-    target_color: options.targetColor ?? '#b9c4d2',
     changed_color: options.changedColor ?? '#ff2d2d',
-    include_changed_wireframe: options.includeChangedWireframe ? 'true' : 'false',
     marching_cubes_step_size: String(options.marchingCubesStepSize ?? 1),
-    wireframe_step_size: String(options.wireframeStepSize ?? 3),
   })
 
   if (options.targetDate) {
