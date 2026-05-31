@@ -101,8 +101,15 @@ class StatisticsService:
         end_date: str,
         target_date: str | None = None,
         tissues: list[str] | None = None,
-        include_meshes: bool = False,
-        include_wireframes: bool = True,
+        comparison_method: str = "pve",
+        pve_threshold: float = 0.2,
+        distance_threshold_mm: float = 1.0,
+        baseline_color: str = "#508cff",
+        target_color: str = "#b9c4d2",
+        changed_color: str = "#ff2d2d",
+        include_changed_wireframe: bool = False,
+        marching_cubes_step_size: int = 1,
+        wireframe_step_size: int | None = 3,
     ) -> DbResult[bytes]:
         try:
             start_date = validate_acquisition_date(start_date)
@@ -144,8 +151,15 @@ class StatisticsService:
                 evolution.build_visual_comparison_glb(
                     target_date=target_date,
                     tissues=tissues,
-                    include_meshes=include_meshes,
-                    include_wireframes=include_wireframes,
+                    comparison_method=comparison_method,
+                    pve_threshold=pve_threshold,
+                    distance_threshold_mm=distance_threshold_mm,
+                    baseline_color=baseline_color,
+                    target_color=target_color,
+                    changed_color=changed_color,
+                    include_changed_wireframe=include_changed_wireframe,
+                    marching_cubes_step_size=marching_cubes_step_size,
+                    wireframe_step_size=wireframe_step_size,
                 )
             )
         except Exception as exc:
@@ -189,11 +203,8 @@ class StatisticsService:
         metrics_ready = bool(workspace is not None and workspace.metrics_json_path.exists())
         mesh_ready = bool(workspace is not None and getattr(workspace, "has_any_mesh_outputs", False))
         wireframe_ready = bool(workspace is not None and getattr(workspace, "has_any_wireframe_outputs", False))
-        complete_visual = bool(
-            workspace is not None
-            and getattr(workspace, "has_complete_mesh_outputs", False)
-            and getattr(workspace, "has_complete_wireframe_outputs", False)
-        )
+        pve_ready = bool(workspace is not None and getattr(workspace, "has_fast_pve_outputs", False))
+        complete_visual = pve_ready
 
         return {
             "case_id": case.id,
@@ -204,6 +215,7 @@ class StatisticsService:
             "has_metrics": metrics_ready,
             "has_meshes": mesh_ready,
             "has_wireframes": wireframe_ready,
+            "has_pve_outputs": pve_ready,
         }
 
 

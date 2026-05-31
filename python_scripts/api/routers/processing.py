@@ -141,12 +141,19 @@ def build_evolution_visual(
     end_date: str,
     target_date: str | None = None,
     tissues: list[str] | None = Query(default=None),
-    include_meshes: bool = False,
-    include_wireframes: bool = True,
+    comparison_method: str = "pve",
+    pve_threshold: float = 0.2,
+    distance_threshold_mm: float = 1.0,
+    baseline_color: str = "#508cff",
+    target_color: str = "#b9c4d2",
+    changed_color: str = "#ff2d2d",
+    include_changed_wireframe: bool = False,
+    marching_cubes_step_size: int = 1,
+    wireframe_step_size: int | None = 3,
     current_user: UserRecord = Depends(get_current_user),
     statistics: StatisticsService = Depends(get_statistics_service),
 ):
-    """Return an in-memory GLB comparing baseline and target MRI geometry."""
+    """Return an in-memory GLB comparing baseline and target PVE maps."""
     result = statistics.evolution_visual_for_subject(
         current_user,
         subject_id,
@@ -154,8 +161,15 @@ def build_evolution_visual(
         end_date=end_date,
         target_date=target_date,
         tissues=tissues,
-        include_meshes=include_meshes,
-        include_wireframes=include_wireframes,
+        comparison_method=comparison_method,
+        pve_threshold=pve_threshold,
+        distance_threshold_mm=distance_threshold_mm,
+        baseline_color=baseline_color,
+        target_color=target_color,
+        changed_color=changed_color,
+        include_changed_wireframe=include_changed_wireframe,
+        marching_cubes_step_size=marching_cubes_step_size,
+        wireframe_step_size=wireframe_step_size,
     )
     glb_bytes = unwrap_result(
         result,

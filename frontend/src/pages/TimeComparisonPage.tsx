@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { createEvolutionVisualComparisonObjectUrl, getEvolutionReport, listEvolutionDates } from '../api/metricsApi'
+import type { EvolutionComparisonMethod } from '../api/metricsApi'
 import { Brain3DViewer } from '../components/Brain3DViewer'
 import type { BrainViewerItem } from '../components/Brain3DViewer'
 import type { EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
@@ -78,6 +79,15 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const [report, setReport] = useState<EvolutionReport | null>(null)
   const [metricGroup, setMetricGroup] = useState<MetricGroup>('volumes_mm3')
   const [selectedTissue, setSelectedTissue] = useState<TissueKey>('gm')
+  const [comparisonMethod, setComparisonMethod] = useState<EvolutionComparisonMethod>('pve')
+  const [pveThreshold, setPveThreshold] = useState(0.2)
+  const [distanceThresholdMm, setDistanceThresholdMm] = useState(1)
+  const [comparisonBaselineColor, setComparisonBaselineColor] = useState('#508cff')
+  const [comparisonTargetColor] = useState('#b9c4d2')
+  const [comparisonChangedColor, setComparisonChangedColor] = useState('#ff2d2d')
+  const [includeChangedWireframe, setIncludeChangedWireframe] = useState(false)
+  const [marchingCubesStepSize, setMarchingCubesStepSize] = useState(1)
+  const [wireframeStepSize, setWireframeStepSize] = useState(3)
   const [isLoadingDates, setIsLoadingDates] = useState(true)
   const [isLoadingReport, setIsLoadingReport] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -94,7 +104,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     }
   }, [])
 
-  async function loadDates() {
+  const loadDates = useCallback(async () => {
     setIsLoadingDates(true)
     setError(null)
     try {
@@ -108,11 +118,11 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     } finally {
       setIsLoadingDates(false)
     }
-  }
+  }, [subjectId])
 
   useEffect(() => {
     loadDates()
-  }, [subjectId])
+  }, [loadDates])
 
   useEffect(() => {
     return () => {
@@ -157,18 +167,25 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
         endDate: report.end_date,
         targetDate: report.end_date,
         tissue: selectedTissue,
-        includeMeshes: false,
-        includeWireframes: true,
+        comparisonMethod,
+        pveThreshold,
+        distanceThresholdMm,
+        baselineColor: comparisonBaselineColor,
+        targetColor: comparisonTargetColor,
+        changedColor: comparisonChangedColor,
+        includeChangedWireframe,
+        marchingCubesStepSize,
+        wireframeStepSize,
       })
 
       clearVisualObjectUrl()
       visualObjectUrlRef.current = objectUrl
       setVisualItems([
         {
-          id: `comparison-${selectedTissue}-${report.start_date}-${report.end_date}`,
+          id: `comparison-${comparisonMethod}-${selectedTissue}-${report.start_date}-${report.end_date}-${pveThreshold}-${distanceThresholdMm}-${comparisonBaselineColor}-${comparisonChangedColor}-${includeChangedWireframe}-${marchingCubesStepSize}-${wireframeStepSize}`,
           name: `${selectedTissue}_comparison_${report.start_date}_to_${report.end_date}.glb`,
           tissue: selectedTissue,
-          mode: 'wireframe',
+          mode: 'mesh',
           objectUrl,
           preserveMaterials: true,
         },
@@ -180,7 +197,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     } finally {
       setIsLoadingVisual(false)
     }
-  }, [clearVisualObjectUrl, report, selectedTissue, subjectId])
+  }, [clearVisualObjectUrl, report, selectedTissue, subjectId, comparisonMethod, pveThreshold, distanceThresholdMm, comparisonBaselineColor, comparisonTargetColor, comparisonChangedColor, includeChangedWireframe, marchingCubesStepSize, wireframeStepSize])
 
   useEffect(() => {
     if (visualOpen && report) {
@@ -266,6 +283,79 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                 <select value={selectedTissue} onChange={(event) => setSelectedTissue(event.target.value as TissueKey)}>
                   {TISSUES.map((tissue) => <option key={tissue.key} value={tissue.key}>{tissue.label}</option>)}
                 </select>
+                <label className="inline-field">
+                  Method
+                  <select value={comparisonMethod} onChange={(event) => setComparisonMethod(event.target.value as EvolutionComparisonMethod)}>
+                    <option value="nearest_distance">Nearest distance · fast / less precise</option>
+                    <option value="pve">PVE comparison · slower / more precise</option>
+                  </select>
+                </label>
+                {comparisonMethod === 'pve' ? (
+                  <>
+                    <label className="inline-field">
+                      PVE threshold
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.05"
+                        max="1"
+                        value={pveThreshold}
+                        onChange={(event) => setPveThreshold(Number(event.target.value))}
+                      />
+                      <span className="muted small-note">probability Δ</span>
+                    </label>
+                    <label className="inline-field">
+                      Mesh step
+                      <input
+                        type="number"
+                        min="1"
+                        max="6"
+                        step="1"
+                        value={marchingCubesStepSize}
+                        onChange={(event) => setMarchingCubesStepSize(Math.max(1, Math.round(Number(event.target.value))))}
+                      />
+                      <span className="muted small-note">mesh detail</span>
+                    </label>
+                  </>
+                ) : (
+                  <label className="inline-field">
+                    Distance threshold
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      value={distanceThresholdMm}
+                      onChange={(event) => setDistanceThresholdMm(Number(event.target.value))}
+                    />
+                    <span className="muted small-note">mm</span>
+                  </label>
+                )}
+                <label className="inline-field">
+                  Base color
+                  <input type="color" value={comparisonBaselineColor} onChange={(event) => setComparisonBaselineColor(event.target.value)} />
+                </label>
+                <label className="inline-field">
+                  Changed color
+                  <input type="color" value={comparisonChangedColor} onChange={(event) => setComparisonChangedColor(event.target.value)} />
+                </label>
+                <label className="checkbox-row inline-checkbox">
+                  <input type="checkbox" checked={includeChangedWireframe} onChange={(event) => setIncludeChangedWireframe(event.target.checked)} />
+                  show wireframe overlay
+                </label>
+                {includeChangedWireframe && (
+                  <label className="inline-field">
+                    Wireframe step
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      step="1"
+                      value={wireframeStepSize}
+                      onChange={(event) => setWireframeStepSize(Math.max(1, Math.round(Number(event.target.value))))}
+                    />
+                    <span className="muted small-note">wire density</span>
+                  </label>
+                )}
                 <button type="button" className="secondary" onClick={handleOpenVisualComparison} disabled={isLoadingVisual}>
                   {visualOpen ? 'Reload 3D comparison' : 'Open 3D comparison'}
                 </button>
@@ -274,7 +364,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} />
             {visualOpen && (
               <p className="muted small-note">
-                The 3D comparison is rebuilt automatically when the selected tissue changes. Current visual tissue: {tissueLabel(selectedTissue)}.
+                The 3D comparison is rebuilt automatically when the selected tissue, method, threshold, color, mesh detail, or wireframe detail changes. Current tissue: {tissueLabel(selectedTissue)}. Method: {comparisonMethod === 'pve' ? 'PVE comparison' : 'nearest-distance comparison'}.
               </p>
             )}
           </section>
@@ -283,11 +373,14 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <Brain3DViewer
               items={visualItems}
               title="3D visual comparison"
-              subtitle={`Wireframe-only comparison for ${tissueLabel(selectedTissue)}. Backend colors are preserved: baseline is blue, target is red.`}
+              subtitle={comparisonMethod === 'pve'
+                ? `PVE comparison for ${tissueLabel(selectedTissue)}. The GLB is the baseline tissue mesh color-coded per vertex: base color = unchanged, changed color = PVE difference ≥ ${pveThreshold}.`
+                : `Nearest-distance comparison for ${tissueLabel(selectedTissue)}. The GLB is the baseline tissue mesh color-coded per vertex: base color = unchanged, changed color = nearest target distance > ${distanceThresholdMm} mm.`}
               loadingText="Building comparison GLB..."
               isLoading={isLoadingVisual}
               error={visualError}
               onReload={loadVisualComparison}
+              controlMode="comparison"
             />
           )}
 

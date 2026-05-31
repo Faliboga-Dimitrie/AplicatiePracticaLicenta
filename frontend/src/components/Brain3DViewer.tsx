@@ -298,6 +298,7 @@ export function Brain3DViewer({
   isLoading = false,
   error = null,
   onReload,
+  controlMode = 'full',
 }: {
   items: BrainViewerItem[]
   title: string
@@ -306,6 +307,7 @@ export function Brain3DViewer({
   isLoading?: boolean
   error?: string | null
   onReload?: () => void
+  controlMode?: 'full' | 'comparison'
 }) {
   const [controls, setControls] = useState<TissueControls>(defaultTissueControls)
   const [showMeshes, setShowMeshes] = useState(true)
@@ -338,6 +340,7 @@ export function Brain3DViewer({
 
   const hasMeshes = items.some((item) => item.mode === 'mesh')
   const hasWireframes = items.some((item) => item.mode === 'wireframe')
+  const showLayerControls = controlMode === 'full'
 
   return (
     <section className="viewer-layout">
@@ -355,59 +358,65 @@ export function Brain3DViewer({
         )}
 
         <div className="viewer-toggle-grid">
-          <label className="checkbox-row">
-            <input type="checkbox" checked={showMeshes} disabled={!hasMeshes} onChange={(event) => setShowMeshes(event.target.checked)} />
-            Meshes
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={showWireframes} disabled={!hasWireframes} onChange={(event) => setShowWireframes(event.target.checked)} />
-            Wireframes
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={doubleSided} onChange={(event) => setDoubleSided(event.target.checked)} />
-            Double-sided material
-          </label>
+          {showLayerControls && (
+            <>
+              <label className="checkbox-row">
+                <input type="checkbox" checked={showMeshes} disabled={!hasMeshes} onChange={(event) => setShowMeshes(event.target.checked)} />
+                Meshes
+              </label>
+              <label className="checkbox-row">
+                <input type="checkbox" checked={showWireframes} disabled={!hasWireframes} onChange={(event) => setShowWireframes(event.target.checked)} />
+                Wireframes
+              </label>
+              <label className="checkbox-row">
+                <input type="checkbox" checked={doubleSided} onChange={(event) => setDoubleSided(event.target.checked)} />
+                Double-sided material
+              </label>
+            </>
+          )}
           <label className="checkbox-row">
             <input type="checkbox" checked={autoRotate} onChange={(event) => setAutoRotate(event.target.checked)} />
             Auto rotate
           </label>
         </div>
 
-        <div className="stack compact-stack">
-          <h3>Tissues</h3>
-          {(['gm', 'wm', 'csf'] as ViewerTissue[]).map((tissue) => (
-            <div className="tissue-control" key={tissue}>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={controls[tissue].visible}
-                  onChange={(event) => updateTissue(tissue, { visible: event.target.checked })}
-                />
-                <span className="tissue-dot" style={{ background: controls[tissue].color }} />
-                {tissueLabels[tissue]}
-              </label>
-              <label className="range-label">
-                Color
-                <input
-                  type="color"
-                  value={controls[tissue].color}
-                  onChange={(event) => updateTissue(tissue, { color: event.target.value })}
-                />
-              </label>
-              <label className="range-label">
-                Opacity {Math.round(controls[tissue].opacity * 100)}%
-                <input
-                  type="range"
-                  min="0.05"
-                  max="1"
-                  step="0.05"
-                  value={controls[tissue].opacity}
-                  onChange={(event) => updateTissue(tissue, { opacity: Number(event.target.value) })}
-                />
-              </label>
-            </div>
-          ))}
-        </div>
+        {showLayerControls && (
+          <div className="stack compact-stack">
+            <h3>Tissues</h3>
+            {(['gm', 'wm', 'csf'] as ViewerTissue[]).map((tissue) => (
+              <div className="tissue-control" key={tissue}>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={controls[tissue].visible}
+                    onChange={(event) => updateTissue(tissue, { visible: event.target.checked })}
+                  />
+                  <span className="tissue-dot" style={{ background: controls[tissue].color }} />
+                  {tissueLabels[tissue]}
+                </label>
+                <label className="range-label">
+                  Color
+                  <input
+                    type="color"
+                    value={controls[tissue].color}
+                    onChange={(event) => updateTissue(tissue, { color: event.target.value })}
+                  />
+                </label>
+                <label className="range-label">
+                  Opacity {Math.round(controls[tissue].opacity * 100)}%
+                  <input
+                    type="range"
+                    min="0.05"
+                    max="1"
+                    step="0.05"
+                    value={controls[tissue].opacity}
+                    onChange={(event) => updateTissue(tissue, { opacity: Number(event.target.value) })}
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="stack compact-stack">
           <h3>Grid scale</h3>

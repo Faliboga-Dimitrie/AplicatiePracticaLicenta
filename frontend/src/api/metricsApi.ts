@@ -18,22 +18,38 @@ export function getEvolutionReport(
   return apiRequest<EvolutionReport>(`/processing/subjects/${encodeURIComponent(subjectId)}/evolution?${params}`)
 }
 
+export type EvolutionComparisonMethod = 'pve' | 'nearest_distance'
+
 export type EvolutionVisualOptions = {
   subjectId: string
   startDate: string
   endDate: string
   targetDate?: string
   tissue?: string
-  includeMeshes?: boolean
-  includeWireframes?: boolean
+  comparisonMethod?: EvolutionComparisonMethod
+  pveThreshold?: number
+  distanceThresholdMm?: number
+  baselineColor?: string
+  targetColor?: string
+  changedColor?: string
+  includeChangedWireframe?: boolean
+  marchingCubesStepSize?: number
+  wireframeStepSize?: number
 }
 
 export async function createEvolutionVisualComparisonObjectUrl(options: EvolutionVisualOptions): Promise<string> {
   const params = new URLSearchParams({
     start_date: options.startDate,
     end_date: options.endDate,
-    include_meshes: String(options.includeMeshes ?? false),
-    include_wireframes: String(options.includeWireframes ?? true),
+    comparison_method: options.comparisonMethod ?? 'pve',
+    pve_threshold: String(options.pveThreshold ?? 0.2),
+    distance_threshold_mm: String(options.distanceThresholdMm ?? 1),
+    baseline_color: options.baselineColor ?? '#508cff',
+    target_color: options.targetColor ?? '#b9c4d2',
+    changed_color: options.changedColor ?? '#ff2d2d',
+    include_changed_wireframe: options.includeChangedWireframe ? 'true' : 'false',
+    marching_cubes_step_size: String(options.marchingCubesStepSize ?? 1),
+    wireframe_step_size: String(options.wireframeStepSize ?? 3),
   })
 
   if (options.targetDate) {
