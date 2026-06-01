@@ -10,7 +10,6 @@ from ...access_control import DbResult, MriCaseRecord, UserRecord
 from ...project_core.artifacts import (
     ArtifactKind,
     ArtifactRef,
-    StoredCaseResult,
     guess_mime_type,
 )
 from ...project_core.domain import MRICase
@@ -42,14 +41,6 @@ class CaseArtifactBundle:
     acquisition_date: date
     case_key: str
     artifacts: tuple[ArtifactFile, ...]
-
-    @property
-    def stored_result(self) -> StoredCaseResult:
-        return StoredCaseResult(
-            subject_id=self.subject_id,
-            acquisition_date=self.acquisition_date.isoformat(),
-            artifacts=tuple(artifact.ref for artifact in self.artifacts),
-        )
 
 
 class ArtifactService:

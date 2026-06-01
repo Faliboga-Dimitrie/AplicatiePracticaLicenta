@@ -109,17 +109,6 @@ class AuthSessionRepository:
             (new_refresh_token_hash, new_expires_at, session_id, old_refresh_token_hash),
         )
 
-    def mark_used(self, session_id: int) -> DbResult[bool]:
-        return self.db.execute_bool(
-            """
-            UPDATE auth_session
-            SET last_used_at = UTC_TIMESTAMP()
-            WHERE id = %s
-              AND revoked_at IS NULL
-            """,
-            (session_id,),
-        )
-
     def revoke_by_hash(self, refresh_token_hash: str) -> DbResult[bool]:
         return self.db.execute_bool(
             """

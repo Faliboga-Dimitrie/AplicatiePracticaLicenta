@@ -71,12 +71,3 @@ class SubjectRepository:
 
     def delete(self, subject_id: str) -> DbResult[bool]:
         return self.db.execute_bool("DELETE FROM subject WHERE id = %s", (subject_id,))
-
-    def list_all(self) -> DbResult[list[SubjectRecord]]:
-        try:
-            rows = self.db.fetch_all(
-                "SELECT id, name, age, notes FROM subject ORDER BY id",
-            )
-            return DbResult.ok([subject_from_row(row) for row in rows])
-        except Exception as exc:
-            return DbResult.fail(str(exc))

@@ -142,5 +142,4 @@ class FslReorientationBackend:
 
 __all__ = [
     "FslReorientationBackend",
-    "run_reorientation",
 ]

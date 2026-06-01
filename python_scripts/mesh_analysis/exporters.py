@@ -6,6 +6,7 @@ from typing import Mapping
 
 import numpy as np
 import trimesh
+import trimesh.visual.material
 
 from ..project_core import CaseWorkspace, MeshExportResult
 from .models import MeshAnalysisMeshes, TissueMeshes

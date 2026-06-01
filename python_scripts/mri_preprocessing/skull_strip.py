@@ -78,12 +78,6 @@ class HdBetSkullStripBackend:
             expects_mask=expects_mask,
         )
 
-        case = MRICase(
-            subject_id=workspace.subject_id,
-            acquisition_date=workspace.acquisition_date,
-            raw_path=workspace.raw_path,
-        )
-
         return SkullStripResult(
             image_path=output_path,
             mask_path=mask_path if mask_path.exists() else None,

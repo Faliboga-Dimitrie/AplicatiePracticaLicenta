@@ -9,7 +9,7 @@ from typing import Any
 import nibabel as nib
 from nibabel.orientations import aff2axcodes
 
-from python_scripts.project_core.domain import MRICase
+from ..project_core import MRICase
 
 
 class OrientationStatus(Enum):

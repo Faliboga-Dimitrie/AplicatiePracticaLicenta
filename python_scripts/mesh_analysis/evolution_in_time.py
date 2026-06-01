@@ -9,18 +9,13 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence, Any, TYPE_CHECKING
 
 from ..project_core.config import settings
-from .mesh_extractors import MarchingCubesConfig
 from ..project_core.domain import TissueName, TissueSurfaces, TissueVolumes, tissue_key, validate_acquisition_date
 
 if TYPE_CHECKING:
     from ..project_core import CaseWorkspace
 
-
 MetricBlock = dict[str, dict[str, float]]
 JsonDict = dict[str, object]
-
-
-
 
 @dataclass(frozen=True)
 class _ComparisonColors:
@@ -729,27 +724,6 @@ class MriEvolutionInTime:
         if not added_geometry:
             raise ValueError("No nearest-distance comparison mesh could be built.")
         return _export_scene_to_glb_bytes(scene)
-
-    def _add_loaded_glb_to_scene(
-        self,
-        *,
-        scene: Any,
-        path: Path,
-        prefix: str,
-        rgba: tuple[int, int, int, int],
-        trimesh_module: Any,
-        numpy_module: Any,
-    ) -> None:
-        loaded = trimesh_module.load(str(path), force="scene")
-        geometry_items = getattr(loaded, "geometry", {})
-
-        if not geometry_items:
-            raise ValueError(f"No geometry found inside GLB file: {path}")
-
-        for index, geometry in enumerate(geometry_items.values()):
-            prepared = geometry.copy()
-            _apply_rgba(prepared, rgba, trimesh_module=trimesh_module, numpy_module=numpy_module)
-            scene.add_geometry(prepared, node_name=f"{prefix}_{index}", geom_name=f"{prefix}_{index}")
 
 
 def evolution_artifacts_from_workspaces(

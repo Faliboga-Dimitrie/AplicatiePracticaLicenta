@@ -3,7 +3,6 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from .config import Settings
 from .domain import MRICase, TISSUE_NAMES, TissueName, tissue_key
@@ -141,10 +140,6 @@ class CaseWorkspace:
         return [self.input_mri_dir, *self.processed_stage_dirs]
 
     @property
-    def existing_stage_dirs(self) -> list[Path]:
-        return [directory for directory in self.stage_dirs if directory.exists()]
-
-    @property
     def workspace_exists(self) -> bool:
         return any(directory.exists() for directory in self.stage_dirs)
 
@@ -207,51 +202,6 @@ class CaseWorkspace:
                     _prune_empty_parent(directory)
 
         return removed
-
-    def delete_processed_outputs(self, *, prune_empty_subject_dirs: bool = True) -> list[Path]:
-        """Delete all generated processing outputs while keeping the staged input MRI."""
-        return self.delete_workspace(
-            include_input=False,
-            prune_empty_subject_dirs=prune_empty_subject_dirs,
-        )
-
-    def delete_input(self, *, prune_empty_subject_dirs: bool = True) -> list[Path]:
-        """Delete only input_mri/<subject>/<date>/ for this case."""
-        removed: list[Path] = []
-        if _remove_tree(self.input_mri_dir):
-            removed.append(self.input_mri_dir)
-            if prune_empty_subject_dirs:
-                _prune_empty_parent(self.input_mri_dir)
-        return removed
-
-    def delete_files(self, paths: Iterable[Path]) -> list[Path]:
-        """Delete existing files from the provided path collection."""
-        removed: list[Path] = []
-        for path in paths:
-            if _remove_file(Path(path)):
-                removed.append(Path(path))
-        return removed
-
-    def delete_reorientation_outputs(self) -> list[Path]:
-        return self.delete_files([self.reoriented_path])
-
-    def delete_hd_bet_outputs(self) -> list[Path]:
-        return self.delete_files([
-            self.skull_stripped_path,
-            self.skull_stripped_mask_path,
-        ])
-
-    def delete_fast_outputs(self) -> list[Path]:
-        """
-        Delete known FAST PVE outputs for this case.
-
-        This intentionally removes the explicit expected FAST PVE files, not every
-        random file in fast_dir. That keeps accidental extra logs/debug files safe.
-        """
-        return self.delete_files(self.fast_pve_paths.values())
-
-    def delete_mesh_analysis_outputs(self) -> list[Path]:
-        return self.delete_files(self.mesh_analysis_output_paths)
     
     # ------------------------------------------------------------------
     # rename
@@ -312,10 +262,6 @@ class CaseWorkspace:
     def reoriented_path(self) -> Path:
         return self.reoriented_dir / f"{self.subject_id}_reo.nii.gz"
 
-    @property
-    def has_reoriented(self) -> bool:
-        return self.reoriented_path.exists()
-
     # ------------------------------------------------------------------
     # HD-BET
     # ------------------------------------------------------------------
@@ -335,10 +281,6 @@ class CaseWorkspace:
     # ------------------------------------------------------------------
     # FAST
     # ------------------------------------------------------------------
-
-    @property
-    def fast_input_path(self) -> Path:
-        return self.skull_stripped_path
 
     @property
     def fast_prefix(self) -> Path:
@@ -440,9 +382,6 @@ class CaseWorkspace:
     @property
     def has_any_mesh_analysis_outputs(self) -> bool:
         return any(path.exists() for path in self.mesh_analysis_output_paths)
-
-    def existing_paths(self, paths: Iterable[Path]) -> list[Path]:
-        return [path for path in paths if path.exists()]
 
 
 class FileSystemWorkspaceProvider:

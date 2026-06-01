@@ -1,5 +1,4 @@
 #GENERAL
-**/__pycache__/
 *.env*
 *.zip
 
@@ -9,6 +8,8 @@
 *.png
 *.glb
 *.json
+*.pyc
+**/__pycache__/
 
 #FRONTEND
 # Logs

@@ -199,16 +199,3 @@ class MriCaseRepository:
             return DbResult.ok([mri_case_from_row(row) for row in rows])
         except Exception as exc:
             return DbResult.fail(str(exc))
-
-    def list_all(self) -> DbResult[list[MriCaseRecord]]:
-        try:
-            rows = self.db.fetch_all(
-                """
-                SELECT id, subject_id, acquisition_date, notes, status
-                FROM mri_case
-                ORDER BY subject_id ASC, acquisition_date ASC
-                """
-            )
-            return DbResult.ok([mri_case_from_row(row) for row in rows])
-        except Exception as exc:
-            return DbResult.fail(str(exc))

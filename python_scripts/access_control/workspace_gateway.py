@@ -4,6 +4,8 @@ import shutil
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+from ..project_core import Settings
 from ..project_core import MRICase, FileSystemWorkspaceProvider, build_case_workspace
 from ..project_core.ports import WorkspaceGateway
 
@@ -16,7 +18,7 @@ class ProjectCaseWorkspaceGateway:
     - top-level style:   from access_control import ...
     """
 
-    def __init__(self, settings: Any):
+    def __init__(self, settings: Settings):
         self.settings = settings
 
     def create_case_workspace(

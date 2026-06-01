@@ -22,8 +22,6 @@ from .workspace import (
 from .artifacts import (
     ArtifactKind,
     ArtifactRef,
-    StoredCaseResult,
-    FileSystemArtifactStore,
     normalize_artifact_kind,
     guess_mime_type,
 )
@@ -34,7 +32,6 @@ from .ports import (
     SegmentationResult,
     MeshExportResult,
     WorkspaceProvider,
-    ArtifactStore,
     ReorientationBackend,
     SkullStripBackend,
     SegmentationBackend,
@@ -69,8 +66,6 @@ __all__ = [
     # artifacts
     "ArtifactKind",
     "ArtifactRef",
-    "StoredCaseResult",
-    "FileSystemArtifactStore",
     "normalize_artifact_kind",
     "guess_mime_type",
     # ports
@@ -79,7 +74,6 @@ __all__ = [
     "SegmentationResult",
     "MeshExportResult",
     "WorkspaceProvider",
-    "ArtifactStore",
     "ReorientationBackend",
     "SkullStripBackend",
     "SegmentationBackend",

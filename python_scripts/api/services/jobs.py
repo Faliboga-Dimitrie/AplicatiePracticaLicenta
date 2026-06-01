@@ -108,11 +108,6 @@ class JobService:
         self._futures: dict[str, Future[Any]] = {}
         self._listeners: list[JobListener] = []
 
-    def subscribe(self, listener: JobListener) -> None:
-        """Register a status/progress listener used by higher-level services."""
-        with self._lock:
-            self._listeners.append(listener)
-
     def start(
         self,
         *,

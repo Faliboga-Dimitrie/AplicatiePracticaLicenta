@@ -162,7 +162,7 @@ class FslFastSegmentationBackend:
         if not subject_fast_dir.exists():
             return
 
-        unused_markers = ("mixeltype", "pveseg", "_seg")
+        unused_markers = ("_mixeltype", "_pveseg", "_seg")
 
         for path in subject_fast_dir.rglob("*"):
             if not path.is_file():

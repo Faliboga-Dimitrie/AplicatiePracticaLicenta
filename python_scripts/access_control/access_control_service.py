@@ -299,7 +299,7 @@ class AccessControlService:
         age: int | None | object = UNSET,
         notes: str | None | object = UNSET,
     ) -> DbResult[bool]:
-        if age is not UNSET and age is not None and int(age) < 0:
+        if age is not UNSET and age is not None and isinstance(age, int) and int(age) < 0:
             return DbResult.fail("Subject age cannot be negative.")
         return self.subjects.update(subject_id, name=name, age=age, notes=notes)
 
@@ -312,7 +312,7 @@ class AccessControlService:
         age: int | None | object = UNSET,
         notes: str | None | object = UNSET,
     ) -> DbResult[bool]:
-        if age is not UNSET and age is not None and int(age) < 0:
+        if age is not UNSET and age is not None and isinstance(age, int) and int(age) < 0:
             return DbResult.fail("Subject age cannot be negative.")
         access = self.access.get(user_id, subject_id)
         if not access.success:
@@ -586,14 +586,6 @@ class AccessControlService:
             return DbResult.fail(f"Unknown role '{role}'. Expected one of: {sorted(ROLE_LEVELS)}")
         return self.access.grant(user_id, subject_id, role)
 
-    def revoke_subject_access(self, user_id: int, subject_id: str) -> DbResult[bool]:
-        return self.access.revoke(user_id, subject_id)
-
-    def set_subject_role(self, user_id: int, subject_id: str, role: str) -> DbResult[bool]:
-        if not is_known_role(role):
-            return DbResult.fail(f"Unknown role '{role}'. Expected one of: {sorted(ROLE_LEVELS)}")
-        return self.access.set_role(user_id, subject_id, role)
-
     def get_subject_access(self, user_id: int, subject_id: str):
         return self.access.get(user_id, subject_id)
 
@@ -686,17 +678,6 @@ class AccessControlService:
             user_id,
             subject_id=subject_id,
             include_cases=include_cases,
-        )
-
-    def search_by_date(
-        self,
-        user_id: int,
-        acquisition_date: str | date,
-    ) -> DbResult[list[SubjectWithCases]]:
-        return self.search_subjects_for_user(
-            user_id,
-            acquisition_date=acquisition_date,
-            include_cases=True,
         )
 
     def search_subjects_for_user(
@@ -812,10 +793,5 @@ class AccessControlService:
             subject_id=case.subject_id,
             acquisition_date=case.acquisition_date,
         )
-
-    def _delete_workspaces_for_cases(self, cases: list[MriCaseRecord]) -> None:
-        for case in cases:
-            self._delete_workspace(case)
-
 
 __all__ = ["AccessControlService"]

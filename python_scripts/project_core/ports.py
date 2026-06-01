@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar, Any
 from datetime import date
 
 if TYPE_CHECKING:
-    from .artifacts import ArtifactKind, ArtifactRef
     from .domain import MRICase, TissueSurfaces, TissueVolumes
     from .workspace import CaseWorkspace
 
@@ -160,40 +159,6 @@ class MeshExporter(Protocol, Generic[MeshCollectionT_contra]):
         ...
 
 
-# -----------------------------------------------------------------------------
-# Optional API/static artifact helper
-# -----------------------------------------------------------------------------
-
-class ArtifactStore(Protocol):
-    """
-    Optional helper for a FastAPI/static-file layer.
-
-    Do not build the core pipeline around this for now. CaseWorkspace already
-    knows where outputs are written. ArtifactStore is only useful if an API wants
-    to copy/register those files under a public static root and return ArtifactRef
-    objects to the frontend.
-    """
-
-    def save_file(
-        self,
-        *,
-        case: MRICase,
-        source_path: Path,
-        artifact_name: str,
-        artifact_kind: ArtifactKind | str,
-        mime_type: str | None = None,
-    ) -> ArtifactRef:
-        ...
-
-    def save_metrics(
-        self,
-        *,
-        case: MRICase,
-        metrics: Mapping[str, object],
-        artifact_name: str = "metrics",
-    ) -> ArtifactRef:
-        ...
-
 class WorkspaceGateway(Protocol):
     """
     Optional adapter used when the service should also touch the filesystem.
@@ -244,6 +209,5 @@ __all__ = [
     "MeshExtractor",
     "SurfaceEstimator",
     "MeshExporter",
-    "ArtifactStore",
     "WorkspaceGateway",
 ]

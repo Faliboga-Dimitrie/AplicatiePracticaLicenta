@@ -4,6 +4,8 @@ import os
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
+from ...api.services import AuthenticatedSession
+
 from ...access_control import UserRecord
 from ..dependencies import get_auth_service, get_current_user
 from ..errors import raise_api_error
@@ -52,7 +54,7 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
-def _session_response(session) -> LoginResponse:
+def _session_response(session: AuthenticatedSession) -> LoginResponse:
     return LoginResponse(
         access_token=session.access_token,
         token_type=session.token_type,
