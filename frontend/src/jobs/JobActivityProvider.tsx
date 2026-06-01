@@ -1,18 +1,8 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Job } from '../types/api'
-
-type JobsByCase = Record<number, Job>
-
-type JobActivityContextValue = {
-  trackedJobs: JobsByCase
-  getTrackedJobForCase: (caseId: number) => Job | null
-  trackJob: (job: Job) => void
-  clearCaseJob: (caseId: number) => void
-  clearAllTrackedJobs: () => void
-}
-
-const JobActivityContext = createContext<JobActivityContextValue | null>(null)
+import { JobActivityContext } from './JobActivityContext'
+import type { JobActivityContextValue, JobsByCase } from './JobActivityContext'
 
 function isTrackableCaseJob(job: Job): job is Job & { case_id: number } {
   return typeof job.case_id === 'number'
@@ -70,12 +60,4 @@ export function JobActivityProvider({ children }: { children: ReactNode }) {
   )
 
   return <JobActivityContext.Provider value={value}>{children}</JobActivityContext.Provider>
-}
-
-export function useJobActivity() {
-  const value = useContext(JobActivityContext)
-  if (!value) {
-    throw new Error('useJobActivity must be used inside JobActivityProvider')
-  }
-  return value
 }

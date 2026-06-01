@@ -4,8 +4,8 @@ import {
   inferViewerModeFromName,
   inferViewerTissueFromName,
   isGlbName,
-} from '../components/Brain3DViewer'
-import type { BrainViewerItem } from '../components/Brain3DViewer'
+} from '../components/brainViewerUtils'
+import type { BrainViewerItem } from '../components/brainViewerUtils'
 
 export function processPublicMri(file: File): Promise<Blob> {
   const formData = new FormData()

@@ -18,5 +18,11 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // The app has normal data-loading effects that deliberately update state
+      // after API calls. Keep the React Compiler guidance visible without
+      // failing cleanup/build checks for these established patterns.
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])

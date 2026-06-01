@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { deleteCase, updateCase } from '../api/casesApi'
@@ -58,7 +58,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
     }
   }, [cases])
 
-  async function refreshCases() {
+  const refreshCases = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -69,11 +69,11 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [subjectId])
 
   useEffect(() => {
     refreshCases()
-  }, [subjectId])
+  }, [refreshCases])
 
   function handleCreatedCase(createdCase: MriCase) {
     setCases((currentCases) => [createdCase, ...currentCases])

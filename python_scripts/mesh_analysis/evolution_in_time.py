@@ -494,7 +494,7 @@ class MriEvolutionInTime:
 
                 for point in points:
                     tissue_payload = _nested_mapping(point, metric_group, tissue)
-                    values.append(float(tissue_payload["value"]))
+                    values.append(_require_float(tissue_payload.get("value"), label=f"{metric_group}.{tissue}.value"))
                     _append_optional_float(baseline_changes, tissue_payload.get("change_from_baseline_percent"))
                     _append_optional_float(previous_changes, tissue_payload.get("change_from_previous_percent"))
 
@@ -970,10 +970,24 @@ def _safe_change_percent(value: float, reference: float) -> float | None:
     return ((value - reference) / reference) * 100.0
 
 
+def _require_float(value: object, *, label: str) -> float:
+    if isinstance(value, bool):
+        raise TypeError(f"{label} must be numeric, not boolean.")
+    if isinstance(value, int | float | str):
+        try:
+            number = float(value)
+        except ValueError as exc:
+            raise ValueError(f"{label} must be convertible to float, got {value!r}.") from exc
+        if not math.isfinite(number):
+            raise ValueError(f"{label} must be finite, got {value!r}.")
+        return number
+    raise TypeError(f"{label} must be numeric or numeric text, got {type(value).__name__}.")
+
+
 def _append_optional_float(values: list[float], value: object) -> None:
     if value is None:
         return
-    values.append(float(value))
+    values.append(_require_float(value, label="optional numeric metric"))
 
 
 def _basic_stats(values: Sequence[float]) -> JsonDict:

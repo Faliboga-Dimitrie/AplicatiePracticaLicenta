@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { extractViewerItemsFromPublicZip, processPublicMri } from '../api/publicApi'
 import { useAuth } from '../auth/useAuth'
-import { Brain3DViewer } from '../components/Brain3DViewer'
-import type { BrainViewerItem } from '../components/Brain3DViewer'
+import type { BrainViewerItem } from '../components/brainViewerUtils'
+
+const Brain3DViewer = lazy(() => import('../components/Brain3DViewer').then((module) => ({ default: module.Brain3DViewer })))
 
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -219,11 +220,13 @@ export function WelcomePage() {
             </div>
             <button type="button" className="secondary" onClick={clearPublicViewerItems}>Clear preview</button>
           </section>
-          <Brain3DViewer
-            items={publicViewerItems}
-            title="Public GLB controls"
-            subtitle="Preview meshes directly from the temporary public processing ZIP. No account, subject or case is involved."
-          />
+          <Suspense fallback={<section className="card"><p className="muted">Loading 3D viewer...</p></section>}>
+            <Brain3DViewer
+              items={publicViewerItems}
+              title="Public GLB controls"
+              subtitle="Preview meshes directly from the temporary public processing ZIP. No account, subject or case is involved."
+            />
+          </Suspense>
         </section>
       )}
     </main>

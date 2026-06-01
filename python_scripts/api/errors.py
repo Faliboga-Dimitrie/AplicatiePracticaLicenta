@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn, Protocol, TypeVar, cast
 
 from fastapi import HTTPException
+
+T = TypeVar("T")
+
+
+class ResultLike(Protocol[T]):
+    success: bool
+    data: T | None
+    error: str | None
 
 
 def error_code_for_status(status_code: int) -> str:
@@ -57,7 +65,7 @@ def raise_api_error(
     *,
     code: str | None = None,
     details: Any | None = None,
-) -> None:
+) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
         detail=error_payload(
@@ -69,11 +77,11 @@ def raise_api_error(
 
 
 def unwrap_result(
-    result: Any,
+    result: ResultLike[T],
     *,
     not_found_message: str = "Resource not found.",
     bad_request_status: int = 400,
-):
+) -> T:
     if not result.success:
         raise_api_error(
             bad_request_status,
@@ -83,14 +91,14 @@ def unwrap_result(
     if result.data is None:
         raise_api_error(404, not_found_message, code="NOT_FOUND")
 
-    return result.data
+    return cast(T, result.data)
 
 
 def unwrap_bool_result(
-    result: Any,
+    result: ResultLike[bool],
     *,
     not_found_message: str = "Resource not found.",
-):
+) -> bool:
     if not result.success:
         raise_api_error(400, result.error or "Operation failed.")
 

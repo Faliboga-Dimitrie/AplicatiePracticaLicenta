@@ -10,7 +10,8 @@ import { SettingsPage } from './pages/SettingsPage'
 import { Case3DViewerPage } from './pages/Case3DViewerPage'
 import { TimeComparisonPage } from './pages/TimeComparisonPage'
 import { StatisticsPage } from './pages/StatisticsPage'
-import { JobActivityProvider, useJobActivity } from './jobs/JobActivityProvider'
+import { JobActivityProvider } from './jobs/JobActivityProvider'
+import { useJobActivity } from './jobs/useJobActivity'
 import './App.css'
 
 type ViewState =

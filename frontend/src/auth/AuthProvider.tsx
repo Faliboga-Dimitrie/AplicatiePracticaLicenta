@@ -1,23 +1,10 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { getCurrentUser, login as loginRequest, logout as logoutRequest, deleteAccount as deleteAccountRequest, logoutAll as logoutAllRequest, refreshSession, register as registerRequest } from '../api/authApi'
 import { apiMessage, clearAccessToken, getStoredAccessToken } from '../api/client'
+import { AuthContext } from './AuthContext'
+import type { AuthContextValue } from './AuthContext'
 import type { User } from '../types/api'
-
-type AuthContextValue = {
-  user: User | null
-  isCheckingSession: boolean
-  authError: string | null
-  isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
-  logout: () => Promise<void>
-  logoutAll: () => Promise<void>
-  deleteAccount: () => Promise<void>
-  clearAuthError: () => void
-}
-
-export const AuthContext = createContext<AuthContextValue | null>(null)
 
 type AuthProviderProps = {
   children: ReactNode

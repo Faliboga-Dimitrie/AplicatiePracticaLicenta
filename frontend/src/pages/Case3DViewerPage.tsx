@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { createArtifactObjectUrl, listViewerArtifacts } from '../api/artifactsApi'
 import { getCase } from '../api/casesApi'
 import { listSubjectCases, listSubjects } from '../api/subjectsApi'
-import { Brain3DViewer, inferViewerModeFromName, inferViewerTissueFromName, isGlbName } from '../components/Brain3DViewer'
-import type { BrainViewerItem } from '../components/Brain3DViewer'
+import { inferViewerModeFromName, inferViewerTissueFromName, isGlbName } from '../components/brainViewerUtils'
+import type { BrainViewerItem } from '../components/brainViewerUtils'
 import type { Artifact, AuthorizedSubject, MriCase } from '../types/api'
+
+const Brain3DViewer = lazy(() => import('../components/Brain3DViewer').then((module) => ({ default: module.Brain3DViewer })))
 
 type Case3DViewerPageProps = {
   caseId?: number
@@ -170,14 +172,16 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
         <p className="muted small-note">Only cases with mesh artifacts are shown here.</p>
       </section>
 
-      <Brain3DViewer
-        items={items}
-        title="3D brain matter viewer"
-        subtitle={mriCase ? `Loaded ${items.length} GLB layers for case #${mriCase.id}.` : 'Choose a case to load its meshes.'}
-        isLoading={isLoadingViewer}
-        error={selectedCaseId === '' ? null : error}
-        onReload={selectedCaseId === '' ? undefined : loadViewer}
-      />
+      <Suspense fallback={<section className="card"><p className="muted">Loading 3D viewer...</p></section>}>
+        <Brain3DViewer
+          items={items}
+          title="3D brain matter viewer"
+          subtitle={mriCase ? `Loaded ${items.length} GLB layers for case #${mriCase.id}.` : 'Choose a case to load its meshes.'}
+          isLoading={isLoadingViewer}
+          error={selectedCaseId === '' ? null : error}
+          onReload={selectedCaseId === '' ? undefined : loadViewer}
+        />
+      </Suspense>
     </main>
   )
 }

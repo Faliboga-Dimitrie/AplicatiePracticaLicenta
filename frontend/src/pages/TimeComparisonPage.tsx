@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { createEvolutionVisualComparisonObjectUrl, getEvolutionReport, listEvolutionDates } from '../api/metricsApi'
 import type { EvolutionComparisonMethod } from '../api/metricsApi'
 import { listSubjects } from '../api/subjectsApi'
-import { Comparison3DViewer } from '../components/Comparison3DViewer'
 import type { AuthorizedSubject, EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
+
+const Comparison3DViewer = lazy(() => import('../components/Comparison3DViewer').then((module) => ({ default: module.Comparison3DViewer })))
 
 type TimeComparisonPageProps = {
   subjectId?: string
@@ -342,17 +343,19 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
           </section>
 
           {visualOpen && (
-            <Comparison3DViewer
-              objectUrl={visualObjectUrl}
-              title="3D visual comparison"
-              subtitle={comparisonMethod === 'pve'
-                ? `PVE comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. PVE threshold: ${pveThreshold}.`
-                : `Nearest-distance comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. Distance threshold: ${distanceThresholdMm} mm.`}
-              loadingText="Building comparison GLB..."
-              isLoading={isLoadingVisual}
-              error={visualError}
-              onReload={loadVisualComparison}
-            />
+            <Suspense fallback={<section className="card"><p className="muted">Loading 3D comparison viewer...</p></section>}>
+              <Comparison3DViewer
+                objectUrl={visualObjectUrl}
+                title="3D visual comparison"
+                subtitle={comparisonMethod === 'pve'
+                  ? `PVE comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. PVE threshold: ${pveThreshold}.`
+                  : `Nearest-distance comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. Distance threshold: ${distanceThresholdMm} mm.`}
+                loadingText="Building comparison GLB..."
+                isLoading={isLoadingVisual}
+                error={visualError}
+                onReload={loadVisualComparison}
+              />
+            </Suspense>
           )}
 
           <section className="card stack">

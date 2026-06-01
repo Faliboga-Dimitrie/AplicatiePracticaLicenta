@@ -6,7 +6,7 @@ import { listArtifacts } from '../api/artifactsApi'
 import { startMeshAnalysisJob, startPreprocessingJob } from '../api/jobsApi'
 import { ArtifactList } from '../components/ArtifactList'
 import { JobStatusCard } from '../components/JobStatusCard'
-import { useJobActivity } from '../jobs/JobActivityProvider'
+import { useJobActivity } from '../jobs/useJobActivity'
 import type { CaseArtifacts, Job, MriCase } from '../types/api'
 
 type CaseDetailPageProps = {
