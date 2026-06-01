@@ -161,7 +161,7 @@ class MeshAnalysisService:
             )
 
             context.update(
-                message="Loading prepared FAST outputs...",
+                message="Loading prepared FAST PVE outputs...",
                 progress=10,
                 metadata={
                     "subject_id": case_record.subject_id,

@@ -47,8 +47,6 @@ class SegmentationResult:
     """
 
     pve_paths: Mapping[str, Path]
-    seg_path: Path | None = None
-    pveseg_path: Path | None = None
 
 
 @dataclass(frozen=True)

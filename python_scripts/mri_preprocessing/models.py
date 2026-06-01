@@ -30,10 +30,6 @@ class PreprocessingResult:
         return self.skull_strip.image_path
 
     @property
-    def segmentation_path(self) -> Path | None:
-        return self.segmentation.seg_path
-
-    @property
     def pve_paths(self) -> dict[str, Path]:
         return dict(self.segmentation.pve_paths)
 
@@ -59,10 +55,6 @@ class CaseRunResult:
     @property
     def skull_stripped_path(self) -> Path | None:
         return self.result.skull_stripped_path if self.result is not None else None
-
-    @property
-    def segmentation_path(self) -> Path | None:
-        return self.result.segmentation_path if self.result is not None else None
     
 all__ = [
     "PreprocessingResult",

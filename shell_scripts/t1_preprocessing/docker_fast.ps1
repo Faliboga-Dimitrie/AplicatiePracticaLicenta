@@ -62,12 +62,9 @@ if ($LASTEXITCODE -ne 0) {
 
 # ---------- verify expected outputs ----------
 $expected = @(
-    "${OutputPrefix}_mixeltype.nii.gz",
     "${OutputPrefix}_pve_0.nii.gz",
     "${OutputPrefix}_pve_1.nii.gz",
-    "${OutputPrefix}_pve_2.nii.gz",
-    "${OutputPrefix}_pveseg.nii.gz",
-    "${OutputPrefix}_seg.nii.gz"
+    "${OutputPrefix}_pve_2.nii.gz"
 )
 
 $missing = @()

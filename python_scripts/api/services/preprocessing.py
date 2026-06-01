@@ -258,7 +258,6 @@ class PreprocessingService:
                 "raw_exists": workspace.raw_path.exists(),
                 "reoriented": reorientation.output_path.exists(),
                 "skull_stripped": skull_strip.image_path.exists(),
-                "segmentation": segmentation.seg_path.exists(),
                 "fast_pve_outputs": all(path.exists() for path in segmentation.pve_paths.values()),
             },
         }

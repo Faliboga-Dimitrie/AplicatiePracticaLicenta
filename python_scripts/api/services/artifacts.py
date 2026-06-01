@@ -194,8 +194,6 @@ class ArtifactService:
             ("reoriented.nii.gz", workspace.reoriented_path, {"stage": "reorientation"}),
             ("skull_stripped.nii.gz", workspace.skull_stripped_path, {"stage": "hd_bet"}),
             ("skull_stripped_mask.nii.gz", workspace.skull_stripped_mask_path, {"stage": "hd_bet", "mask": True}),
-            ("fast_seg.nii.gz", workspace.fast_seg_path, {"stage": "fast"}),
-            ("fast_pveseg.nii.gz", workspace.fast_pve_seg_path, {"stage": "fast"}),
         ]
         for tissue, path in workspace.fast_pve_paths.items():
             preprocessing_outputs.append(

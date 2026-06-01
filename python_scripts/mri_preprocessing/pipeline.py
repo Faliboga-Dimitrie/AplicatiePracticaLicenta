@@ -126,7 +126,9 @@ def _print_summary(case: CaseRunResult) -> bool:
             print(f"[OK] {case.subject_id}")
             print(f"     reoriented    : {case.reoriented_path}")
             print(f"     skull-stripped: {case.skull_stripped_path}")
-            print(f"     segmentation  : {case.segmentation_path}")
+            print("     FAST PVE outputs:")
+            for tissue, path in case.result.pve_paths.items():
+                print(f"       {tissue}: {path}")
     else:
         print(f"[FAIL] {case.subject_id}")
         print(f"       error: {case.error}")

@@ -17,8 +17,8 @@ class FslFastSegmentationBackend:
     SegmentationBackend implementation using FSL FAST through the existing
     PowerShell/Docker wrapper.
 
-    The backend produces FAST outputs in the provided CaseWorkspace and returns
-    typed paths to the generated PVE/segmentation files.
+    The backend produces FAST PVE outputs in the provided CaseWorkspace and
+    returns typed paths to the generated probability-volume-estimation files.
     """
 
     def __init__(self, settings: Settings):
@@ -33,13 +33,8 @@ class FslFastSegmentationBackend:
 
         self._validate_input(input_path, workspace)
         self._run_fast(input_path, workspace)
+        self._fast_cleanup(workspace)
         self._require_outputs(workspace)
-
-        case = MRICase(
-            subject_id=workspace.subject_id,
-            acquisition_date=workspace.acquisition_date,
-            raw_path=workspace.raw_path,
-        )
 
         return self._result_from_workspace(workspace)
 
@@ -47,7 +42,7 @@ class FslFastSegmentationBackend:
         self,
         workspace: CaseWorkspace,
     ) -> SegmentationResult | None:
-        full_outputs_exist = workspace.has_fast_outputs
+        full_outputs_exist = workspace.has_fast_pve_outputs
         partial_outputs_exist = any(workspace.fast_dir.glob(f"{workspace.subject_id}*"))
 
         if full_outputs_exist:
@@ -56,7 +51,7 @@ class FslFastSegmentationBackend:
 
             if not self.settings.overwrite:
                 raise FileExistsError(
-                    f"FAST outputs already exist for {workspace.subject_id} in "
+                    f"FAST PVE outputs already exist for {workspace.subject_id} in "
                     f"{workspace.fast_dir}. Set overwrite=True to rerun."
                 )
 
@@ -66,7 +61,7 @@ class FslFastSegmentationBackend:
         if partial_outputs_exist:
             if not self.settings.overwrite:
                 raise FileExistsError(
-                    f"Partial FAST outputs already exist for {workspace.subject_id} in "
+                    f"Partial FAST PVE outputs already exist for {workspace.subject_id} in "
                     f"{workspace.fast_dir}. Set overwrite=True to clean and rerun."
                 )
 
@@ -161,8 +156,24 @@ class FslFastSegmentationBackend:
                 f"STDERR:\n{proc.stderr}"
             )
 
+    def _fast_cleanup(self, workspace: CaseWorkspace) -> None:
+        """Remove unused FAST outputs from this subject's local FAST folder."""
+        subject_fast_dir = workspace.fast_dir.parent
+        if not subject_fast_dir.exists():
+            return
+
+        unused_markers = ("mixeltype", "pveseg", "_seg")
+
+        for path in subject_fast_dir.rglob("*"):
+            if not path.is_file():
+                continue
+
+            name = path.name.lower()
+            if any(marker in name for marker in unused_markers):
+                path.unlink()
+
     def _require_outputs(self, workspace: CaseWorkspace) -> None:
-        missing = [path for path in workspace.fast_output_paths if not path.exists()]
+        missing = workspace.missing_fast_pve_paths
         if not missing:
             return
 
@@ -175,8 +186,6 @@ class FslFastSegmentationBackend:
     def _result_from_workspace(self, workspace: CaseWorkspace) -> SegmentationResult:
         return SegmentationResult(
             pve_paths=workspace.fast_pve_paths,
-            seg_path=workspace.fast_seg_path,
-            pveseg_path=workspace.fast_pve_seg_path,
         )
 
 __all__ = [

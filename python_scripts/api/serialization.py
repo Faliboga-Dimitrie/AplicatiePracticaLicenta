@@ -14,9 +14,7 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
     reoriented_exists = workspace.reoriented_path.exists()
     skull_stripped_exists = workspace.skull_stripped_path.exists()
     skull_mask_exists = workspace.skull_stripped_mask_path.exists()
-    fast_seg_exists = workspace.fast_seg_path.exists()
     fast_pve_outputs_exist = bool(getattr(workspace, "has_fast_pve_outputs", False))
-    fast_outputs_exist = bool(getattr(workspace, "has_fast_outputs", False))
     metrics_exists = workspace.metrics_json_path.exists()
     any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_outputs", False))
     complete_mesh_outputs_exist = bool(getattr(workspace, "has_complete_mesh_outputs", False))
@@ -38,9 +36,7 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
             "reoriented": reoriented_exists,
             "skull_stripped": skull_stripped_exists,
             "skull_stripped_mask": skull_mask_exists,
-            "fast_segmentation": fast_seg_exists,
             "fast_pve_outputs": fast_pve_outputs_exist,
-            "fast_outputs": fast_outputs_exist,
             "metrics_json": metrics_exists,
             "any_mesh_outputs": any_mesh_outputs_exist,
             "complete_mesh_outputs": complete_mesh_outputs_exist,
@@ -88,7 +84,6 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
         "raw_uploaded": raw_exists,
         "has_reoriented": workspace.reoriented_path.exists(),
         "has_skull_stripped": workspace.skull_stripped_path.exists(),
-        "has_fast_outputs": bool(getattr(workspace, "has_fast_outputs", False)),
         "has_fast_pve_outputs": has_fast_pve_outputs,
         "has_meshes": has_any_mesh_outputs,
         "has_metrics": has_metrics,

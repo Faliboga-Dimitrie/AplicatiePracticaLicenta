@@ -49,7 +49,6 @@ export type CaseCapabilities = {
   raw_uploaded?: boolean
   has_reoriented?: boolean
   has_skull_stripped?: boolean
-  has_fast_outputs?: boolean
   has_fast_pve_outputs?: boolean
   has_meshes?: boolean
   has_metrics?: boolean

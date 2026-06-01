@@ -243,12 +243,12 @@ class CaseWorkspace:
 
     def delete_fast_outputs(self) -> list[Path]:
         """
-        Delete known FAST outputs for this case.
+        Delete known FAST PVE outputs for this case.
 
-        This intentionally removes the explicit expected FAST files, not every
+        This intentionally removes the explicit expected FAST PVE files, not every
         random file in fast_dir. That keeps accidental extra logs/debug files safe.
         """
-        return self.delete_files(self.fast_output_paths)
+        return self.delete_files(self.fast_pve_paths.values())
 
     def delete_mesh_analysis_outputs(self) -> list[Path]:
         return self.delete_files(self.mesh_analysis_output_paths)
@@ -349,10 +349,6 @@ class CaseWorkspace:
         return self.fast_dir / self.subject_id
 
     @property
-    def fast_mixeltype_path(self) -> Path:
-        return self.fast_dir / f"{self.subject_id}_mixeltype.nii.gz"
-
-    @property
     def fast_pve_csf_path(self) -> Path:
         return self.fast_dir / f"{self.subject_id}_pve_0.nii.gz"
 
@@ -365,35 +361,12 @@ class CaseWorkspace:
         return self.fast_dir / f"{self.subject_id}_pve_2.nii.gz"
 
     @property
-    def fast_pve_seg_path(self) -> Path:
-        return self.fast_dir / f"{self.subject_id}_pveseg.nii.gz"
-
-    @property
-    def fast_seg_path(self) -> Path:
-        return self.fast_dir / f"{self.subject_id}_seg.nii.gz"
-
-    @property
     def fast_pve_paths(self) -> dict[str, Path]:
         return {
             TissueName.CSF.value: self.fast_pve_csf_path,
             TissueName.GM.value: self.fast_pve_gm_path,
             TissueName.WM.value: self.fast_pve_wm_path,
         }
-
-    @property
-    def fast_output_paths(self) -> list[Path]:
-        return [
-            self.fast_mixeltype_path,
-            self.fast_pve_csf_path,
-            self.fast_pve_gm_path,
-            self.fast_pve_wm_path,
-            self.fast_pve_seg_path,
-            self.fast_seg_path,
-        ]
-
-    @property
-    def has_fast_outputs(self) -> bool:
-        return all(path.exists() for path in self.fast_output_paths)
 
     @property
     def has_fast_pve_outputs(self) -> bool:

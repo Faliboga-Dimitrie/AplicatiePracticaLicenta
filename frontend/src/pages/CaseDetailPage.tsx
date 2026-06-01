@@ -214,7 +214,7 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
             <h2>Capabilities</h2>
             <div className="capability-grid">
               <span>Raw uploaded</span><strong>{capabilityText(capabilities?.raw_uploaded)}</strong>
-              <span>FAST outputs</span><strong>{capabilityText(capabilities?.has_fast_pve_outputs)}</strong>
+              <span>FAST PVE outputs</span><strong>{capabilityText(capabilities?.has_fast_pve_outputs)}</strong>
               <span>Meshes</span><strong>{capabilityText(capabilities?.has_meshes)}</strong>
               <span>Metrics</span><strong>{capabilityText(capabilities?.has_metrics)}</strong>
               <span>Busy</span><strong>{capabilityText(capabilities?.is_busy)}</strong>
