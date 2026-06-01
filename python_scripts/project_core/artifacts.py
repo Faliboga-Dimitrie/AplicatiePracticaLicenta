@@ -21,7 +21,6 @@ class ArtifactKind(str, Enum):
     """
 
     MESH = "mesh"
-    WIREFRAME = "wireframe"
     METRICS = "metrics"
     NIFTI = "nifti"
     LOG = "log"

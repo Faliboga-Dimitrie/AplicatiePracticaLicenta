@@ -104,9 +104,9 @@ class ArtifactService:
         """Return only artifacts needed by the interactive 3D viewer.
 
         The normal artifact endpoint intentionally lists everything useful for
-        download/debugging. The viewer should be narrower: GLB meshes, GLB
-        wireframes and the metrics JSON reference. This avoids React considering
-        NIfTI preprocessing files when opening the WebGL page.
+        download/debugging. The viewer should be narrower: GLB meshes and the
+        metrics JSON reference. This avoids React considering NIfTI preprocessing
+        files when opening the WebGL page.
         """
         bundle_result = self.list_for_case(user, case_id)
         if not bundle_result.success:
@@ -116,7 +116,6 @@ class ArtifactService:
 
         viewer_kinds = {
             ArtifactKind.MESH,
-            ArtifactKind.WIREFRAME,
             ArtifactKind.METRICS,
         }
         viewer_artifacts = tuple(
@@ -178,16 +177,6 @@ class ArtifactService:
                 )
             )
 
-        for tissue, path in workspace.wireframe_paths.items():
-            artifacts.append(
-                self._known_file(
-                    case_id=case.id,
-                    name=f"{tissue}_wireframe.glb",
-                    kind=ArtifactKind.WIREFRAME,
-                    path=path,
-                    metadata={"tissue": tissue},
-                )
-            )
 
         artifacts.append(
             self._known_file(

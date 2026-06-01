@@ -188,7 +188,7 @@ class StatisticsService:
             "raw": {
                 key: value
                 for key, value in payload.items()
-                if key not in {"mesh_paths", "wireframe_paths"}
+                if key not in {"mesh_paths"}
             },
         }
 
@@ -196,7 +196,6 @@ class StatisticsService:
         workspace = getattr(case, "workspace", None)
         metrics_ready = bool(workspace is not None and workspace.metrics_json_path.exists())
         mesh_ready = bool(workspace is not None and getattr(workspace, "has_any_mesh_outputs", False))
-        wireframe_ready = bool(workspace is not None and getattr(workspace, "has_any_wireframe_outputs", False))
         pve_ready = bool(workspace is not None and getattr(workspace, "has_fast_pve_outputs", False))
         complete_visual = pve_ready
 
@@ -208,7 +207,6 @@ class StatisticsService:
             "ready_for_visual": complete_visual,
             "has_metrics": metrics_ready,
             "has_meshes": mesh_ready,
-            "has_wireframes": wireframe_ready,
             "has_pve_outputs": pve_ready,
         }
 

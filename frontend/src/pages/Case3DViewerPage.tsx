@@ -135,7 +135,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
     return () => clearObjectUrls()
   }, [clearObjectUrls])
 
-  const meshReadyCases = subjectCases.filter((entry) => entry.capabilities?.can_view_meshes || entry.capabilities?.has_meshes || entry.capabilities?.has_wireframes)
+  const meshReadyCases = subjectCases.filter((entry) => entry.capabilities?.can_view_meshes || entry.capabilities?.has_meshes)
 
   return (
     <main className="page stack">
@@ -167,7 +167,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
             {meshReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date} · case #{entry.id}</option>)}
           </select>
         </label>
-        <p className="muted small-note">Only cases with mesh or wireframe artifacts are shown here.</p>
+        <p className="muted small-note">Only cases with mesh artifacts are shown here.</p>
       </section>
 
       <Brain3DViewer

@@ -57,12 +57,9 @@ class MeshExportResult:
     Result produced by a mesh exporter.
 
     mesh_paths contains the final exported solid mesh files.
-    wireframe_paths is optional because not every exporter/strategy needs to
-    generate wireframes.
     """
 
     mesh_paths: Mapping[str, Path]
-    wireframe_paths: Mapping[str, Path] | None = None
 
 
 # The concrete mesh representation is intentionally not defined in project_core.

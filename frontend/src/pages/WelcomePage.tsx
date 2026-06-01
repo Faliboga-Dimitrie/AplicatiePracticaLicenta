@@ -105,7 +105,7 @@ export function WelcomePage(_props: WelcomePageProps) {
           <p className="eyebrow">Brain MRI Processing</p>
           <h1>From T1 MRI to segmented 3D brain tissue models.</h1>
           <p className="hero-text">
-            Upload a NIfTI MRI and generate tissue meshes, wireframes and volume/surface metrics.
+            Upload a NIfTI MRI and generate tissue meshes plus volume/surface metrics.
             Use the public quick processing route for one-off downloads, or sign in to manage subjects,
             cases, processing jobs and artifacts over time.
           </p>
@@ -121,7 +121,7 @@ export function WelcomePage(_props: WelcomePageProps) {
             <li>Reorientation to standard space</li>
             <li>Skull stripping with HD-BET</li>
             <li>FAST tissue segmentation</li>
-            <li>GLB mesh and wireframe export</li>
+            <li>GLB mesh export</li>
             <li>Volume and surface metrics</li>
           </ul>
         </div>
@@ -225,7 +225,7 @@ export function WelcomePage(_props: WelcomePageProps) {
           <Brain3DViewer
             items={publicViewerItems}
             title="Public GLB controls"
-            subtitle="Preview meshes and wireframes directly from the temporary public processing ZIP. No account, subject or case is involved."
+            subtitle="Preview meshes directly from the temporary public processing ZIP. No account, subject or case is involved."
           />
         </section>
       )}

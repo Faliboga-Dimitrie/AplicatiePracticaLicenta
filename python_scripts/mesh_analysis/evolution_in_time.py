@@ -56,9 +56,6 @@ class EvolutionMriArtifacts:
     csf_mesh_path: Path
     gm_mesh_path: Path
     wm_mesh_path: Path
-    csf_wireframe_path: Path
-    gm_wireframe_path: Path
-    wm_wireframe_path: Path
     csf_pve_path: Path
     gm_pve_path: Path
     wm_pve_path: Path
@@ -69,9 +66,6 @@ class EvolutionMriArtifacts:
         object.__setattr__(self, "csf_mesh_path", Path(self.csf_mesh_path))
         object.__setattr__(self, "gm_mesh_path", Path(self.gm_mesh_path))
         object.__setattr__(self, "wm_mesh_path", Path(self.wm_mesh_path))
-        object.__setattr__(self, "csf_wireframe_path", Path(self.csf_wireframe_path))
-        object.__setattr__(self, "gm_wireframe_path", Path(self.gm_wireframe_path))
-        object.__setattr__(self, "wm_wireframe_path", Path(self.wm_wireframe_path))
         object.__setattr__(self, "csf_pve_path", Path(self.csf_pve_path))
         object.__setattr__(self, "gm_pve_path", Path(self.gm_pve_path))
         object.__setattr__(self, "wm_pve_path", Path(self.wm_pve_path))
@@ -84,13 +78,6 @@ class EvolutionMriArtifacts:
             TissueName.WM.value: self.wm_mesh_path,
         }
 
-    @property
-    def wireframe_paths(self) -> dict[str, Path]:
-        return {
-            TissueName.CSF.value: self.csf_wireframe_path,
-            TissueName.GM.value: self.gm_wireframe_path,
-            TissueName.WM.value: self.wm_wireframe_path,
-        }
 
     @property
     def pve_paths(self) -> dict[str, Path]:
@@ -112,9 +99,6 @@ class EvolutionMriArtifacts:
             csf_mesh_path=workspace.mesh_paths[TissueName.CSF.value],
             gm_mesh_path=workspace.mesh_paths[TissueName.GM.value],
             wm_mesh_path=workspace.mesh_paths[TissueName.WM.value],
-            csf_wireframe_path=workspace.wireframe_paths[TissueName.CSF.value],
-            gm_wireframe_path=workspace.wireframe_paths[TissueName.GM.value],
-            wm_wireframe_path=workspace.wireframe_paths[TissueName.WM.value],
             csf_pve_path=workspace.fast_pve_paths[TissueName.CSF.value],
             gm_pve_path=workspace.fast_pve_paths[TissueName.GM.value],
             wm_pve_path=workspace.fast_pve_paths[TissueName.WM.value],
@@ -128,7 +112,6 @@ class EvolutionMriArtifacts:
         *,
         tissues: Iterable[str] | None = None,
         include_meshes: bool = True,
-        include_wireframes: bool = True,
     ) -> list[Path]:
         selected_tissues = _normalize_tissues(tissues)
         missing: list[Path] = []
@@ -139,10 +122,6 @@ class EvolutionMriArtifacts:
                 if not mesh_path.exists():
                     missing.append(mesh_path)
 
-            if include_wireframes:
-                wireframe_path = self.wireframe_paths[tissue]
-                if not wireframe_path.exists():
-                    missing.append(wireframe_path)
 
         return missing
 
@@ -679,7 +658,7 @@ class MriEvolutionInTime:
     ) -> bytes:
         missing: list[Path] = []
         for mri in (baseline, target):
-            missing.extend(mri.missing_visual_paths(tissues=selected_tissues, include_meshes=True, include_wireframes=False))
+            missing.extend(mri.missing_visual_paths(tissues=selected_tissues, include_meshes=True))
             missing.extend(mri.missing_metric_paths())
         if missing:
             missing_str = "\n".join(str(path) for path in missing)
@@ -1086,9 +1065,9 @@ def _apply_rgba(
         geometry.visual = trimesh_module.visual.TextureVisuals(material=material)
         return
 
-    # Path3D objects used for wireframes expose a colors collection. If that is
-    # unavailable for a loaded GLB variant, leaving the geometry untouched is safer
-    # than failing the whole visual comparison.
+    # Some loaded GLB variants expose an entities/colors collection. If that is
+    # unavailable, leaving the geometry untouched is safer than failing the whole
+    # visual comparison.
     if hasattr(geometry, "entities") and hasattr(geometry, "colors"):
         color = numpy_module.array(rgba, dtype=numpy_module.uint8)
         geometry.colors = numpy_module.tile(color, (len(geometry.entities), 1))

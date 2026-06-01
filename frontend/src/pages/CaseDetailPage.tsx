@@ -42,8 +42,6 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
   const [isLoading, setIsLoading] = useState(true)
   const [isStartingPreprocessing, setIsStartingPreprocessing] = useState(false)
   const [isStartingMesh, setIsStartingMesh] = useState(false)
-  const [createWireframeSource, setCreateWireframeSource] = useState(true)
-  const [wireframeStepSize, setWireframeStepSize] = useState(3)
   const [isUpdatingCase, setIsUpdatingCase] = useState(false)
   const [isDeletingCase, setIsDeletingCase] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -100,17 +98,10 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
   }
 
   async function handleStartMeshAnalysis() {
-    if (createWireframeSource && wireframeStepSize < 1) {
-      setError('Wireframe step size must be at least 1.')
-      return
-    }
     setIsStartingMesh(true)
     setError(null)
     try {
-      const job = await startMeshAnalysisJob(caseId, {
-        createWireframeSource,
-        wireframeStepSize,
-      })
+      const job = await startMeshAnalysisJob(caseId)
       trackJob(job)
       await refreshCase()
     } catch (startError) {
@@ -289,30 +280,6 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
       {mriCase && (
         <section className="card stack">
           <h2>Processing actions</h2>
-          <div className="form-grid compact-form-grid">
-            <label className="checkbox-row inline-checkbox">
-              <input
-                type="checkbox"
-                checked={createWireframeSource}
-                onChange={(event) => setCreateWireframeSource(event.target.checked)}
-              />
-              Create wireframe source meshes
-            </label>
-            <label>
-              Wireframe step size
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={wireframeStepSize}
-                disabled={!createWireframeSource}
-                onChange={(event) => setWireframeStepSize(Math.max(1, Math.round(Number(event.target.value))))}
-              />
-            </label>
-            <p className="muted small-note">
-              These options map to MarchingCubesConfig before mesh generation. Larger wireframe step values create lighter, less dense wireframes.
-            </p>
-          </div>
           <div className="button-row">
             <button
               type="button"

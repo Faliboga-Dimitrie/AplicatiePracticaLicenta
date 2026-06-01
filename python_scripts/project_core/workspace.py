@@ -404,16 +404,13 @@ class CaseWorkspace:
         return [path for path in self.fast_pve_paths.values() if not path.exists()]
 
     # ------------------------------------------------------------------
-    # meshes / wireframes / metrics
+    # meshes / metrics
     # ------------------------------------------------------------------
 
     def mesh_path_for(self, tissue: TissueName | str) -> Path:
         key = tissue_key(tissue)
         return self.mesh_dir / f"{self.subject_id}_{key}_mesh.glb"
 
-    def wireframe_path_for(self, tissue: TissueName | str) -> Path:
-        key = tissue_key(tissue)
-        return self.mesh_dir / f"{self.subject_id}_{key}_wireframe.glb"
 
     @property
     def mesh_csf_mesh_path(self) -> Path:
@@ -427,17 +424,6 @@ class CaseWorkspace:
     def mesh_wm_mesh_path(self) -> Path:
         return self.mesh_path_for(TissueName.WM)
 
-    @property
-    def wireframe_csf_path(self) -> Path:
-        return self.wireframe_path_for(TissueName.CSF)
-
-    @property
-    def wireframe_gm_path(self) -> Path:
-        return self.wireframe_path_for(TissueName.GM)
-
-    @property
-    def wireframe_wm_path(self) -> Path:
-        return self.wireframe_path_for(TissueName.WM)
 
     @property
     def mesh_metrics_json_path(self) -> Path:
@@ -452,23 +438,16 @@ class CaseWorkspace:
     def mesh_paths(self) -> dict[str, Path]:
         return {tissue.value: self.mesh_path_for(tissue) for tissue in TISSUE_NAMES}
 
-    @property
-    def wireframe_paths(self) -> dict[str, Path]:
-        return {tissue.value: self.wireframe_path_for(tissue) for tissue in TISSUE_NAMES}
 
     @property
     def mesh_output_paths(self) -> list[Path]:
         return [*self.mesh_paths.values(), self.mesh_metrics_json_path]
 
-    @property
-    def wireframe_output_paths(self) -> list[Path]:
-        return list(self.wireframe_paths.values())
 
     @property
     def mesh_analysis_output_paths(self) -> list[Path]:
         return [
             *self.mesh_paths.values(),
-            *self.wireframe_paths.values(),
             self.mesh_metrics_json_path,
         ]
 
@@ -480,13 +459,6 @@ class CaseWorkspace:
     def has_any_mesh_outputs(self) -> bool:
         return any(path.exists() for path in self.mesh_output_paths)
 
-    @property
-    def has_complete_wireframe_outputs(self) -> bool:
-        return all(path.exists() for path in self.wireframe_output_paths)
-
-    @property
-    def has_any_wireframe_outputs(self) -> bool:
-        return any(path.exists() for path in self.wireframe_output_paths)
 
     @property
     def has_complete_mesh_analysis_outputs(self) -> bool:

@@ -8,7 +8,7 @@ import numpy as np
 import trimesh
 
 from ..project_core import CaseWorkspace, MeshExportResult
-from .models import MeshAnalysisMeshes, TissueMeshes, TissueWireframes
+from .models import MeshAnalysisMeshes, TissueMeshes
 
 
 RGBA = tuple[int, int, int, int]
@@ -27,16 +27,10 @@ class GlbExportConfig:
 
     rotate_x_degrees: float | None = -90.0
     scale_factor: float = 1.0
-    export_wireframes: bool = True
     solid_materials: Mapping[str, RGBA] = field(default_factory=lambda: {
         "csf": (80, 140, 255, 60),
         "gm": (80, 140, 255, 90),
         "wm": (80, 140, 255, 180),
-    })
-    wireframe_materials: Mapping[str, RGBA] = field(default_factory=lambda: {
-        "csf": (80, 140, 255, 60),
-        "gm": (80, 140, 255, 60),
-        "wm": (80, 140, 255, 60),
     })
 
 
@@ -60,16 +54,7 @@ class GlbMeshExporter:
         solid_meshes = meshes.solid
         mesh_paths = self._export_solid_meshes(solid_meshes, workspace)
 
-        wireframe_paths: dict[str, Path] | None = None
-        if self.config.export_wireframes:
-            wireframe_source = meshes.wireframe_source
-            wireframes = self._build_wireframes(wireframe_source)
-            wireframe_paths = self._export_wireframes(wireframes, workspace)
-
-        return MeshExportResult(
-            mesh_paths=mesh_paths,
-            wireframe_paths=wireframe_paths,
-        )
+        return MeshExportResult(mesh_paths=mesh_paths)
 
     def _export_solid_meshes(
         self,
@@ -93,36 +78,6 @@ class GlbMeshExporter:
 
         return exported
 
-    def _build_wireframes(self, meshes: TissueMeshes) -> TissueWireframes:
-        prepared: dict[str, object] = {}
-
-        for tissue, mesh in meshes.as_dict().items():
-            export_mesh = mesh.copy()
-            self._apply_view_transform(export_mesh)
-            prepared[tissue] = self._mesh_to_wireframe(export_mesh)
-
-        return TissueWireframes(
-            csf=prepared["csf"],
-            gm=prepared["gm"],
-            wm=prepared["wm"],
-        )
-
-    def _export_wireframes(
-        self,
-        wireframes: TissueWireframes,
-        workspace: CaseWorkspace,
-    ) -> dict[str, Path]:
-        exported: dict[str, Path] = {}
-
-        for tissue, wireframe in wireframes.as_dict().items():
-            out_path = workspace.wireframe_paths[tissue]
-            self._set_wireframe_color(wireframe, self.config.wireframe_materials[tissue])
-
-            scene = trimesh.Scene(wireframe)
-            scene.export(str(out_path), file_type="glb")
-            exported[tissue] = out_path
-
-        return exported
 
     def _apply_view_transform(self, mesh: trimesh.Trimesh) -> None:
         if self.config.rotate_x_degrees is not None:
@@ -153,14 +108,6 @@ class GlbMeshExporter:
 
         mesh.visual = trimesh.visual.TextureVisuals(material=material)
 
-    def _mesh_to_wireframe(self, mesh: trimesh.Trimesh):
-        edges = mesh.edges_unique
-        segments = mesh.vertices[edges]
-        return trimesh.load_path(segments)
-
-    def _set_wireframe_color(self, wireframe, rgba: RGBA) -> None:
-        color = np.array(rgba, dtype=np.uint8)
-        wireframe.colors = np.tile(color, (len(wireframe.entities), 1))
 
 
 __all__ = [

@@ -20,8 +20,6 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
     metrics_exists = workspace.metrics_json_path.exists()
     any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_outputs", False))
     complete_mesh_outputs_exist = bool(getattr(workspace, "has_complete_mesh_outputs", False))
-    any_wireframe_outputs_exist = bool(getattr(workspace, "has_any_wireframe_outputs", False))
-    complete_wireframe_outputs_exist = bool(getattr(workspace, "has_complete_wireframe_outputs", False))
 
     return {
         "case_id": getattr(workspace, "case_id", None),
@@ -46,8 +44,6 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
             "metrics_json": metrics_exists,
             "any_mesh_outputs": any_mesh_outputs_exist,
             "complete_mesh_outputs": complete_mesh_outputs_exist,
-            "any_wireframe_outputs": any_wireframe_outputs_exist,
-            "complete_wireframe_outputs": complete_wireframe_outputs_exist,
         },
     }
 
@@ -78,7 +74,6 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
     raw_exists = workspace.raw_path.exists()
     has_fast_pve_outputs = bool(getattr(workspace, "has_fast_pve_outputs", False))
     has_any_mesh_outputs = bool(getattr(workspace, "has_any_mesh_outputs", False))
-    has_any_wireframe_outputs = bool(getattr(workspace, "has_any_wireframe_outputs", False))
     has_metrics = workspace.metrics_json_path.exists()
     can_view_artifacts = any([
         raw_exists,
@@ -86,7 +81,6 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
         workspace.skull_stripped_path.exists(),
         has_fast_pve_outputs,
         has_any_mesh_outputs,
-        has_any_wireframe_outputs,
         has_metrics,
     ])
 
@@ -97,12 +91,11 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
         "has_fast_outputs": bool(getattr(workspace, "has_fast_outputs", False)),
         "has_fast_pve_outputs": has_fast_pve_outputs,
         "has_meshes": has_any_mesh_outputs,
-        "has_wireframes": has_any_wireframe_outputs,
         "has_metrics": has_metrics,
         "can_start_preprocessing": raw_exists and not is_busy,
         "can_start_mesh_analysis": has_fast_pve_outputs and not is_busy,
         "can_view_artifacts": can_view_artifacts,
-        "can_view_meshes": has_any_mesh_outputs or has_any_wireframe_outputs,
+        "can_view_meshes": has_any_mesh_outputs,
         "can_view_metrics": has_metrics,
         "is_busy": is_busy,
     }

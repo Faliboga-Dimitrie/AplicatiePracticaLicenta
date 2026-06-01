@@ -5,7 +5,7 @@ import { Center, Html, OrbitControls, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 
 export type ViewerTissue = 'gm' | 'wm' | 'csf'
-export type ViewerArtifactMode = 'mesh' | 'wireframe'
+export type ViewerArtifactMode = 'mesh'
 
 export type BrainViewerItem = {
   id: string
@@ -74,9 +74,6 @@ export function inferViewerTissueFromName(name: string, metadataTissue?: unknown
 
 export function inferViewerModeFromName(nameOrKind: string): ViewerArtifactMode | null {
   const lower = nameOrKind.toLowerCase()
-  if (lower.includes('wireframe')) {
-    return 'wireframe'
-  }
   if (lower.includes('mesh') || lower.endsWith('.glb')) {
     return 'mesh'
   }
@@ -92,19 +89,17 @@ function ModelLayer({
   controls,
   transform,
   showMeshes,
-  showWireframes,
   doubleSided,
 }: {
   item: BrainViewerItem
   controls: TissueControls
   transform: ViewerTransform
   showMeshes: boolean
-  showWireframes: boolean
   doubleSided: boolean
 }) {
   const gltf = useGLTF(item.objectUrl)
   const control = controls[item.tissue]
-  const shouldShow = control.visible && (item.mode === 'mesh' ? showMeshes : showWireframes)
+  const shouldShow = control.visible && showMeshes
 
   const scene = useMemo(() => {
     const clone = gltf.scene.clone(true)
@@ -123,11 +118,9 @@ function ModelLayer({
           return cloned
         }
 
-        const opacity = item.mode === 'wireframe'
-          ? Math.min(1, Math.max(0.25, control.opacity + 0.25))
-          : control.opacity
+        const opacity = control.opacity
 
-        cloned.transparent = opacity < 1 || item.mode === 'wireframe'
+        cloned.transparent = opacity < 1
         cloned.opacity = opacity
         cloned.depthWrite = opacity >= 0.95
 
@@ -136,10 +129,6 @@ function ModelLayer({
           materialWithColor.color.set(control.color)
         }
 
-        const materialWithWireframe = cloned as THREE.Material & { wireframe?: boolean }
-        if (typeof materialWithWireframe.wireframe === 'boolean') {
-          materialWithWireframe.wireframe = item.mode === 'wireframe'
-        }
 
         return cloned
       })
@@ -147,7 +136,7 @@ function ModelLayer({
       object.material = Array.isArray(sourceMaterial) ? clonedMaterials : clonedMaterials[0]
     })
     return clone
-  }, [control.color, control.opacity, doubleSided, gltf.scene, item.mode])
+  }, [control.color, control.opacity, doubleSided, gltf.scene])
 
   useEffect(() => {
     return () => {
@@ -240,7 +229,6 @@ function BrainGlbScene({
   controls,
   transform,
   showMeshes,
-  showWireframes,
   doubleSided,
   autoRotate,
   resetSignal,
@@ -250,7 +238,6 @@ function BrainGlbScene({
   controls: TissueControls
   transform: ViewerTransform
   showMeshes: boolean
-  showWireframes: boolean
   doubleSided: boolean
   autoRotate: boolean
   resetSignal: number
@@ -274,8 +261,7 @@ function BrainGlbScene({
                 controls={controls}
                 transform={transform}
                 showMeshes={showMeshes}
-                showWireframes={showWireframes}
-                doubleSided={doubleSided}
+                  doubleSided={doubleSided}
               />
             ))}
           </AutoRotateGroup>
@@ -311,7 +297,6 @@ export function Brain3DViewer({
 }) {
   const [controls, setControls] = useState<TissueControls>(defaultTissueControls)
   const [showMeshes, setShowMeshes] = useState(true)
-  const [showWireframes, setShowWireframes] = useState(true)
   const [doubleSided, setDoubleSided] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
   const [transform, setTransform] = useState<ViewerTransform>(defaultTransform)
@@ -335,11 +320,10 @@ export function Brain3DViewer({
 
   const visibleCount = items.filter((item) => {
     const tissueControl = controls[item.tissue]
-    return tissueControl.visible && (item.mode === 'mesh' ? showMeshes : showWireframes)
+    return tissueControl.visible && showMeshes
   }).length
 
   const hasMeshes = items.some((item) => item.mode === 'mesh')
-  const hasWireframes = items.some((item) => item.mode === 'wireframe')
   const showLayerControls = controlMode === 'full'
 
   return (
@@ -363,10 +347,6 @@ export function Brain3DViewer({
               <label className="checkbox-row">
                 <input type="checkbox" checked={showMeshes} disabled={!hasMeshes} onChange={(event) => setShowMeshes(event.target.checked)} />
                 Meshes
-              </label>
-              <label className="checkbox-row">
-                <input type="checkbox" checked={showWireframes} disabled={!hasWireframes} onChange={(event) => setShowWireframes(event.target.checked)} />
-                Wireframes
               </label>
               <label className="checkbox-row">
                 <input type="checkbox" checked={doubleSided} onChange={(event) => setDoubleSided(event.target.checked)} />
@@ -503,7 +483,6 @@ export function Brain3DViewer({
               controls={controls}
               transform={transform}
               showMeshes={showMeshes}
-              showWireframes={showWireframes}
               doubleSided={doubleSided}
               autoRotate={autoRotate}
               resetSignal={resetSignal}

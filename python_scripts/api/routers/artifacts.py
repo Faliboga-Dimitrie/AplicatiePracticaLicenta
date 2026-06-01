@@ -23,7 +23,7 @@ def list_case_artifacts(
     List frontend-safe artifact references for one authorized MRI case.
 
     React should call this after preprocessing/mesh jobs complete. The response
-    contains URLs for meshes, wireframes, metrics and useful NIfTI
+    contains URLs for meshes, metrics and useful NIfTI
     outputs, but it does not expose local filesystem paths.
     """
     result = artifacts.list_for_case(current_user, case_id)
@@ -43,7 +43,7 @@ def list_case_viewer_artifacts(
     """List only artifacts needed by the interactive 3D viewer.
 
     This endpoint intentionally omits NIfTI preprocessing outputs.
-    It returns GLB meshes, GLB wireframes and metrics JSON metadata references,
+    It returns GLB meshes and metrics JSON metadata references,
     so the viewer page does not preflight/download large irrelevant files.
     """
     result = artifacts.list_viewer_for_case(current_user, case_id)

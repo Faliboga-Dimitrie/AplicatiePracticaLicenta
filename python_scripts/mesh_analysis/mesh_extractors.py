@@ -21,14 +21,10 @@ class MarchingCubesConfig:
 
     level is the probability threshold used on the PVE maps.
     solid_step_size controls the exported/metric mesh detail.
-    wireframe_step_size can be larger to produce lighter wireframe GLBs.
-    Set wireframe_step_size=None to disable the separate wireframe source meshes.
     """
 
     level: float = 0.5
     solid_step_size: int = 1
-    wireframe_step_size: int | None = 3
-    create_wireframe_source: bool = True
 
 
 class MarchingCubesMeshExtractor:
@@ -50,18 +46,7 @@ class MarchingCubesMeshExtractor:
             label_suffix="",
         )
 
-        wireframe_source: TissueMeshes | None = None
-        if self.config.wireframe_step_size is not None and self.config.create_wireframe_source:
-            wireframe_source = self._extract_tissue_meshes(
-                pve_paths=pve_paths,
-                step_size=self.config.wireframe_step_size,
-                label_suffix=" wireframe",
-            )
-
-        return MeshAnalysisMeshes(
-            solid=solid,
-            wireframe_source=wireframe_source,
-        )
+        return MeshAnalysisMeshes(solid=solid)
 
     def _extract_tissue_meshes(
         self,

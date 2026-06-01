@@ -107,7 +107,7 @@ class MeshAnalysisPipeline:
             print(f"volume computation: {t1 - t0:.3f}s")
             print(f"mesh build: {t2 - t1:.3f}s")
             print(f"surface area computation: {t3 - t2:.3f}s")
-            print(f"mesh/wireframe export: {t4 - t3:.3f}s")
+            print(f"mesh export: {t4 - t3:.3f}s")
 
         return result
 
@@ -121,11 +121,7 @@ class MeshAnalysisPipeline:
         if not partial_outputs_exist:
             return None
 
-        full_outputs_exist = (
-            self.workspace.has_complete_mesh_analysis_outputs
-            if self._wireframes_expected()
-            else self.workspace.has_complete_mesh_outputs
-        )
+        full_outputs_exist = self.workspace.has_complete_mesh_analysis_outputs
 
         if full_outputs_exist:
             if self.settings.skip_existing:
@@ -156,11 +152,6 @@ class MeshAnalysisPipeline:
             if path.exists():
                 path.unlink()
 
-    def _wireframes_expected(self) -> bool:
-        config = getattr(self.mesh_extractor, "config", None)
-        if config is None:
-            return True
-        return bool(getattr(config, "create_wireframe_source", True)) and getattr(config, "wireframe_step_size", None) is not None
 
     def _load_existing_result(self) -> MeshAnalysisResult:
         metrics_path = self.workspace.mesh_metrics_json_path
@@ -199,8 +190,6 @@ class MeshAnalysisPipeline:
         payload = result.to_dict()
         payload["mesh_paths"] = _stringify_paths(export_result.mesh_paths)
 
-        if export_result.wireframe_paths is not None:
-            payload["wireframe_paths"] = _stringify_paths(export_result.wireframe_paths)
 
         self.workspace.mesh_metrics_json_path.parent.mkdir(parents=True, exist_ok=True)
         with self.workspace.mesh_metrics_json_path.open("w", encoding="utf-8") as f:

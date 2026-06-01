@@ -30,7 +30,7 @@ function toCaseEditorState(mriCase: MriCase): CaseEditorState {
 }
 
 function readinessLabel(mriCase: MriCase): string {
-  if (mriCase.capabilities.has_meshes || mriCase.capabilities.has_wireframes) {
+  if (mriCase.capabilities.has_meshes) {
     return 'meshes ready'
   }
   if (mriCase.capabilities.has_fast_pve_outputs) {
@@ -54,7 +54,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
     return {
       raw: cases.filter((mriCase) => mriCase.capabilities.raw_uploaded).length,
       fast: cases.filter((mriCase) => mriCase.capabilities.has_fast_pve_outputs).length,
-      mesh: cases.filter((mriCase) => mriCase.capabilities.has_meshes || mriCase.capabilities.has_wireframes).length,
+      mesh: cases.filter((mriCase) => mriCase.capabilities.has_meshes).length,
     }
   }, [cases])
 
@@ -195,7 +195,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
                   <span className="status-pill">{readinessLabel(mriCase)}</span>
                   <span>Raw: {mriCase.capabilities.raw_uploaded ? 'yes' : 'no'}</span>
                   <span>FAST: {mriCase.capabilities.has_fast_pve_outputs ? 'yes' : 'no'}</span>
-                  <span>Mesh: {mriCase.capabilities.has_meshes || mriCase.capabilities.has_wireframes ? 'yes' : 'no'}</span>
+                  <span>Mesh: {mriCase.capabilities.has_meshes ? 'yes' : 'no'}</span>
                 </div>
 
                 {mriCase.notes && <p>{mriCase.notes}</p>}

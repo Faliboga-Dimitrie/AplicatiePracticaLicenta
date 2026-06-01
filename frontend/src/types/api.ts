@@ -52,7 +52,6 @@ export type CaseCapabilities = {
   has_fast_outputs?: boolean
   has_fast_pve_outputs?: boolean
   has_meshes?: boolean
-  has_wireframes?: boolean
   has_metrics?: boolean
   can_start_preprocessing?: boolean
   can_start_mesh_analysis?: boolean
@@ -181,7 +180,6 @@ export type EvolutionDateEntry = {
   ready_for_visual: boolean
   has_metrics: boolean
   has_meshes: boolean
-  has_wireframes: boolean
 }
 
 export type EvolutionDatesResponse = {

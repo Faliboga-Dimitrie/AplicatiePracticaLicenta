@@ -1,7 +1,7 @@
 from ..project_core import MeshAnalysisResult, TissueSurfaces, TissueSurfaces, TissueVolumes
 from .exporters import GlbExportConfig, GlbMeshExporter
 from .mesh_extractors import MarchingCubesConfig, MarchingCubesMeshExtractor
-from .models import MeshAnalysisMeshes, TissueMeshes, TissueWireframes
+from .models import MeshAnalysisMeshes, TissueMeshes
 from .evolution_in_time import (
     EvolutionCaseMetrics,
     EvolutionMriArtifacts,
@@ -18,7 +18,6 @@ __all__ = [
     "TissueSurfaces",
     "MeshAnalysisResult",
     "TissueMeshes",
-    "TissueWireframes",
     "MeshAnalysisMeshes",
     "EvolutionCaseMetrics",
     "EvolutionMriArtifacts",

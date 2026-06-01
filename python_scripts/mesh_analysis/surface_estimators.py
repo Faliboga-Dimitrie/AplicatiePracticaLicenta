@@ -10,8 +10,8 @@ class TrimeshSurfaceEstimator:
     """
     SurfaceEstimator implementation using triangle meshes.
 
-    The estimator accepts the current MeshAnalysisMeshes bundle but computes the
-    metric only from the solid meshes, not from the simplified wireframe source.
+    The estimator accepts the current MeshAnalysisMeshes bundle and computes
+    surface metrics from the exported solid meshes.
     """
 
     def compute(self, meshes: MeshAnalysisMeshes) -> TissueSurfaces:

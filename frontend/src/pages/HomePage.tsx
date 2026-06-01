@@ -9,7 +9,7 @@ type HomePageProps = {
 const upcomingModules = [
   {
     title: '3D tissue viewer',
-    description: 'Interactive GLB inspection for grey matter, white matter, CSF meshes and wireframes.',
+    description: 'Interactive GLB inspection for grey matter, white matter and CSF meshes.',
   },
   {
     title: 'Statistics dashboard',
@@ -24,7 +24,7 @@ const upcomingModules = [
 const pipelineSteps = [
   'Upload or reuse a T1-weighted NIfTI MRI',
   'Run reorientation, skull stripping and FAST segmentation',
-  'Generate GLB meshes, wireframes and tissue metrics',
+  'Generate GLB meshes and tissue metrics',
   'Download artifacts or inspect them in future visual modules',
 ]
 

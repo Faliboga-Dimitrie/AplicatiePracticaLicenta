@@ -114,7 +114,6 @@ class PublicProcessingService:
         payload["upload_filename"] = upload_filename
         payload["files"] = {
             "meshes": {tissue: f"meshes/{path.name}" for tissue, path in workspace.mesh_paths.items()},
-            "wireframes": {tissue: f"wireframes/{path.name}" for tissue, path in workspace.wireframe_paths.items()},
         }
 
         buffer = io.BytesIO()
@@ -124,8 +123,6 @@ class PublicProcessingService:
             for tissue, path in workspace.mesh_paths.items():
                 self._write_existing_file(archive, path, f"meshes/{path.name}")
 
-            for tissue, path in workspace.wireframe_paths.items():
-                self._write_existing_file(archive, path, f"wireframes/{path.name}")
 
             # Keep these optional but useful for debugging/scientific inspection.
             # They are PVE probability maps, not required by the UI viewer.
@@ -135,8 +132,7 @@ class PublicProcessingService:
             archive.writestr(
                 "README.txt",
                 "Anonymous Brain MRI Processing output.\n"
-                "meshes/ contains solid GLB files.\n"
-                "wireframes/ contains wireframe GLB files.\n"
+                "meshes/ contains GLB files.\n"
                 "metrics.json contains volume and surface-area values.\n"
                 "pve/ contains FAST probability maps used to create the meshes.\n",
             )
