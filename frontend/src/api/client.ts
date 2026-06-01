@@ -4,7 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000
 const ACCESS_TOKEN_KEY = 'mri_access_token'
 const ACCESS_TOKEN_EXPIRY_KEY = 'mri_access_token_expires_at'
 
-export class ApiError extends Error {
+class ApiError extends Error {
   status: number
   code: string
   details?: unknown
@@ -22,10 +22,6 @@ export function getStoredAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY)
 }
 
-export function getStoredAccessTokenExpiry(): string | null {
-  return localStorage.getItem(ACCESS_TOKEN_EXPIRY_KEY)
-}
-
 export function storeAccessToken(accessToken: string, expiresAt: string): void {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
   localStorage.setItem(ACCESS_TOKEN_EXPIRY_KEY, expiresAt)
@@ -34,10 +30,6 @@ export function storeAccessToken(accessToken: string, expiresAt: string): void {
 export function clearAccessToken(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
   localStorage.removeItem(ACCESS_TOKEN_EXPIRY_KEY)
-}
-
-export function getApiBaseUrl(): string {
-  return API_BASE_URL
 }
 
 type ApiRequestOptions = {

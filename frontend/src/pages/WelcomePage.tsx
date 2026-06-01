@@ -6,9 +6,6 @@ import { useAuth } from '../auth/useAuth'
 import { Brain3DViewer } from '../components/Brain3DViewer'
 import type { BrainViewerItem } from '../components/Brain3DViewer'
 
-type WelcomePageProps = {
-  onRegistered?: () => void
-}
 
 function downloadBlob(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob)
@@ -21,7 +18,7 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(objectUrl)
 }
 
-export function WelcomePage(_props: WelcomePageProps) {
+export function WelcomePage() {
   const { login, register, authError, clearAuthError } = useAuth()
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')

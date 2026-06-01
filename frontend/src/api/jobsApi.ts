@@ -1,11 +1,6 @@
 import { apiRequest } from './client'
 import type { Job } from '../types/api'
 
-export function listJobs(caseId?: number): Promise<Job[]> {
-  const query = caseId === undefined ? '' : `?case_id=${caseId}`
-  return apiRequest<Job[]>(`/jobs${query}`)
-}
-
 export function getJob(jobId: string): Promise<Job> {
   return apiRequest<Job>(`/jobs/${encodeURIComponent(jobId)}`)
 }

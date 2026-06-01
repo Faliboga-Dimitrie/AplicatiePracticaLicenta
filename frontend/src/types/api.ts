@@ -22,7 +22,7 @@ export type ApiErrorPayload = {
   }
 }
 
-export type Subject = {
+type Subject = {
   id: string
   name: string | null
   age: number | null
@@ -35,7 +35,7 @@ export type AuthorizedSubject = Subject & {
   cases?: MriCase[] | null
 }
 
-export type CaseWorkspaceState = {
+type CaseWorkspaceState = {
   case_id?: string | null
   subject_id?: string | null
   acquisition_date?: string | null
@@ -45,7 +45,7 @@ export type CaseWorkspaceState = {
   outputs?: Record<string, boolean>
 }
 
-export type CaseCapabilities = {
+type CaseCapabilities = {
   raw_uploaded?: boolean
   has_reoriented?: boolean
   has_skull_stripped?: boolean
@@ -90,7 +90,7 @@ export type UpdateCaseInput = {
   status?: string | null
 }
 
-export type JobStatus =
+type JobStatus =
   | 'queued'
   | 'running'
   | 'completed'
@@ -133,7 +133,7 @@ export type CaseArtifacts = {
   artifacts: Artifact[]
 }
 
-export type MutationResponse<TName extends string, TPayload> = {
+type MutationResponse<TName extends string, TPayload> = {
   [Key in TName]: boolean
 } & TPayload
 
@@ -145,16 +145,6 @@ export type UpdatedSubjectResponse = MutationResponse<'updated', { subject: Subj
 export type DeletedSubjectResponse = { deleted: boolean; subject_id: string }
 
 export type TissueKey = 'csf' | 'gm' | 'wm'
-
-export type CaseMetricValues = {
-  csf_mm3?: number
-  gm_mm3?: number
-  wm_mm3?: number
-  csf_mm2?: number
-  gm_mm2?: number
-  wm_mm2?: number
-  [key: string]: number | undefined
-}
 
 export type CaseMetricsResponse = {
   case_id: number
@@ -186,7 +176,7 @@ export type EvolutionDatesResponse = {
   dates: EvolutionDateEntry[]
 }
 
-export type EvolutionMetricComparison = {
+type EvolutionMetricComparison = {
   value: number
   baseline_value: number
   absolute_change_from_baseline: number
@@ -198,7 +188,7 @@ export type EvolutionMetricComparison = {
   change_from_previous_percent: number | null
 }
 
-export type EvolutionPoint = {
+type EvolutionPoint = {
   index: number
   acquisition_date: string
   is_baseline: boolean
@@ -208,7 +198,7 @@ export type EvolutionPoint = {
   surfaces_mm2: Record<TissueKey, EvolutionMetricComparison>
 }
 
-export type BasicStats = {
+type BasicStats = {
   count: number
   min: number | null
   max: number | null

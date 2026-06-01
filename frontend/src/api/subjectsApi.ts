@@ -13,10 +13,6 @@ export function listSubjects(): Promise<AuthorizedSubject[]> {
   return apiRequest<AuthorizedSubject[]>('/subjects')
 }
 
-export function getSubject(subjectId: string): Promise<AuthorizedSubject> {
-  return apiRequest<AuthorizedSubject>(`/subjects/${encodeURIComponent(subjectId)}`)
-}
-
 export function createSubject(input: CreateSubjectInput): Promise<CreatedSubjectResponse> {
   return apiRequest<CreatedSubjectResponse>('/subjects', {
     method: 'POST',

@@ -2,8 +2,6 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import type { ReactNode } from 'react'
 import type { Job } from '../types/api'
 
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
-
 type JobsByCase = Record<number, Job>
 
 type JobActivityContextValue = {
@@ -18,10 +16,6 @@ const JobActivityContext = createContext<JobActivityContextValue | null>(null)
 
 function isTrackableCaseJob(job: Job): job is Job & { case_id: number } {
   return typeof job.case_id === 'number'
-}
-
-export function isTerminalJobStatus(status: string): boolean {
-  return TERMINAL_STATUSES.has(status)
 }
 
 export function JobActivityProvider({ children }: { children: ReactNode }) {
