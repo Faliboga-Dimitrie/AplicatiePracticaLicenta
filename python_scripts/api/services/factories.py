@@ -49,17 +49,28 @@ def build_default_mesh_analysis_service(
     # scientific mesh stack is touched. The concrete pipeline is only needed
     # when FastAPI builds the mesh-analysis dependency.
     from ...mesh_analysis.exporters import GlbMeshExporter
-    from ...mesh_analysis.mesh_extractors import MarchingCubesMeshExtractor
+    from ...mesh_analysis.mesh_extractors import MarchingCubesConfig, MarchingCubesMeshExtractor
     from ...mesh_analysis.pipeline import MeshAnalysisPipeline
     from ...mesh_analysis.surface_estimators import TrimeshSurfaceEstimator
     from ...mesh_analysis.volume_estimators import PveSumVolumeEstimator
 
-    def pipeline_factory(workspace: Any) -> MeshAnalysisPipeline:
+    def pipeline_factory(workspace: Any, *, mesh_config_options: dict[str, Any] | None = None) -> MeshAnalysisPipeline:
+        mesh_config_options = mesh_config_options or {}
+        create_wireframe_source = bool(mesh_config_options.get("create_wireframe_source", True))
+        raw_wireframe_step_size = mesh_config_options.get("wireframe_step_size", 3)
+        wireframe_step_size = None if not create_wireframe_source else int(raw_wireframe_step_size or 3)
         return MeshAnalysisPipeline(
             workspace=workspace,
             settings=settings_obj,
             volume_estimator=PveSumVolumeEstimator(),
-            mesh_extractor=MarchingCubesMeshExtractor(),
+            mesh_extractor=MarchingCubesMeshExtractor(
+                MarchingCubesConfig(
+                    level=0.5,
+                    solid_step_size=1,
+                    wireframe_step_size=wireframe_step_size,
+                    create_wireframe_source=create_wireframe_source,
+                )
+            ),
             surface_estimator=TrimeshSurfaceEstimator(),
             mesh_exporter=GlbMeshExporter(),
             log_timings=False,

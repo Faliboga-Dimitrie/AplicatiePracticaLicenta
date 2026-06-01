@@ -22,8 +22,17 @@ export function startPreprocessingJob(caseId: number): Promise<Job> {
   })
 }
 
-export function startMeshAnalysisJob(caseId: number): Promise<Job> {
+export type MeshAnalysisJobOptions = {
+  createWireframeSource?: boolean
+  wireframeStepSize?: number | null
+}
+
+export function startMeshAnalysisJob(caseId: number, options: MeshAnalysisJobOptions = {}): Promise<Job> {
   return apiRequest<Job>(`/processing/cases/${caseId}/mesh-analysis-jobs`, {
     method: 'POST',
+    body: {
+      create_wireframe_source: options.createWireframeSource ?? true,
+      wireframe_step_size: options.createWireframeSource === false ? null : options.wireframeStepSize ?? 3,
+    },
   })
 }

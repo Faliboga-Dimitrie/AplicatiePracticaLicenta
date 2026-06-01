@@ -121,8 +121,11 @@ class MeshAnalysisPipeline:
         if not partial_outputs_exist:
             return None
 
-        full_outputs_exist = self.workspace.has_complete_mesh_analysis_outputs
-
+        full_outputs_exist = (
+            self.workspace.has_complete_mesh_analysis_outputs
+            if self._wireframes_expected()
+            else self.workspace.has_complete_mesh_outputs
+        )
 
         if full_outputs_exist:
             if self.settings.skip_existing:
@@ -152,6 +155,12 @@ class MeshAnalysisPipeline:
         for path in self.workspace.mesh_analysis_output_paths:
             if path.exists():
                 path.unlink()
+
+    def _wireframes_expected(self) -> bool:
+        config = getattr(self.mesh_extractor, "config", None)
+        if config is None:
+            return True
+        return bool(getattr(config, "create_wireframe_source", True)) and getattr(config, "wireframe_step_size", None) is not None
 
     def _load_existing_result(self) -> MeshAnalysisResult:
         metrics_path = self.workspace.mesh_metrics_json_path

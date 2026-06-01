@@ -46,7 +46,7 @@ class MeshAnalysisService:
         cases: CaseService,
         jobs: JobService,
         workspace_provider: WorkspaceProvider,
-        pipeline_factory: Callable[[Any], Any],
+        pipeline_factory: Callable[..., Any],
         artifacts: ArtifactService,
         settings_obj: Settings = project_settings,
     ):
@@ -61,6 +61,9 @@ class MeshAnalysisService:
         self,
         user: UserRecord,
         case_id: int,
+        *,
+        create_wireframe_source: bool = True,
+        wireframe_step_size: int | None = 3,
     ) -> DbResult[JobRecord]:
         """
         Authorize and enqueue mesh analysis for one MRI case.
@@ -100,6 +103,13 @@ class MeshAnalysisService:
                 f"Missing files: {missing}"
             )
 
+        mesh_config_options = {
+            "create_wireframe_source": bool(create_wireframe_source),
+            "wireframe_step_size": None if not create_wireframe_source else wireframe_step_size,
+        }
+        if mesh_config_options["wireframe_step_size"] is not None and int(mesh_config_options["wireframe_step_size"]) < 1:
+            return DbResult.fail("wireframe_step_size must be at least 1 when wireframe export is enabled.")
+
         queued = self.cases.set_status_for_user(
             user,
             case_id,
@@ -117,11 +127,13 @@ class MeshAnalysisService:
             metadata={
                 "subject_id": case.subject_id,
                 "acquisition_date": case.acquisition_date.isoformat(),
+                "marching_cubes": mesh_config_options,
             },
             handler=lambda context: self._run_mesh_analysis_job(
                 user=user,
                 case_id=case.id,
                 context=context,
+                mesh_config_options=mesh_config_options,
             ),
         )
 
@@ -131,6 +143,7 @@ class MeshAnalysisService:
         user: UserRecord,
         case_id: int,
         context: JobContext,
+        mesh_config_options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         try:
             require_not_cancelled(context, "Mesh-analysis job was cancelled.")
@@ -181,7 +194,7 @@ class MeshAnalysisService:
 
             require_not_cancelled(context, "Mesh-analysis job was cancelled.")
             context.checkpoint("Computing volumes, surfaces and GLB meshes...", progress=35)
-            pipeline = self.pipeline_factory(workspace)
+            pipeline = self.pipeline_factory(workspace, mesh_config_options=mesh_config_options or {})
             result = pipeline.run()
 
             require_not_cancelled(context, "Mesh-analysis job was cancelled.")

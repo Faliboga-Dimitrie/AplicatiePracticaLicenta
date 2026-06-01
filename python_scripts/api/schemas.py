@@ -133,6 +133,13 @@ class UpdateMriCaseRequest(BaseModel):
 # jobs
 # -----------------------------------------------------------------------------
 
+
+
+class MeshAnalysisJobRequest(BaseModel):
+    create_wireframe_source: bool = True
+    wireframe_step_size: int | None = Field(default=3, ge=1)
+
+
 class JobResponse(BaseModel):
     id: str
     type: str

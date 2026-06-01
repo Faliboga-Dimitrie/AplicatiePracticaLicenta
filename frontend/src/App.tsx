@@ -18,9 +18,9 @@ type ViewState =
   | { name: 'subjects' }
   | { name: 'subjectCases'; subjectId: string }
   | { name: 'caseDetail'; subjectId: string; caseId: number }
-  | { name: 'caseViewer'; subjectId: string; caseId: number }
-  | { name: 'statistics'; subjectId: string; caseId: number }
-  | { name: 'timeComparison'; subjectId: string }
+  | { name: 'caseViewer'; subjectId?: string; caseId?: number }
+  | { name: 'statistics'; subjectId?: string; caseId?: number }
+  | { name: 'timeComparison'; subjectId?: string }
   | { name: 'settings' }
 
 type RecentCase = {
@@ -140,27 +140,24 @@ function AppContent() {
           <button
             type="button"
             className={view.name === 'caseViewer' ? 'active' : ''}
-            disabled={!recentCase}
-            onClick={() => recentCase && openCaseViewer(recentCase.subjectId, recentCase.caseId)}
-            title={recentCase ? 'Open latest 3D viewer' : 'Open a case with meshes first'}
+            onClick={() => recentCase ? openCaseViewer(recentCase.subjectId, recentCase.caseId) : setView({ name: 'caseViewer' })}
+            title={recentCase ? 'Open latest 3D viewer' : 'Choose a subject and case for 3D viewing'}
           >
             <span>3D view</span>
           </button>
           <button
             type="button"
             className={view.name === 'statistics' ? 'active' : ''}
-            disabled={!recentCase}
-            onClick={() => recentCase && openStatistics(recentCase.subjectId, recentCase.caseId)}
-            title={recentCase ? 'Open statistics for latest case' : 'Open a metric-ready case first'}
+            onClick={() => recentCase ? openStatistics(recentCase.subjectId, recentCase.caseId) : setView({ name: 'statistics' })}
+            title={recentCase ? 'Open statistics for latest case' : 'Choose a subject and metric-ready case'}
           >
             <span>Statistics</span>
           </button>
           <button
             type="button"
             className={view.name === 'timeComparison' ? 'active' : ''}
-            disabled={!recentSubjectId}
-            onClick={() => recentSubjectId && openTimeComparison(recentSubjectId)}
-            title={recentSubjectId ? 'Compare metric-ready dates for latest subject' : 'Open a subject first'}
+            onClick={() => recentSubjectId ? openTimeComparison(recentSubjectId) : setView({ name: 'timeComparison' })}
+            title={recentSubjectId ? 'Compare metric-ready dates for latest subject' : 'Choose a subject for time comparison'}
           >
             <span>Time comparison</span>
           </button>
@@ -224,23 +221,25 @@ function AppContent() {
 
         {view.name === 'caseViewer' && (
           <Case3DViewerPage
+            subjectId={view.subjectId}
             caseId={view.caseId}
-            onBack={() => openCaseDetail(view.subjectId, view.caseId)}
+            onBack={() => view.subjectId && view.caseId ? openCaseDetail(view.subjectId, view.caseId) : setView({ name: 'home' })}
           />
         )}
 
         {view.name === 'statistics' && (
           <StatisticsPage
+            subjectId={view.subjectId}
             caseId={view.caseId}
-            onBack={() => openCaseDetail(view.subjectId, view.caseId)}
-            onOpenViewer={() => openCaseViewer(view.subjectId, view.caseId)}
+            onBack={() => view.subjectId && view.caseId ? openCaseDetail(view.subjectId, view.caseId) : setView({ name: 'home' })}
+            onOpenViewer={(subjectId, caseId) => subjectId && caseId && openCaseViewer(subjectId, caseId)}
           />
         )}
 
         {view.name === 'timeComparison' && (
           <TimeComparisonPage
             subjectId={view.subjectId}
-            onBack={() => setView({ name: 'subjectCases', subjectId: view.subjectId })}
+            onBack={() => view.subjectId ? setView({ name: 'subjectCases', subjectId: view.subjectId }) : setView({ name: 'home' })}
           />
         )}
 

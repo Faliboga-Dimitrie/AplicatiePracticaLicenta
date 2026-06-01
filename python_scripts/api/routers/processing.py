@@ -10,7 +10,7 @@ from ..dependencies import (
     get_statistics_service,
 )
 from ..errors import raise_api_error, unwrap_result
-from ..schemas import JobResponse
+from ..schemas import JobResponse, MeshAnalysisJobRequest
 from ..serialization import job_to_dict
 from ..services import MeshAnalysisService, PreprocessingService, StatisticsService
 
@@ -44,6 +44,7 @@ def start_preprocessing_job(
 @router.post("/cases/{case_id}/mesh-analysis-jobs", response_model=JobResponse)
 def start_mesh_analysis_job(
     case_id: int,
+    request: MeshAnalysisJobRequest | None = None,
     current_user: UserRecord = Depends(get_current_user),
     mesh_analysis: MeshAnalysisService = Depends(get_mesh_analysis_service),
 ):
@@ -54,7 +55,12 @@ def start_mesh_analysis_job(
     is completed, the result contains metrics and frontend-safe artifact URLs
     for the generated GLB files/metrics JSON.
     """
-    result = mesh_analysis.start_for_case(current_user, case_id)
+    result = mesh_analysis.start_for_case(
+        current_user,
+        case_id,
+        create_wireframe_source=True if request is None else request.create_wireframe_source,
+        wireframe_step_size=3 if request is None else request.wireframe_step_size,
+    )
     if not result.success and result.error == mesh_analysis.ACTIVE_JOB_MESSAGE:
         raise_api_error(409, result.error, code="ACTIVE_JOB_EXISTS")
 
@@ -95,6 +101,7 @@ def mesh_case_legacy_path(
     """
     return start_mesh_analysis_job(
         case_id=case_id,
+        request=MeshAnalysisJobRequest(),
         current_user=current_user,
         mesh_analysis=mesh_analysis,
     )
