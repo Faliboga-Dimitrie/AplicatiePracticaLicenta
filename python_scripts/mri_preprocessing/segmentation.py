@@ -10,7 +10,6 @@ from ..project_core.domain import MRICase
 from ..project_core.ports import SegmentationResult
 from ..project_core.workspace import CaseWorkspace
 from .input_checks import OrientationStatus, check_input_orientation
-from .qc import maybe_save_fast_qc
 
 
 class FslFastSegmentationBackend:
@@ -41,7 +40,6 @@ class FslFastSegmentationBackend:
             acquisition_date=workspace.acquisition_date,
             raw_path=workspace.raw_path,
         )
-        maybe_save_fast_qc(case, workspace, self.settings)
 
         return self._result_from_workspace(workspace)
 

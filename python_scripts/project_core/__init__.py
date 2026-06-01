@@ -44,7 +44,6 @@ from .ports import (
     MeshExtractor,
     SurfaceEstimator,
     MeshExporter,
-    QualityControlGenerator,
 )
 
 from .common import build_prepared_case_paths, run_pipeline_cli
@@ -92,7 +91,6 @@ __all__ = [
     "MeshExtractor",
     "SurfaceEstimator",
     "MeshExporter",
-    "QualityControlGenerator",
     # CLI helpers
     "build_prepared_case_paths",
     "run_pipeline_cli",

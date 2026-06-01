@@ -56,7 +56,6 @@ class ProjectCaseWorkspaceGateway:
             Path(self.settings.reoriented_dir) / subject_id,
             Path(self.settings.hd_bet_dir) / subject_id,
             Path(self.settings.fast_dir) / subject_id,
-            Path(self.settings.qc_dir) / subject_id,
             Path(self.settings.mesh_dir) / subject_id,
         ]
 

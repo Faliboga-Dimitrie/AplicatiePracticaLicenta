@@ -54,7 +54,6 @@ export type CaseCapabilities = {
   has_meshes?: boolean
   has_wireframes?: boolean
   has_metrics?: boolean
-  has_qc_images?: boolean
   can_start_preprocessing?: boolean
   can_start_mesh_analysis?: boolean
   can_view_artifacts?: boolean

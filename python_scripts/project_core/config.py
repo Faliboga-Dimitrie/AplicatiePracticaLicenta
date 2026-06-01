@@ -12,7 +12,6 @@ class Settings:
     reoriented_dir: Path
     hd_bet_dir: Path
     fast_dir: Path
-    qc_dir: Path
     mesh_dir: Path
 
     # --- shell script paths ---
@@ -35,9 +34,6 @@ class Settings:
     hd_bet_verbose: bool = True
     hd_bet_executable: str | None = None
 
-    # --- QC parameters ---
-    generate_qc: bool = True
-    fail_on_qc_error: bool = False
 
 
 def build_settings() -> Settings:
@@ -59,7 +55,6 @@ def build_settings() -> Settings:
         reoriented_dir=processed_mri_dir / "reoriented",
         hd_bet_dir=processed_mri_dir / "hd_bet",
         fast_dir=processed_mri_dir / "fast",
-        qc_dir=processed_mri_dir / "qc",
         mesh_dir=processed_mri_dir / "meshes",
 
         reorient_script=shell_scripts_dir / "t1_preprocessing" / "docker_reorient.ps1",
@@ -82,7 +77,6 @@ def ensure_main_directories(settings: Settings) -> None:
         settings.reoriented_dir,
         settings.hd_bet_dir,
         settings.fast_dir,
-        settings.qc_dir,
         settings.mni_template_dir,
         settings.mesh_dir,
     ]:

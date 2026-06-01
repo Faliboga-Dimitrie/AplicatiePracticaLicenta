@@ -100,7 +100,6 @@ class CaseWorkspace:
         processed_mri/reoriented/<subject>/<date>/...
         processed_mri/hd_bet/<subject>/<date>/...
         processed_mri/fast/<subject>/<date>/...
-        processed_mri/qc/<subject>/<date>/...
         processed_mri/meshes/<subject>/<date>/...
 
     CaseWorkspace intentionally handles both creation and deletion of those
@@ -116,7 +115,6 @@ class CaseWorkspace:
     reoriented_dir: Path
     hd_bet_dir: Path
     fast_dir: Path
-    qc_dir: Path
     mesh_dir: Path
 
     @property
@@ -134,7 +132,6 @@ class CaseWorkspace:
             self.reoriented_dir,
             self.hd_bet_dir,
             self.fast_dir,
-            self.qc_dir,
             self.mesh_dir,
         ]
 
@@ -252,9 +249,6 @@ class CaseWorkspace:
         random file in fast_dir. That keeps accidental extra logs/debug files safe.
         """
         return self.delete_files(self.fast_output_paths)
-
-    def delete_qc_outputs(self) -> list[Path]:
-        return self.delete_files(self.qc_paths.values())
 
     def delete_mesh_analysis_outputs(self) -> list[Path]:
         return self.delete_files(self.mesh_analysis_output_paths)
@@ -408,34 +402,6 @@ class CaseWorkspace:
     @property
     def missing_fast_pve_paths(self) -> list[Path]:
         return [path for path in self.fast_pve_paths.values() if not path.exists()]
-
-    # ------------------------------------------------------------------
-    # QC
-    # ------------------------------------------------------------------
-
-    @property
-    def qc_reorientation_png(self) -> Path:
-        return self.qc_dir / f"{self.subject_id}_reorientation_qc.png"
-
-    @property
-    def qc_bet_png(self) -> Path:
-        return self.qc_dir / f"{self.subject_id}_bet_qc.png"
-
-    @property
-    def qc_fast_png(self) -> Path:
-        return self.qc_dir / f"{self.subject_id}_fast_qc.png"
-
-    @property
-    def qc_paths(self) -> dict[str, Path]:
-        return {
-            "reorientation": self.qc_reorientation_png,
-            "hd_bet": self.qc_bet_png,
-            "fast": self.qc_fast_png,
-        }
-
-    @property
-    def existing_qc_paths(self) -> dict[str, Path]:
-        return {name: path for name, path in self.qc_paths.items() if path.exists()}
 
     # ------------------------------------------------------------------
     # meshes / wireframes / metrics
@@ -611,7 +577,6 @@ def build_case_workspace(case: MRICase, settings: Settings) -> CaseWorkspace:
         reoriented_dir=_case_dir(Path(settings.reoriented_dir), case),
         hd_bet_dir=_case_dir(Path(settings.hd_bet_dir), case),
         fast_dir=_case_dir(Path(settings.fast_dir), case),
-        qc_dir=_case_dir(Path(settings.qc_dir), case),
         mesh_dir=_case_dir(Path(settings.mesh_dir), case),
     )
 

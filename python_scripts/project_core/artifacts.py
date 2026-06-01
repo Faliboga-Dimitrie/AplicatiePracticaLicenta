@@ -23,7 +23,6 @@ class ArtifactKind(str, Enum):
     MESH = "mesh"
     WIREFRAME = "wireframe"
     METRICS = "metrics"
-    QC_IMAGE = "qc_image"
     NIFTI = "nifti"
     LOG = "log"
     OTHER = "other"

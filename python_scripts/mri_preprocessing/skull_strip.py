@@ -11,7 +11,6 @@ from ..project_core.config import Settings
 from ..project_core.domain import MRICase, strip_nii_suffix
 from ..project_core.ports import SkullStripResult
 from ..project_core.workspace import CaseWorkspace
-from .qc import maybe_save_bet_qc
 
 
 class HdBetSkullStripBackend:
@@ -84,7 +83,6 @@ class HdBetSkullStripBackend:
             acquisition_date=workspace.acquisition_date,
             raw_path=workspace.raw_path,
         )
-        maybe_save_bet_qc(case, workspace, self.settings)
 
         return SkullStripResult(
             image_path=output_path,

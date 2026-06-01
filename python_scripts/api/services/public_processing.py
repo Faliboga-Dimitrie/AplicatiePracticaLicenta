@@ -97,11 +97,9 @@ class PublicProcessingService:
             reoriented_dir=processed_root / "reoriented",
             hd_bet_dir=processed_root / "hd_bet",
             fast_dir=processed_root / "fast",
-            qc_dir=processed_root / "qc",
             mesh_dir=processed_root / "meshes",
             overwrite=True,
             skip_existing=False,
-            generate_qc=False,
         )
 
     def _zip_public_outputs(

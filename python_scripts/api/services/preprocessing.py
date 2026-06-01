@@ -260,7 +260,6 @@ class PreprocessingService:
                 "skull_stripped": skull_strip.image_path.exists(),
                 "segmentation": segmentation.seg_path.exists(),
                 "fast_pve_outputs": all(path.exists() for path in segmentation.pve_paths.values()),
-                "qc_images": bool(workspace.existing_qc_paths),
             },
         }
 

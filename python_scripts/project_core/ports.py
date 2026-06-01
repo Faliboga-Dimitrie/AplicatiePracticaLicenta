@@ -165,18 +165,6 @@ class MeshExporter(Protocol, Generic[MeshCollectionT_contra]):
         ...
 
 
-class QualityControlGenerator(Protocol):
-    """
-    Generates optional QC artifacts for a processed case.
-
-    This is intentionally separate from the main processing stages so QC can be
-    disabled, replaced, or allowed to fail without changing scientific metrics.
-    """
-
-    def generate(self, case: MRICase, workspace: CaseWorkspace) -> Mapping[str, Path]:
-        ...
-
-
 # -----------------------------------------------------------------------------
 # Optional API/static artifact helper
 # -----------------------------------------------------------------------------
@@ -261,7 +249,6 @@ __all__ = [
     "MeshExtractor",
     "SurfaceEstimator",
     "MeshExporter",
-    "QualityControlGenerator",
     "ArtifactStore",
     "WorkspaceGateway",
 ]

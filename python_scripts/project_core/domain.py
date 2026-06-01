@@ -305,7 +305,7 @@ class CaseProcessingResult:
     High-level result returned by the future application pipeline/API layer.
 
     This can carry final artifact references that a CLI/API/frontend needs to
-    access meshes, QC images, metrics JSON, or other outputs.
+    access meshes, metrics JSON, or other outputs.
     """
 
     subject_id: str

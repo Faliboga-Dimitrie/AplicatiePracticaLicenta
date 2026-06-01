@@ -9,7 +9,6 @@ from ..project_core.domain import MRICase
 from ..project_core.ports import ReorientationResult
 from ..project_core.workspace import CaseWorkspace
 from .input_checks import OrientationStatus, check_input_orientation
-from .qc import maybe_save_reorientation_qc
 
 
 class FslReorientationBackend:
@@ -41,7 +40,6 @@ class FslReorientationBackend:
 
         if orientation.status == OrientationStatus.ALREADY_STANDARD:
             self._copy_to_reoriented(workspace.raw_path, output_path)
-            maybe_save_reorientation_qc(case, workspace, self.settings)
             return ReorientationResult(
                 output_path=output_path,
                 already_standard=True,
@@ -54,7 +52,6 @@ class FslReorientationBackend:
             )
             self._require_output(output_path)
             self._check_output_is_standard(case, workspace)
-            maybe_save_reorientation_qc(case, workspace, self.settings)
             return ReorientationResult(
                 output_path=output_path,
                 already_standard=False,

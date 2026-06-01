@@ -106,7 +106,7 @@ class ArtifactService:
         The normal artifact endpoint intentionally lists everything useful for
         download/debugging. The viewer should be narrower: GLB meshes, GLB
         wireframes and the metrics JSON reference. This avoids React considering
-        QC images or NIfTI files when opening the WebGL page.
+        NIfTI preprocessing files when opening the WebGL page.
         """
         bundle_result = self.list_for_case(user, case_id)
         if not bundle_result.success:
@@ -198,17 +198,6 @@ class ArtifactService:
             )
         )
 
-        # QC images are useful for a React results/debug page when generated.
-        for qc_name, path in workspace.qc_paths.items():
-            artifacts.append(
-                self._known_file(
-                    case_id=case.id,
-                    name=f"qc_{qc_name}.png",
-                    kind=ArtifactKind.QC_IMAGE,
-                    path=path,
-                    metadata={"stage": qc_name},
-                )
-            )
 
         # Preprocessing outputs are not the main browser display target, but they
         # are useful for debugging/downloads and make the artifact list complete.

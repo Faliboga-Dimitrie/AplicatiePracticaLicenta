@@ -34,7 +34,6 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
             "reoriented": workspace.reoriented_dir.exists(),
             "hd_bet": workspace.hd_bet_dir.exists(),
             "fast": workspace.fast_dir.exists(),
-            "qc": workspace.qc_dir.exists(),
             "mesh": workspace.mesh_dir.exists(),
         },
         "outputs": {
@@ -81,7 +80,6 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
     has_any_mesh_outputs = bool(getattr(workspace, "has_any_mesh_outputs", False))
     has_any_wireframe_outputs = bool(getattr(workspace, "has_any_wireframe_outputs", False))
     has_metrics = workspace.metrics_json_path.exists()
-    has_qc_images = bool(getattr(workspace, "existing_qc_paths", {}))
     can_view_artifacts = any([
         raw_exists,
         workspace.reoriented_path.exists(),
@@ -90,7 +88,6 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
         has_any_mesh_outputs,
         has_any_wireframe_outputs,
         has_metrics,
-        has_qc_images,
     ])
 
     return {
@@ -102,7 +99,6 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
         "has_meshes": has_any_mesh_outputs,
         "has_wireframes": has_any_wireframe_outputs,
         "has_metrics": has_metrics,
-        "has_qc_images": has_qc_images,
         "can_start_preprocessing": raw_exists and not is_busy,
         "can_start_mesh_analysis": has_fast_pve_outputs and not is_busy,
         "can_view_artifacts": can_view_artifacts,
