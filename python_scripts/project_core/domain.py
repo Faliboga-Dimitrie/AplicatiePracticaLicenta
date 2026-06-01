@@ -267,7 +267,7 @@ class CaseMetrics:
 @dataclass(frozen=True)
 class MeshAnalysisResult:
     """
-    Current mesh-analysis result shape used by the existing CLI/pipeline.
+    Current mesh-analysis result shape used by the web/API processing flow.
 
     acquisition_date is optional to keep older deserialization paths tolerant,
     but new code should fill it from CaseWorkspace.
@@ -304,7 +304,7 @@ class CaseProcessingResult:
     """
     High-level result returned by the future application pipeline/API layer.
 
-    This can carry final artifact references that a CLI/API/frontend needs to
+    This can carry final artifact references that the API/frontend needs to
     access meshes, metrics JSON, or other outputs.
     """
 

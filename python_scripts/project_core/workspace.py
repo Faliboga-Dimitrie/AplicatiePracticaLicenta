@@ -450,7 +450,7 @@ class FileSystemWorkspaceProvider:
     Small convenience factory for CaseWorkspace.
 
     It is not meant as a long-term storage abstraction. It simply keeps creation
-    and deletion calls short for CLI/API code while CaseWorkspace owns the real
+    and deletion calls short for API/service code while CaseWorkspace owns the real
     filesystem behavior.
     """
 

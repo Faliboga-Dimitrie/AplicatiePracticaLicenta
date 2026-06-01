@@ -17,7 +17,7 @@ from ...mri_preprocessing.skull_strip import HdBetSkullStripBackend
 from ...mri_preprocessing.segmentation import FslFastSegmentationBackend
 from ...mesh_analysis.exporters import GlbMeshExporter
 from ...mesh_analysis.mesh_extractors import MarchingCubesMeshExtractor
-from ...mesh_analysis.pipeline import MeshAnalysisPipeline
+from ...mesh_analysis.analysis import MeshAnalysisPipeline
 from ...mesh_analysis.surface_estimators import TrimeshSurfaceEstimator
 from ...mesh_analysis.volume_estimators import PveSumVolumeEstimator
 

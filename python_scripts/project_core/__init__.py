@@ -8,14 +8,12 @@ from .domain import (
     MRICase,
     TissueVolumes,
     TissueSurfaces,
-    TissueSurfaces,
     CaseMetrics,
     MeshAnalysisResult,
     CaseProcessingResult,
 )
 
 from .workspace import (
-    CaseWorkspace,
     CaseWorkspace,
     FileSystemWorkspaceProvider,
     build_case_workspace,
@@ -46,7 +44,6 @@ from .ports import (
     MeshExporter,
 )
 
-from .common import build_prepared_case_paths, run_pipeline_cli
 
 __all__ = [
     # config
@@ -61,7 +58,6 @@ __all__ = [
     "strip_nii_suffix",
     "MRICase",
     "TissueVolumes",
-    "TissueSurfaces",
     "TissueSurfaces",
     "CaseMetrics",
     "MeshAnalysisResult",
@@ -91,7 +87,4 @@ __all__ = [
     "MeshExtractor",
     "SurfaceEstimator",
     "MeshExporter",
-    # CLI helpers
-    "build_prepared_case_paths",
-    "run_pipeline_cli",
 ]

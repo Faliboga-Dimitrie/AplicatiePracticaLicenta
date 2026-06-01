@@ -50,7 +50,7 @@ def build_default_mesh_analysis_service(
     # when FastAPI builds the mesh-analysis dependency.
     from ...mesh_analysis.exporters import GlbMeshExporter
     from ...mesh_analysis.mesh_extractors import MarchingCubesConfig, MarchingCubesMeshExtractor
-    from ...mesh_analysis.pipeline import MeshAnalysisPipeline
+    from ...mesh_analysis.analysis import MeshAnalysisPipeline
     from ...mesh_analysis.surface_estimators import TrimeshSurfaceEstimator
     from ...mesh_analysis.volume_estimators import PveSumVolumeEstimator
 

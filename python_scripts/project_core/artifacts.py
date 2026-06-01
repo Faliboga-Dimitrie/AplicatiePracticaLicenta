@@ -33,7 +33,7 @@ class ArtifactRef:
     Reference to a final/published artifact.
 
     `uri` may be:
-        - a local filesystem path for CLI use,
+        - a local filesystem path for backend/internal use,
         - a static URL path for FastAPI/frontend use,
         - a database/blob-storage URI in a future implementation.
     """

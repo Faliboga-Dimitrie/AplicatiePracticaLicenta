@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
@@ -12,16 +11,11 @@ from ..project_core import (
     MeshExportResult,
     MeshExporter as MeshExporterPort,
     MeshExtractor as MeshExtractorPort,
-    MRICase,
     Settings,
     SurfaceEstimator as SurfaceEstimatorPort,
     TissueSurfaces,
     TissueVolumes,
     VolumeEstimator as VolumeEstimatorPort,
-    build_prepared_case_paths,
-    ensure_main_directories,
-    run_pipeline_cli,
-    settings,
 )
 
 from .exporters import GlbMeshExporter
@@ -31,27 +25,14 @@ from .surface_estimators import TrimeshSurfaceEstimator
 from .volume_estimators import PveSumVolumeEstimator
 
 
-@dataclass
-class CaseRunResult:
-    subject_id: str
-    success: bool
-    result: MeshAnalysisResult | None = None
-    error: str | None = None
-
-
 class MeshAnalysisPipeline:
     """
     Mesh-analysis orchestration for one MRI case.
 
-    This class now coordinates strategy interfaces instead of hardcoding the
-    algorithms directly. The default strategies still use your current approach:
-    - PVE sum volume estimation
-    - skimage marching cubes
-    - mesh triangle surface area
-    - trimesh GLB export
-
-    The important change is that the pipeline depends on protocols, so a future
-    implementation can replace one strategy without modifying this class.
+    The class coordinates injectable strategy interfaces instead of hardcoding
+    the algorithms directly. The default strategies use the current approach:
+    PVE-sum volume estimation, skimage marching cubes, trimesh surface area,
+    and GLB export.
     """
 
     def __init__(
@@ -111,10 +92,6 @@ class MeshAnalysisPipeline:
 
         return result
 
-    # -------------------------------------------------------------------------
-    # existing-output policy
-    # -------------------------------------------------------------------------
-
     def _handle_existing_outputs(self) -> MeshAnalysisResult | None:
         partial_outputs_exist = self.workspace.has_any_mesh_analysis_outputs
 
@@ -152,7 +129,6 @@ class MeshAnalysisPipeline:
             if path.exists():
                 path.unlink()
 
-
     def _load_existing_result(self) -> MeshAnalysisResult:
         metrics_path = self.workspace.mesh_metrics_json_path
 
@@ -165,10 +141,6 @@ class MeshAnalysisPipeline:
             surfaces=TissueSurfaces.from_mapping(payload["surfaces"]),
         )
 
-    # -------------------------------------------------------------------------
-    # validation
-    # -------------------------------------------------------------------------
-
     def _validate_inputs(self) -> None:
         missing = self.workspace.missing_fast_pve_paths
         if missing:
@@ -178,10 +150,6 @@ class MeshAnalysisPipeline:
                 f"{missing_str}"
             )
 
-    # -------------------------------------------------------------------------
-    # metrics export
-    # -------------------------------------------------------------------------
-
     def _write_metrics_json(
         self,
         result: MeshAnalysisResult,
@@ -189,7 +157,6 @@ class MeshAnalysisPipeline:
     ) -> None:
         payload = result.to_dict()
         payload["mesh_paths"] = _stringify_paths(export_result.mesh_paths)
-
 
         self.workspace.mesh_metrics_json_path.parent.mkdir(parents=True, exist_ok=True)
         with self.workspace.mesh_metrics_json_path.open("w", encoding="utf-8") as f:
@@ -200,67 +167,4 @@ def _stringify_paths(paths: Mapping[str, Path]) -> dict[str, str]:
     return {name: str(path) for name, path in paths.items()}
 
 
-def _preflight_checks(settings_obj: Settings) -> None:
-    ensure_main_directories(settings_obj)
-
-
-def _process_case(case: MRICase, settings_obj: Settings) -> CaseRunResult:
-    workspace = build_prepared_case_paths(case, settings_obj)
-
-    try:
-        pipeline = MeshAnalysisPipeline(workspace, settings_obj)
-        result = pipeline.run()
-
-        return CaseRunResult(
-            subject_id=case.subject_id,
-            success=True,
-            result=result,
-        )
-
-    except Exception as exc:
-        return CaseRunResult(
-            subject_id=case.subject_id,
-            success=False,
-            error=str(exc),
-        )
-
-
-def _print_summary(case: CaseRunResult) -> bool:
-    print("\n" + "#" * 80)
-    print("MESH ANALYSIS SUMMARY")
-    print("#" * 80)
-
-    ok: bool = case.success and case.result is not None
-
-    if ok:
-        print(f"[OK] {case.subject_id}")
-        print(f"     volumes : {case.result.volumes.to_dict()}")
-        print(f"     surfaces: {case.result.surfaces.to_dict()}")
-    else:
-        print(f"[FAIL] {case.subject_id}")
-        print(f"       error: {case.error}")
-
-    print("-" * 80)
-    return ok
-
-
-def main() -> int:
-    return run_pipeline_cli(
-        description="Run the mesh-analysis pipeline: PVE volumes -> meshes -> metrics",
-        settings_obj=settings,
-        preflight_checks=_preflight_checks,
-        process_case=_process_case,
-        print_summary=_print_summary,
-        case_header_title="Mesh analysis for case",
-    )
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
-__all__ = [
-    "CaseRunResult",
-    "MeshAnalysisPipeline",
-    "main",
-]
+__all__ = ["MeshAnalysisPipeline"]
