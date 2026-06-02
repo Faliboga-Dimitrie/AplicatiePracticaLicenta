@@ -62,16 +62,6 @@ def _move_tree(source: Path, target: Path, *, overwrite: bool = False) -> bool:
     return True
 
 
-def _remove_file(path: Path) -> bool:
-    """Remove one file if it exists. Return True when something was removed."""
-    if not path.exists():
-        return False
-    if not path.is_file():
-        raise ValueError(f"Expected file path, got non-file path: {path}")
-    path.unlink()
-    return True
-
-
 def _prune_empty_parent(path: Path) -> None:
     """
     Remove the direct parent folder when it became empty.
@@ -270,14 +260,6 @@ class CaseWorkspace:
     def skull_stripped_path(self) -> Path:
         return self.hd_bet_dir / f"{self.subject_id}_bet.nii.gz"
 
-    @property
-    def skull_stripped_mask_path(self) -> Path:
-        return self.hd_bet_dir / f"{self.subject_id}_bet_mask.nii.gz"
-
-    @property
-    def hd_bet_output_paths(self) -> list[Path]:
-        return [self.skull_stripped_path, self.skull_stripped_mask_path]
-
     # ------------------------------------------------------------------
     # FAST
     # ------------------------------------------------------------------
@@ -443,6 +425,33 @@ class FileSystemWorkspaceProvider:
             include_input=include_input,
             prune_empty_subject_dirs=prune_empty_subject_dirs,
         )
+
+    def delete_subject_workspaces(self, subject_id: str) -> list[Path]:
+        """
+        Delete every local workspace directory owned by one subject.
+
+        This removes the subject folder under each configured stage root, for
+        example input_mri/<subject>/ and processed_mri/fast/<subject>/. It is
+        intentionally implemented at provider level because it spans multiple
+        CaseWorkspace instances/acquisition dates.
+
+        Returns the subject directories that were actually removed.
+        """
+        safe_subject_id = _safe_case_segment(subject_id)
+        subject_dirs = [
+            Path(self.settings.input_mri_dir) / safe_subject_id,
+            Path(self.settings.reoriented_dir) / safe_subject_id,
+            Path(self.settings.hd_bet_dir) / safe_subject_id,
+            Path(self.settings.fast_dir) / safe_subject_id,
+            Path(self.settings.mesh_dir) / safe_subject_id,
+        ]
+
+        removed: list[Path] = []
+        for directory in subject_dirs:
+            if _remove_tree(directory):
+                removed.append(directory)
+
+        return removed
 
 
 def build_case_workspace(case: MRICase, settings: Settings) -> CaseWorkspace:

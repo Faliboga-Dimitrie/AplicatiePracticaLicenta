@@ -13,7 +13,6 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
     raw_exists = workspace.raw_path.exists()
     reoriented_exists = workspace.reoriented_path.exists()
     skull_stripped_exists = workspace.skull_stripped_path.exists()
-    skull_mask_exists = workspace.skull_stripped_mask_path.exists()
     fast_pve_outputs_exist = bool(getattr(workspace, "has_fast_pve_outputs", False))
     metrics_exists = workspace.metrics_json_path.exists()
     any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_outputs", False))
@@ -35,7 +34,6 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
         "outputs": {
             "reoriented": reoriented_exists,
             "skull_stripped": skull_stripped_exists,
-            "skull_stripped_mask": skull_mask_exists,
             "fast_pve_outputs": fast_pve_outputs_exist,
             "metrics_json": metrics_exists,
             "any_mesh_outputs": any_mesh_outputs_exist,

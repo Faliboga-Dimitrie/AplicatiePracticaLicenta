@@ -184,7 +184,6 @@ class ArtifactService:
         preprocessing_outputs: list[tuple[str, Path, dict[str, Any]]] = [
             ("reoriented.nii.gz", workspace.reoriented_path, {"stage": "reorientation"}),
             ("skull_stripped.nii.gz", workspace.skull_stripped_path, {"stage": "hd_bet"}),
-            ("skull_stripped_mask.nii.gz", workspace.skull_stripped_mask_path, {"stage": "hd_bet", "mask": True}),
         ]
         for tissue, path in workspace.fast_pve_paths.items():
             preprocessing_outputs.append(

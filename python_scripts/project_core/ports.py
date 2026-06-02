@@ -33,7 +33,6 @@ class SkullStripResult:
     """Result produced by a skull-stripping backend."""
 
     image_path: Path
-    mask_path: Path | None = None
 
 
 @dataclass(frozen=True)

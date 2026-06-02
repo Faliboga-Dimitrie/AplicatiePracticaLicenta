@@ -1,25 +1,35 @@
 from __future__ import annotations
 
-import shutil
 from datetime import date
 from pathlib import Path
-from typing import Any
 
-from ..project_core import Settings
-from ..project_core import MRICase, FileSystemWorkspaceProvider, build_case_workspace
+from ..project_core import (
+    CaseWorkspace,
+    FileSystemWorkspaceProvider,
+    MRICase,
+    Settings,
+    build_case_workspace,
+)
 from ..project_core.ports import WorkspaceGateway
+
 
 class ProjectCaseWorkspaceGateway:
     """
-    Adapter from access_control to your existing project_core workspace.
+    Adapter from access_control to the project_core filesystem workspace.
 
-    It supports both import styles:
-    - package style:     from python_scripts.access_control import ...
-    - top-level style:   from access_control import ...
+    The access-control layer owns database metadata and permission decisions.
+    CaseWorkspace/FileSystemWorkspaceProvider own the actual filesystem layout
+    and destructive workspace operations.
     """
 
     def __init__(self, settings: Settings):
         self.settings = settings
+
+    def _provider(self, *, create_directories: bool = False) -> FileSystemWorkspaceProvider:
+        return FileSystemWorkspaceProvider(
+            self.settings,
+            create_directories=create_directories,
+        )
 
     def create_case_workspace(
         self,
@@ -27,7 +37,7 @@ class ProjectCaseWorkspaceGateway:
         subject_id: str,
         acquisition_date: date,
         source_raw_path: Path | None = None,
-    ) -> Any:
+    ) -> CaseWorkspace:
         if source_raw_path is None:
             raise ValueError("source_raw_path is required to create a CaseWorkspace input file.")
 
@@ -36,38 +46,23 @@ class ProjectCaseWorkspaceGateway:
             acquisition_date=acquisition_date.isoformat(),
             raw_path=Path(source_raw_path),
         )
-        provider = FileSystemWorkspaceProvider(self.settings)
-        return provider.create_workspace(case)
+        return self._provider(create_directories=True).create_workspace(case)
 
-    def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> None:
+    def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> list[Path]:
         placeholder_raw = Path("__deleted_case_placeholder__.nii.gz")
         case = MRICase(
             subject_id=subject_id,
             acquisition_date=acquisition_date.isoformat(),
             raw_path=placeholder_raw,
         )
-        workspace = build_case_workspace(case, self.settings)
+        return self._provider().delete_workspace(
+            case,
+            include_input=True,
+            prune_empty_subject_dirs=True,
+        )
 
-        for directory in workspace.stage_dirs:
-            if directory.exists():
-                shutil.rmtree(directory)
-
-    def delete_subject_workspaces(self, *, subject_id: str) -> None:
-        subject_dirs = [
-            Path(self.settings.input_mri_dir) / subject_id,
-            Path(self.settings.reoriented_dir) / subject_id,
-            Path(self.settings.hd_bet_dir) / subject_id,
-            Path(self.settings.fast_dir) / subject_id,
-            Path(self.settings.mesh_dir) / subject_id,
-        ]
-
-        for directory in subject_dirs:
-            if directory.exists():
-                shutil.rmtree(directory)
-
-    def _safe_case_segment(self, value: str) -> str:
-        """Mirror project_core workspace path segment safety for lookups."""
-        return value.replace("/", "_").replace("\\", "_").strip()
+    def delete_subject_workspaces(self, *, subject_id: str) -> list[Path]:
+        return self._provider().delete_subject_workspaces(subject_id)
 
     def _find_existing_raw_input(self, *, subject_id: str, acquisition_date: date) -> Path | None:
         """Return the first staged raw NIfTI file for this case, if one exists.
@@ -78,11 +73,13 @@ class ProjectCaseWorkspaceGateway:
         the staged input file, workspace.raw_path would point to a placeholder
         name and raw_uploaded would incorrectly become false after refresh.
         """
-        input_dir = (
-            Path(self.settings.input_mri_dir)
-            / self._safe_case_segment(subject_id)
-            / self._safe_case_segment(acquisition_date.isoformat())
+        lookup_case = MRICase(
+            subject_id=subject_id,
+            acquisition_date=acquisition_date.isoformat(),
+            raw_path=Path("__lookup_case_placeholder__.nii.gz"),
         )
+        input_dir = build_case_workspace(lookup_case, self.settings).input_mri_dir
+
         if not input_dir.exists() or not input_dir.is_dir():
             return None
 
@@ -95,7 +92,7 @@ class ProjectCaseWorkspaceGateway:
 
         return None
 
-    def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
+    def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> CaseWorkspace:
         raw_path = self._find_existing_raw_input(
             subject_id=subject_id,
             acquisition_date=acquisition_date,
@@ -106,8 +103,8 @@ class ProjectCaseWorkspaceGateway:
             acquisition_date=acquisition_date.isoformat(),
             raw_path=raw_path,
         )
-        return build_case_workspace(case, self.settings)
-    
+        return self._provider().get_workspace(case)
+
     def rename_case_workspace(
         self,
         *,
@@ -115,7 +112,7 @@ class ProjectCaseWorkspaceGateway:
         old_acquisition_date: date,
         new_acquisition_date: date,
         overwrite: bool = False,
-    ) -> Any:
+    ) -> list[tuple[Path, Path]]:
         placeholder_raw = Path("__renamed_case_placeholder__.nii.gz")
 
         old_case = MRICase(
@@ -130,17 +127,12 @@ class ProjectCaseWorkspaceGateway:
             raw_path=placeholder_raw,
         )
 
-        provider = FileSystemWorkspaceProvider(
-            self.settings,
-            create_directories=False,
-        )
-
-        return provider.rename_workspace(
+        return self._provider().rename_workspace(
             old_case,
             new_case,
             overwrite=overwrite,
             prune_empty_subject_dirs=True,
         )
-    
+
 
 __all__ = ["ProjectCaseWorkspaceGateway", "WorkspaceGateway"]
