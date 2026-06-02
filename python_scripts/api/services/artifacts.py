@@ -48,8 +48,8 @@ class ArtifactService:
     Web-facing artifact service.
 
     Only final user-facing outputs are published: GLB 3D models and JSON metrics.
-    Intermediate NIfTI/PVE/debug files can still exist on disk for the processing
-    pipeline, but they are not listed or downloadable through the API.
+    Processing intermediates can still exist on disk for the scientific pipeline,
+    but they are never treated as downloadable artifacts by this service.
 
     React sees stable URLs like:
 
@@ -110,7 +110,7 @@ class ArtifactService:
         viewer_artifacts = tuple(
             artifact
             for artifact in bundle_result.data.artifacts
-            if artifact.ref.kind in {ArtifactKind.MESH, ArtifactKind.METRICS}
+            if self._is_public_artifact_name(artifact.ref.name)
         )
 
         return DbResult.ok(
@@ -202,7 +202,7 @@ class ArtifactService:
             for path in sorted(workspace.mesh_dir.iterdir(), key=lambda item: item.name.lower()):
                 if not path.is_file():
                     continue
-                kind = self._downloadable_kind(path)
+                kind = self._artifact_kind_for_path(path)
                 if kind is None:
                     continue
                 add_if_present(
@@ -233,7 +233,7 @@ class ArtifactService:
         if not path.exists() or not path.is_file():
             return None
 
-        if self._downloadable_kind(path) is None:
+        if not self._is_public_artifact_path(path):
             return None
 
         stat = path.stat()
@@ -283,7 +283,14 @@ class ArtifactService:
     def _artifact_url(self, case_id: int, artifact_name: str) -> str:
         return f"/cases/{case_id}/artifacts/{quote(artifact_name, safe='')}"
 
-    def _downloadable_kind(self, path: Path) -> ArtifactKind | None:
+    def _is_public_artifact_name(self, name: str) -> bool:
+        lower = name.lower()
+        return lower.endswith(".glb") or lower.endswith(".json")
+
+    def _is_public_artifact_path(self, path: Path) -> bool:
+        return path.exists() and path.is_file() and self._is_public_artifact_name(path.name)
+
+    def _artifact_kind_for_path(self, path: Path) -> ArtifactKind | None:
         lower = path.name.lower()
         if lower.endswith(".glb"):
             return ArtifactKind.MESH
@@ -310,11 +317,6 @@ class ArtifactService:
         path = Path(preferred)
         stem = path.stem
         suffix = path.suffix
-        # Keep .nii.gz handling harmless even though NIfTI files are no longer public.
-        if preferred.lower().endswith(".nii.gz"):
-            stem = preferred[:-7]
-            suffix = ".nii.gz"
-
         index = 2
         while True:
             candidate = f"{stem}_{index}{suffix}"

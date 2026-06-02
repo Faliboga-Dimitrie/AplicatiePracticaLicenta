@@ -5,31 +5,22 @@ from enum import Enum
 from pathlib import Path
 from typing import Mapping
 
-class ArtifactKind(str, Enum):
-    """
-    Public categories for files/results produced by the pipeline.
 
-    These values are API/JSON-friendly and intentionally broader than concrete
-    implementation details. For example, a mesh can be produced by marching
-    cubes today and by another extractor later while still being a MESH artifact.
-    """
+class ArtifactKind(str, Enum):
+    """Downloadable artifact categories exposed by the API."""
 
     MESH = "mesh"
     METRICS = "metrics"
-    NIFTI = "nifti"
-    LOG = "log"
-    OTHER = "other"
 
 
 @dataclass(frozen=True)
 class ArtifactRef:
     """
-    Reference to a final/published artifact.
+    Reference to a final downloadable result.
 
-    `uri` may be:
-        - a local filesystem path for backend/internal use,
-        - a static URL path for FastAPI/frontend use,
-        - a database/blob-storage URI in a future implementation.
+    The application exposes only two artifact file types:
+    - GLB 3D models (`ArtifactKind.MESH`)
+    - JSON measurement payloads (`ArtifactKind.METRICS`)
     """
 
     name: str
@@ -71,6 +62,7 @@ class ArtifactRef:
             metadata=dict(metadata or {}),
         )
 
+
 def normalize_artifact_kind(kind: ArtifactKind | str) -> ArtifactKind:
     if isinstance(kind, ArtifactKind):
         return kind
@@ -78,33 +70,25 @@ def normalize_artifact_kind(kind: ArtifactKind | str) -> ArtifactKind:
     value = kind.strip().lower()
     try:
         return ArtifactKind(value)
-    except ValueError:
-        return ArtifactKind.OTHER
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in ArtifactKind)
+        raise ValueError(f"Unsupported downloadable artifact kind '{kind}'. Expected one of: {allowed}.") from exc
 
 
-def guess_mime_type(path: Path, kind: ArtifactKind | str = ArtifactKind.OTHER) -> str | None:
-    """
-    Small explicit MIME map for the artifacts this project produces most often.
-    """
-    normalized_kind = normalize_artifact_kind(kind)
+def guess_mime_type(path: Path, kind: ArtifactKind | str | None = None) -> str | None:
+    """Return MIME type only for published GLB/JSON artifacts."""
+    if kind is not None:
+        normalize_artifact_kind(kind)
+
     name = path.name.lower()
 
     if name.endswith(".glb"):
         return "model/gltf-binary"
-    if name.endswith(".gltf"):
-        return "model/gltf+json"
-    if name.endswith(".json") or normalized_kind == ArtifactKind.METRICS:
+    if name.endswith(".json"):
         return "application/json"
-    if name.endswith(".png"):
-        return "image/png"
-    if name.endswith(".jpg") or name.endswith(".jpeg"):
-        return "image/jpeg"
-    if name.endswith(".nii") or name.endswith(".nii.gz"):
-        return "application/octet-stream"
-    if name.endswith(".txt") or normalized_kind == ArtifactKind.LOG:
-        return "text/plain"
 
     return None
+
 
 __all__ = [
     "ArtifactKind",

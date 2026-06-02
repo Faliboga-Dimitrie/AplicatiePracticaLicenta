@@ -13,23 +13,24 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function isPublishedResult(artifact: Artifact): boolean {
+  const lower = artifact.name.toLowerCase()
+  return lower.endsWith('.glb') || lower.endsWith('.json')
+}
+
 function friendlyArtifactName(artifact: Artifact): string {
   const lower = artifact.name.toLowerCase()
-  if (lower.endsWith('.glb')) {
-    if (lower.includes('gm') || lower.includes('gray')) return 'Grey matter 3D model'
-    if (lower.includes('wm') || lower.includes('white')) return 'White matter 3D model'
-    if (lower.includes('csf')) return 'CSF 3D model'
-    return '3D model'
-  }
   if (lower.endsWith('.json')) return 'Measurement data'
-  return artifact.name
+  if (lower.includes('gm') || lower.includes('gray')) return 'Grey matter 3D model'
+  if (lower.includes('wm') || lower.includes('white')) return 'White matter 3D model'
+  if (lower.includes('csf')) return 'CSF 3D model'
+  return '3D model'
 }
 
 function friendlyArtifactDescription(artifact: Artifact): string {
   const lower = artifact.name.toLowerCase()
-  if (lower.endsWith('.glb')) return `3D file · ${formatBytes(artifact.size_bytes)}`
   if (lower.endsWith('.json')) return `Structured measurement data · ${formatBytes(artifact.size_bytes)}`
-  return `${artifact.name} · ${formatBytes(artifact.size_bytes)}`
+  return `3D file · ${formatBytes(artifact.size_bytes)}`
 }
 
 export function ArtifactList({ artifacts }: ArtifactListProps) {
@@ -48,12 +49,9 @@ export function ArtifactList({ artifacts }: ArtifactListProps) {
     }
   }
 
-  const downloadableArtifacts = artifacts.filter((artifact) => {
-    const lower = artifact.name.toLowerCase()
-    return lower.endsWith('.glb') || lower.endsWith('.json')
-  })
+  const resultFiles = artifacts.filter(isPublishedResult)
 
-  if (downloadableArtifacts.length === 0) {
+  if (resultFiles.length === 0) {
     return <p className="muted">No result files are available yet. Create the 3D model and measurements first.</p>
   }
 
@@ -61,7 +59,7 @@ export function ArtifactList({ artifacts }: ArtifactListProps) {
     <div className="stack">
       {error && <p className="error-text">{error}</p>}
       <div className="table-like download-list">
-        {downloadableArtifacts.map((artifact) => (
+        {resultFiles.map((artifact) => (
           <div className="table-row" key={`${artifact.kind}-${artifact.name}`}>
             <div>
               <strong>{friendlyArtifactName(artifact)}</strong>

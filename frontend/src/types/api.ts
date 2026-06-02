@@ -115,11 +115,13 @@ export type Job = {
   cancel_requested: boolean
 }
 
+export type ArtifactKind = 'mesh' | 'metrics'
+
 export type Artifact = {
   name: string
-  kind: string
+  kind: ArtifactKind
   url: string
-  mime_type: string | null
+  mime_type: 'model/gltf-binary' | 'application/json' | null
   size_bytes: number
   metadata: Record<string, unknown>
 }

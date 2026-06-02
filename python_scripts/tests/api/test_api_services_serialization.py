@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import io
 from pathlib import Path
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -24,6 +26,7 @@ from python_scripts.api.serialization import (
 from python_scripts.api.services.artifacts import ArtifactFile, ArtifactService, CaseArtifactBundle
 from python_scripts.api.services.cases import CaseService
 from python_scripts.api.services.jobs import JobRecord, JobStatus
+from python_scripts.api.services.public_processing import PublicProcessingService
 from python_scripts.api.services.subjects import SubjectService
 from python_scripts.api.services.statistics import StatisticsService
 from python_scripts.project_core.artifacts import ArtifactKind, ArtifactRef
@@ -262,6 +265,9 @@ def test_artifact_service_lists_only_existing_artifacts_and_filters_viewer_files
     workspace.mesh_path_for("csf").write_bytes(b"glb")
     workspace.metrics_json_path.write_text("{}")
     workspace.reoriented_path.write_text("reo")
+    (workspace.mesh_dir / "debug.csv").write_text("debug")
+    (workspace.mesh_dir / "notes.txt").write_text("debug")
+    (workspace.mesh_dir / "old_pve_0.nii.gz").write_text("debug")
     case = MriCaseRecord(5, workspace.subject_id, date.fromisoformat(workspace.acquisition_date), None, "completed", workspace)
     cases = Mock()
     cases.get_for_user.return_value = DbResult.ok(case)
@@ -281,6 +287,9 @@ def test_artifact_service_lists_only_existing_artifacts_and_filters_viewer_files
     assert "csf_mesh.glb" in names
     assert "metrics.json" in names
     assert "reoriented.nii.gz" not in names
+    assert "debug.csv" not in names
+    assert "notes.txt" not in names
+    assert "old_pve_0.nii.gz" not in names
     assert all(a.ref.name.lower().endswith((".glb", ".json")) for a in bundle.data.artifacts)
     assert all(a.ref.kind in {ArtifactKind.MESH, ArtifactKind.METRICS} for a in viewer.data.artifacts)
     assert file_result.data.ref.name == "metrics.json"
@@ -305,6 +314,37 @@ def test_artifact_service_builds_workspace_when_case_has_no_workspace(workspace)
     provider.get_workspace.assert_called_once()
     assert result.data.case_key == workspace.case_id
 
+
+
+def test_public_processing_zip_contains_only_glb_and_json(workspace):
+    # Arrange
+    workspace.ensure_directories()
+    for path in workspace.mesh_paths.values():
+        path.write_bytes(b"glb")
+    (workspace.mesh_dir / "debug.csv").write_text("debug")
+    (workspace.fast_dir / "pve_0.nii.gz").write_text("pve")
+
+    service = PublicProcessingService()
+    result = SimpleNamespace(to_dict=lambda: {"subject_id": workspace.subject_id, "volumes": {}, "surfaces": {}})
+
+    # Act
+    zip_bytes = service._zip_public_outputs(
+        workspace=workspace,
+        result=result,
+        upload_filename="scan.nii.gz",
+    )
+
+    # Assert
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as archive:
+        names = sorted(archive.namelist())
+
+    assert names == [
+        "meshes/IXI001_csf_mesh.glb",
+        "meshes/IXI001_gm_mesh.glb",
+        "meshes/IXI001_wm_mesh.glb",
+        "metrics.json",
+    ]
+    assert all(name.endswith((".glb", ".json")) for name in names)
 
 def test_statistics_service_loads_metrics_and_date_readiness(workspace):
     # Arrange

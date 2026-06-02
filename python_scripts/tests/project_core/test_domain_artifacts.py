@@ -123,15 +123,20 @@ def test_artifact_ref_serializes_optional_fields_and_normalizes_kind(tmp_path):
     }
 
 
-def test_artifact_kind_and_mime_type_helpers_cover_common_outputs():
+def test_artifact_kind_and_mime_type_helpers_cover_only_published_outputs():
     # Arrange / Act / Assert
-    assert normalize_artifact_kind(ArtifactKind.NIFTI) is ArtifactKind.NIFTI
-    assert normalize_artifact_kind("unknown") is ArtifactKind.OTHER
+    assert normalize_artifact_kind(ArtifactKind.MESH) is ArtifactKind.MESH
+    assert normalize_artifact_kind("metrics") is ArtifactKind.METRICS
     assert guess_mime_type(Path("brain.glb")) == "model/gltf-binary"
-    assert guess_mime_type(Path("scene.gltf")) == "model/gltf+json"
     assert guess_mime_type(Path("metrics.json")) == "application/json"
-    assert guess_mime_type(Path("plot.png")) == "image/png"
-    assert guess_mime_type(Path("photo.jpeg")) == "image/jpeg"
-    assert guess_mime_type(Path("scan.nii.gz")) == "application/octet-stream"
-    assert guess_mime_type(Path("log.bin"), ArtifactKind.LOG) == "text/plain"
-    assert guess_mime_type(Path("file.unknown")) is None
+    assert guess_mime_type(Path("scene.gltf")) is None
+    assert guess_mime_type(Path("plot.png")) is None
+    assert guess_mime_type(Path("photo.jpeg")) is None
+    assert guess_mime_type(Path("scan.nii.gz")) is None
+    assert guess_mime_type(Path("log.txt")) is None
+
+    with pytest.raises(ValueError):
+        normalize_artifact_kind("nifti")
+
+    with pytest.raises(ValueError):
+        normalize_artifact_kind("unknown")
