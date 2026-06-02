@@ -3,8 +3,10 @@ import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { deleteCase, updateCase } from '../api/casesApi'
 import { listSubjectCases } from '../api/subjectsApi'
+import { CaseProgress } from '../components/CaseProgress'
 import { UploadCaseForm } from '../components/UploadCaseForm'
 import type { MriCase } from '../types/api'
+import { formatCaseName, formatDateLabel, getCaseStageLabel } from '../utils/userFacing'
 
 type SubjectCasesPageProps = {
   subjectId: string
@@ -17,7 +19,6 @@ type CaseEditorState = {
   id: number
   acquisitionDate: string
   notes: string
-  status: string
 }
 
 function toCaseEditorState(mriCase: MriCase): CaseEditorState {
@@ -25,21 +26,7 @@ function toCaseEditorState(mriCase: MriCase): CaseEditorState {
     id: mriCase.id,
     acquisitionDate: mriCase.acquisition_date,
     notes: mriCase.notes ?? '',
-    status: mriCase.status ?? '',
   }
-}
-
-function readinessLabel(mriCase: MriCase): string {
-  if (mriCase.capabilities.has_meshes) {
-    return 'meshes ready'
-  }
-  if (mriCase.capabilities.has_fast_pve_outputs) {
-    return 'segmentation ready'
-  }
-  if (mriCase.capabilities.raw_uploaded) {
-    return 'raw uploaded'
-  }
-  return 'missing raw file'
 }
 
 export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeComparison }: SubjectCasesPageProps) {
@@ -52,11 +39,16 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
 
   const readyCounts = useMemo(() => {
     return {
-      raw: cases.filter((mriCase) => mriCase.capabilities.raw_uploaded).length,
-      fast: cases.filter((mriCase) => mriCase.capabilities.has_fast_pve_outputs).length,
-      mesh: cases.filter((mriCase) => mriCase.capabilities.has_meshes).length,
+      uploaded: cases.filter((mriCase) => mriCase.capabilities.raw_uploaded).length,
+      prepared: cases.filter((mriCase) => mriCase.capabilities.has_fast_pve_outputs).length,
+      finished: cases.filter((mriCase) => mriCase.capabilities.has_metrics || mriCase.capabilities.can_view_metrics).length,
     }
   }, [cases])
+
+  const sortedCases = useMemo(
+    () => [...cases].sort((a, b) => b.acquisition_date.localeCompare(a.acquisition_date)),
+    [cases],
+  )
 
   const refreshCases = useCallback(async () => {
     setIsLoading(true)
@@ -81,9 +73,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
 
   async function handleUpdateCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!editingCase) {
-      return
-    }
+    if (!editingCase) return
 
     setIsUpdating(true)
     setError(null)
@@ -91,7 +81,6 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
       const response = await updateCase(editingCase.id, {
         acquisition_date: editingCase.acquisitionDate,
         notes: editingCase.notes.trim() || null,
-        status: editingCase.status.trim() || null,
       })
       setCases((currentCases) => currentCases.map((item) => (item.id === response.case.id ? response.case : item)))
       setEditingCase(null)
@@ -104,19 +93,15 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
 
   async function handleDeleteCase(mriCase: MriCase) {
     const confirmed = window.confirm(
-      `Delete case #${mriCase.id} from ${mriCase.acquisition_date}? This also deletes its local workspace files.`,
+      `Delete the MRI scan from ${formatDateLabel(mriCase.acquisition_date)}?`,
     )
-    if (!confirmed) {
-      return
-    }
+    if (!confirmed) return
 
     setDeletingCaseId(mriCase.id)
     setError(null)
     try {
       await deleteCase(mriCase.id)
-      if (editingCase?.id === mriCase.id) {
-        setEditingCase(null)
-      }
+      if (editingCase?.id === mriCase.id) setEditingCase(null)
       setCases((currentCases) => currentCases.filter((item) => item.id !== mriCase.id))
     } catch (deleteError) {
       setError(apiMessage(deleteError))
@@ -130,18 +115,14 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
       <section className="page-header-card">
         <div>
           <button type="button" className="link-button" onClick={onBack}>← Back to subjects</button>
-          <p className="eyebrow">Subject workspace</p>
+          <p className="eyebrow">Subject</p>
           <h1>{subjectId}</h1>
-          <p className="muted">Manage dated acquisitions, raw uploads and processing readiness for this subject.</p>
+          <p className="muted">Upload scans, follow their progress, and open completed results for this subject.</p>
         </div>
         <div className="button-row">
           {onOpenTimeComparison && (
-            <button
-              type="button"
-              onClick={onOpenTimeComparison}
-              disabled={readyCounts.mesh < 2}
-            >
-              Compare over time
+            <button type="button" onClick={onOpenTimeComparison} disabled={readyCounts.finished < 2}>
+              Compare dates
             </button>
           )}
           <button type="button" className="secondary" onClick={refreshCases} disabled={isLoading}>
@@ -152,60 +133,55 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
 
       <section className="metric-grid">
         <article className="metric-card">
-          <span>Total cases</span>
+          <span>Total scans</span>
           <strong>{cases.length}</strong>
         </article>
         <article className="metric-card">
-          <span>Raw uploaded</span>
-          <strong>{readyCounts.raw}</strong>
+          <span>Uploaded</span>
+          <strong>{readyCounts.uploaded}</strong>
         </article>
         <article className="metric-card">
-          <span>FAST ready</span>
-          <strong>{readyCounts.fast}</strong>
+          <span>Prepared</span>
+          <strong>{readyCounts.prepared}</strong>
         </article>
         <article className="metric-card">
-          <span>Mesh ready</span>
-          <strong>{readyCounts.mesh}</strong>
+          <span>Ready results</span>
+          <strong>{readyCounts.finished}</strong>
         </article>
       </section>
 
       <section className="two-column">
         <div className="stack">
           {error && <p className="error-text">{error}</p>}
-          {isLoading && <p className="muted">Loading cases...</p>}
+          {isLoading && <p className="muted">Loading MRI scans...</p>}
           {!isLoading && cases.length === 0 && (
             <article className="card empty-state">
-              <h2>No MRI cases yet</h2>
-              <p className="muted">Upload the first raw NIfTI acquisition from the form on the right.</p>
+              <h2>No MRI scans yet</h2>
+              <p className="muted">Upload the first acquisition from the form on the right.</p>
             </article>
           )}
 
           <div className="card-list">
-            {cases.map((mriCase) => (
+            {sortedCases.map((mriCase) => (
               <article className="card case-card" key={mriCase.id}>
                 <div className="row-between">
                   <div>
-                    <h2>Case #{mriCase.id}</h2>
-                    <p className="muted">Acquisition date: {mriCase.acquisition_date}</p>
+                    <h2>{formatCaseName(mriCase)}</h2>
+                    <p className="muted">Saved under subject {mriCase.subject_id}</p>
                   </div>
-                  <span className="badge">{mriCase.status || 'no status'}</span>
+                  <span className="badge">{getCaseStageLabel(mriCase)}</span>
                 </div>
 
-                <div className="readiness-row">
-                  <span className="status-pill">{readinessLabel(mriCase)}</span>
-                  <span>Raw: {mriCase.capabilities.raw_uploaded ? 'yes' : 'no'}</span>
-                  <span>FAST: {mriCase.capabilities.has_fast_pve_outputs ? 'yes' : 'no'}</span>
-                  <span>Mesh: {mriCase.capabilities.has_meshes ? 'yes' : 'no'}</span>
-                </div>
+                <CaseProgress mriCase={mriCase} compact />
 
                 {mriCase.notes && <p>{mriCase.notes}</p>}
 
                 <div className="button-row">
                   <button type="button" onClick={() => onSelectCase(mriCase.id)}>
-                    Open processing
+                    Open scan
                   </button>
                   <button type="button" className="secondary" onClick={() => setEditingCase(toCaseEditorState(mriCase))}>
-                    Edit case
+                    Edit notes/date
                   </button>
                   <button
                     type="button"
@@ -228,8 +204,8 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
             <form className="card form-grid" onSubmit={handleUpdateCase}>
               <div className="row-between">
                 <div>
-                  <p className="eyebrow">Edit case</p>
-                  <h2>Case #{editingCase.id}</h2>
+                  <p className="eyebrow">Edit scan</p>
+                  <h2>{formatDateLabel(editingCase.acquisitionDate)}</h2>
                 </div>
                 <button type="button" className="secondary" onClick={() => setEditingCase(null)}>
                   Cancel
@@ -247,30 +223,6 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
               </label>
 
               <label>
-                Status
-                <select
-                  value={editingCase.status}
-                  onChange={(event) => setEditingCase({ ...editingCase, status: event.target.value })}
-                >
-                  <option value="">No status</option>
-                  <option value="registered">registered</option>
-                  <option value="preprocessing_queued">preprocessing_queued</option>
-                  <option value="preprocessing">preprocessing</option>
-                  <option value="preprocessed">preprocessed</option>
-                  <option value="mesh_queued">mesh_queued</option>
-                  <option value="mesh_analysis">mesh_analysis</option>
-                  <option value="mesh_completed">mesh_completed</option>
-                  <option value="failed">failed</option>
-                  <option value="preprocessing_cancelled">preprocessing_cancelled</option>
-                  <option value="mesh_cancelled">mesh_cancelled</option>
-                </select>
-              </label>
-
-              <p className="muted small-note">
-                Status is usually managed by background jobs. Edit it only for correction/testing.
-              </p>
-
-              <label>
                 Notes
                 <textarea
                   value={editingCase.notes}
@@ -280,7 +232,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
               </label>
 
               <button type="submit" disabled={isUpdating}>
-                {isUpdating ? 'Saving...' : 'Save case changes'}
+                {isUpdating ? 'Saving...' : 'Save changes'}
               </button>
             </form>
           )}

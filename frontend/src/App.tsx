@@ -41,8 +41,8 @@ function AppContent() {
     return (
       <main className="page centered-page">
         <section className="card">
-          <h1>Loading session...</h1>
-          <p className="muted">Checking whether your refresh cookie can restore the session.</p>
+          <h1>Opening your workspace...</h1>
+          <p className="muted">Checking whether you are already signed in.</p>
         </section>
       </main>
     )
@@ -106,7 +106,7 @@ function AppContent() {
           {!isSidebarCollapsed && (
             <div>
               <strong>Brain MRI</strong>
-              <p>Processing Suite</p>
+              <p>Results Workspace</p>
             </div>
           )}
         </div>
@@ -134,15 +134,15 @@ function AppContent() {
             type="button"
             className={currentSection === 'workspace' ? 'active' : ''}
             onClick={() => setView({ name: 'subjects' })}
-            title="Subjects & cases"
+            title="Subjects & scans"
           >
-            <span>Subjects & cases</span>
+            <span>Subjects & scans</span>
           </button>
           <button
             type="button"
             className={view.name === 'caseViewer' ? 'active' : ''}
             onClick={() => recentCase ? openCaseViewer(recentCase.subjectId, recentCase.caseId) : setView({ name: 'caseViewer' })}
-            title={recentCase ? 'Open latest 3D viewer' : 'Choose a subject and case for 3D viewing'}
+            title={recentCase ? 'Open latest 3D viewer' : 'Choose a subject and completed scan'}
           >
             <span>3D view</span>
           </button>
@@ -150,7 +150,7 @@ function AppContent() {
             type="button"
             className={view.name === 'statistics' ? 'active' : ''}
             onClick={() => recentCase ? openStatistics(recentCase.subjectId, recentCase.caseId) : setView({ name: 'statistics' })}
-            title={recentCase ? 'Open statistics for latest case' : 'Choose a subject and metric-ready case'}
+            title={recentCase ? 'Open statistics for latest case' : 'Choose a subject and completed scan'}
           >
             <span>Statistics</span>
           </button>
@@ -158,7 +158,7 @@ function AppContent() {
             type="button"
             className={view.name === 'timeComparison' ? 'active' : ''}
             onClick={() => recentSubjectId ? openTimeComparison(recentSubjectId) : setView({ name: 'timeComparison' })}
-            title={recentSubjectId ? 'Compare metric-ready dates for latest subject' : 'Choose a subject for time comparison'}
+            title={recentSubjectId ? 'Compare completed dates for latest subject' : 'Choose a subject to compare dates'}
           >
             <span>Time comparison</span>
           </button>
@@ -176,15 +176,15 @@ function AppContent() {
       <div className="main-shell">
         <header className="topbar">
           <div>
-            <strong>{currentSection === 'workspace' ? 'Persistent workspace' : currentSection === 'settings' ? 'Settings' : 'Home'}</strong>
-            <p className="muted">Logged in as {user.email}</p>
+            <strong>{currentSection === 'workspace' ? 'MRI workspace' : currentSection === 'settings' ? 'Settings' : 'Home'}</strong>
+            <p className="muted">Signed in as {user.email}</p>
           </div>
           <nav className="button-row">
             <button type="button" className="secondary" onClick={() => setView({ name: 'settings' })}>
               Settings
             </button>
             <button type="button" onClick={handleLogout}>
-              Logout
+              Sign out
             </button>
           </nav>
         </header>

@@ -7,7 +7,6 @@ import type { BrainViewerItem } from '../components/brainViewerUtils'
 
 const Brain3DViewer = lazy(() => import('../components/Brain3DViewer').then((module) => ({ default: module.Brain3DViewer })))
 
-
 function downloadBlob(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -32,7 +31,7 @@ export function WelcomePage() {
   const [publicError, setPublicError] = useState<string | null>(null)
   const [publicStatus, setPublicStatus] = useState<string | null>(null)
   const [publicViewerItems, setPublicViewerItems] = useState<BrainViewerItem[]>([])
-  const [publicViewerTitle, setPublicViewerTitle] = useState<string>('Public MRI preview')
+  const [publicViewerTitle, setPublicViewerTitle] = useState<string>('3D preview')
   const publicObjectUrlsRef = useRef<string[]>([])
 
   function clearPublicViewerItems() {
@@ -69,25 +68,25 @@ export function WelcomePage() {
   async function handlePublicSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!publicFile) {
-      setPublicError('Choose a .nii or .nii.gz file first.')
+      setPublicError('Choose a .nii or .nii.gz MRI file first.')
       return
     }
 
     setIsPublicProcessing(true)
     setPublicError(null)
-    setPublicStatus('Uploading and processing MRI. This can take several minutes...')
+    setPublicStatus('Preparing your MRI scan. This may take a while for larger files.')
     clearPublicViewerItems()
 
     try {
       const blob = await processPublicMri(publicFile)
       const base = publicFile.name.replace(/\.nii(\.gz)?$/i, '') || 'brain_mri'
-      downloadBlob(blob, `${base}_brain_mri_outputs.zip`)
+      downloadBlob(blob, `${base}_brain_mri_results.zip`)
 
       const viewerItems = await extractViewerItemsFromPublicZip(blob)
       publicObjectUrlsRef.current = viewerItems.map((item) => item.objectUrl)
       setPublicViewerItems(viewerItems)
       setPublicViewerTitle(`${base} preview`)
-      setPublicStatus('Processing completed. Your ZIP download should start automatically, and the GLB preview is ready below.')
+      setPublicStatus('Done. The result download has started and the 3D preview is ready below.')
     } catch (error) {
       setPublicError(apiMessage(error))
       setPublicStatus(null)
@@ -101,38 +100,36 @@ export function WelcomePage() {
       <section className="hero-section">
         <div className="hero-copy">
           <p className="eyebrow">Brain MRI Processing</p>
-          <h1>From T1 MRI to segmented 3D brain tissue models.</h1>
+          <h1>Turn MRI scans into clear 3D brain tissue results.</h1>
           <p className="hero-text">
-            Upload a NIfTI MRI and generate tissue meshes plus volume/surface metrics.
-            Use the public quick processing route for one-off downloads, or sign in to manage subjects,
-            cases, processing jobs and artifacts over time.
+            Upload a NIfTI MRI scan, generate tissue models, and review measurements in a visual workspace designed
+            for users rather than developers.
           </p>
           <div className="hero-actions">
-            <a href="#public-upload" className="button-link">Try public processing</a>
-            <a href="#account" className="button-link secondary-link">Log in or sign up</a>
+            <a href="#public-upload" className="button-link">Try without an account</a>
+            <a href="#account" className="button-link secondary-link">Sign in</a>
           </div>
         </div>
 
-        <div className="hero-card">
-          <span className="badge">Current pipeline</span>
-          <ul className="feature-list">
-            <li>Reorientation to standard space</li>
-            <li>Skull stripping with HD-BET</li>
-            <li>FAST tissue segmentation</li>
-            <li>GLB mesh export</li>
-            <li>Volume and surface metrics</li>
+        <div className="hero-card result-card">
+          <span className="badge">What you get</span>
+          <ul className="feature-list clean-feature-list">
+            <li>Prepared brain scan</li>
+            <li>3D grey matter, white matter and CSF models</li>
+            <li>Volume and surface measurements</li>
+            <li>Downloadable result files</li>
+            <li>Saved subjects and time comparison after sign-in</li>
           </ul>
         </div>
       </section>
 
       <section className="welcome-grid page">
         <article className="card public-upload-card" id="public-upload">
-          <p className="eyebrow">No account needed</p>
-          <h2>Quick MRI processing</h2>
+          <p className="eyebrow">Quick processing</p>
+          <h2>Process one MRI scan</h2>
           <p className="muted">
-            This route does not create a subject or case. The backend uses temporary files,
-            returns a ZIP, then discards the temporary workspace. The browser can also preview
-            the GLB files from that ZIP without storing them permanently.
+            Use this for a one-time result download. Create an account when you want to keep subjects, cases,
+            dates and comparisons organized.
           </p>
 
           <form className="form-grid" onSubmit={handlePublicSubmit}>
@@ -140,40 +137,40 @@ export function WelcomePage() {
               MRI file
               <input
                 type="file"
-                accept=".nii,.nii.gz,application/gzip,application/octet-stream"
+                accept=".nii,.gz,.nii.gz"
                 onChange={(event) => setPublicFile(event.target.files?.[0] ?? null)}
-                disabled={isPublicProcessing}
+                required
               />
             </label>
             {publicStatus && <p className="info-text">{publicStatus}</p>}
             {publicError && <p className="error-text">{publicError}</p>}
-            <button type="submit" disabled={isPublicProcessing || !publicFile}>
-              {isPublicProcessing ? 'Processing...' : 'Process, download ZIP and preview GLBs'}
+            <button type="submit" disabled={isPublicProcessing}>
+              {isPublicProcessing ? 'Processing scan...' : 'Process scan and download results'}
             </button>
           </form>
         </article>
 
         <article className="card" id="account">
-          <p className="eyebrow">Persistent workspace</p>
-          <h2>{authMode === 'signup' ? 'Create account' : 'Log in'}</h2>
+          <p className="eyebrow">Saved workspace</p>
+          <h2>{authMode === 'login' ? 'Sign in' : 'Create account'}</h2>
           <p className="muted">
-            Sign in to keep subjects, acquisition dates, job history, case readiness and artifacts organized.
+            Sign in to save subjects, keep acquisition dates together, and return to results later.
           </p>
 
-          <div className="segmented-control" aria-label="Authentication mode">
+          <div className="segmented-control" role="tablist" aria-label="Authentication mode">
             <button
               type="button"
-              className={authMode === 'login' ? 'active' : 'secondary'}
+              className={authMode === 'login' ? 'active' : ''}
               onClick={() => setAuthMode('login')}
             >
-              Log in
+              Sign in
             </button>
             <button
               type="button"
-              className={authMode === 'signup' ? 'active' : 'secondary'}
+              className={authMode === 'signup' ? 'active' : ''}
               onClick={() => setAuthMode('signup')}
             >
-              Sign up
+              New account
             </button>
           </div>
 
@@ -194,17 +191,13 @@ export function WelcomePage() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
                 required
               />
             </label>
-
             {(authLocalError || authError) && <p className="error-text">{authLocalError || authError}</p>}
-
             <button type="submit" disabled={isSubmittingAuth}>
-              {isSubmittingAuth
-                ? authMode === 'signup' ? 'Creating account...' : 'Signing in...'
-                : authMode === 'signup' ? 'Create account' : 'Sign in'}
+              {isSubmittingAuth ? 'Please wait...' : authMode === 'login' ? 'Sign in' : 'Create account'}
             </button>
           </form>
         </article>
@@ -212,19 +205,12 @@ export function WelcomePage() {
 
       {publicViewerItems.length > 0 && (
         <section className="page public-viewer-section">
-          <section className="page-header-card viewer-header-card">
-            <div>
-              <p className="eyebrow">Public 3D preview</p>
-              <h1>{publicViewerTitle}</h1>
-              <p className="muted">These object URLs are created in the browser from the downloaded ZIP and are discarded when you leave or process another file.</p>
-            </div>
-            <button type="button" className="secondary" onClick={clearPublicViewerItems}>Clear preview</button>
-          </section>
-          <Suspense fallback={<section className="card"><p className="muted">Loading 3D viewer...</p></section>}>
+          <Suspense fallback={<section className="card"><p className="muted">Loading 3D preview...</p></section>}>
             <Brain3DViewer
               items={publicViewerItems}
-              title="Public GLB controls"
-              subtitle="Preview meshes directly from the temporary public processing ZIP. No account, subject or case is involved."
+              title={publicViewerTitle}
+              subtitle="Preview the generated tissue models before saving the downloaded result files."
+              loadingText="Loading preview..."
             />
           </Suspense>
         </section>

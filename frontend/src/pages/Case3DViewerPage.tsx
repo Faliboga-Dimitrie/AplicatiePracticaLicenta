@@ -144,17 +144,17 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
       <section className="page-header-card">
         <div>
           <button type="button" className="link-button" onClick={onBack}>← Back</button>
-          <p className="eyebrow">3D viewer</p>
+          <p className="eyebrow">3D view</p>
           <h1>{mriCase ? `${mriCase.subject_id} · ${mriCase.acquisition_date}` : 'Choose a case'}</h1>
-          <p className="muted">Select a subject and a mesh-ready case, then inspect its GLB artifacts.</p>
+          <p className="muted">Select a subject and a completed scan to open its 3D brain tissue model.</p>
         </div>
-        <button type="button" className="secondary" onClick={loadViewer} disabled={isLoadingViewer || selectedCaseId === ''}>Refresh viewer</button>
+        <button type="button" className="secondary" onClick={loadViewer} disabled={isLoadingViewer || selectedCaseId === ''}>Refresh model</button>
       </section>
 
       {error && <p className="error-text">{error}</p>}
 
       <section className="card form-grid">
-        <h2>Choose 3D source</h2>
+        <h2>Choose scan</h2>
         <label>
           Subject
           <select value={selectedSubjectId} disabled={isLoadingSelection} onChange={(event) => { setSelectedSubjectId(event.target.value); setSelectedCaseId('') }}>
@@ -165,18 +165,18 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
         <label>
           Case
           <select value={selectedCaseId} disabled={!selectedSubjectId || isLoadingCases} onChange={(event) => setSelectedCaseId(event.target.value ? Number(event.target.value) : '')}>
-            <option value="">Choose mesh-ready case</option>
-            {meshReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date} · case #{entry.id}</option>)}
+            <option value="">Choose completed scan</option>
+            {meshReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date}</option>)}
           </select>
         </label>
-        <p className="muted small-note">Only cases with mesh artifacts are shown here.</p>
+        <p className="muted small-note">Only scans with a completed 3D model are shown here.</p>
       </section>
 
-      <Suspense fallback={<section className="card"><p className="muted">Loading 3D viewer...</p></section>}>
+      <Suspense fallback={<section className="card"><p className="muted">Loading 3D view...</p></section>}>
         <Brain3DViewer
           items={items}
-          title="3D brain matter viewer"
-          subtitle={mriCase ? `Loaded ${items.length} GLB layers for case #${mriCase.id}.` : 'Choose a case to load its meshes.'}
+          title="3D brain tissue viewer"
+          subtitle={mriCase ? `Loaded ${items.length} tissue layers.` : 'Choose a completed scan to load its 3D model.'}
           isLoading={isLoadingViewer}
           error={selectedCaseId === '' ? null : error}
           onReload={selectedCaseId === '' ? undefined : loadViewer}

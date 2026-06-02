@@ -34,16 +34,12 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
   }
 
   async function handleDeleteAccount() {
-    if (deleteConfirmation !== user.email) {
-      return
-    }
+    if (deleteConfirmation !== user.email) return
 
     const confirmed = window.confirm(
-      'Delete this account permanently? Subjects without any remaining linked user will also be deleted with their cases and local workspaces.',
+      'Delete this account permanently? Saved subjects that are only linked to this account may also be removed.',
     )
-    if (!confirmed) {
-      return
-    }
+    if (!confirmed) return
 
     setIsDeletingAccount(true)
     try {
@@ -60,11 +56,8 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
       <section className="card settings-header">
         <div>
           <p className="eyebrow">Settings</p>
-          <h1>Account and session controls</h1>
-          <p className="muted">
-            Manage the current authenticated session. More account-management actions can live here as the
-            backend grows.
-          </p>
+          <h1>Account settings</h1>
+          <p className="muted">Manage your sign-in session and account-level actions.</p>
         </div>
       </section>
 
@@ -75,7 +68,6 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
             <h2>Profile</h2>
           </div>
           <dl className="details-list">
-            <div><dt>User ID</dt><dd>{user.id}</dd></div>
             <div><dt>Email</dt><dd>{user.email}</dd></div>
             <div><dt>Status</dt><dd>Active</dd></div>
           </dl>
@@ -83,19 +75,18 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
 
         <article className="card stack">
           <div>
-            <p className="eyebrow">Sessions</p>
-            <h2>Logout options</h2>
+            <p className="eyebrow">Sign out</p>
+            <h2>Session options</h2>
             <p className="muted">
-              Logout ends this browser session. Logout all revokes every refresh session for this account,
-              including other browsers.
+              Sign out of this browser, or sign out everywhere if you used the app on another device.
             </p>
           </div>
           <div className="button-row">
             <button type="button" className="secondary" onClick={handleLogout} disabled={isLoggingOut}>
-              {isLoggingOut ? 'Logging out...' : 'Logout this browser'}
+              {isLoggingOut ? 'Signing out...' : 'Sign out here'}
             </button>
             <button type="button" onClick={handleLogoutAll} disabled={isLoggingOutAll}>
-              {isLoggingOutAll ? 'Logging out all...' : 'Logout all sessions'}
+              {isLoggingOutAll ? 'Signing out everywhere...' : 'Sign out everywhere'}
             </button>
           </div>
         </article>
@@ -103,11 +94,9 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
         <article className="card stack danger-zone">
           <div>
             <p className="eyebrow">Danger zone</p>
-            <h2>Account deletion</h2>
+            <h2>Delete account</h2>
             <p className="muted">
-              This permanently deletes your user account and refresh sessions. Subjects are deleted only if,
-              after removing your account, no remaining user is linked to them. Subjects with
-              at least one remaining linked user are kept.
+              This permanently removes your account. Type your email to confirm before continuing.
             </p>
           </div>
           <label>

@@ -5,9 +5,11 @@ import { deleteCase, getCase, updateCase } from '../api/casesApi'
 import { listArtifacts } from '../api/artifactsApi'
 import { startMeshAnalysisJob, startPreprocessingJob } from '../api/jobsApi'
 import { ArtifactList } from '../components/ArtifactList'
+import { CaseProgress } from '../components/CaseProgress'
 import { JobStatusCard } from '../components/JobStatusCard'
 import { useJobActivity } from '../jobs/useJobActivity'
 import type { CaseArtifacts, Job, MriCase } from '../types/api'
+import { formatCaseName, formatDateLabel, getCaseStageLabel, getNextCaseAction } from '../utils/userFacing'
 
 type CaseDetailPageProps = {
   caseId: number
@@ -20,18 +22,19 @@ type CaseDetailPageProps = {
 type CaseEditorState = {
   acquisitionDate: string
   notes: string
-  status: string
 }
 
-function capabilityText(value: boolean | undefined): string {
-  return value ? 'yes' : 'no'
-}
 function toCaseEditorState(mriCase: MriCase): CaseEditorState {
   return {
     acquisitionDate: mriCase.acquisition_date,
     notes: mriCase.notes ?? '',
-    status: mriCase.status ?? '',
   }
+}
+
+function disabledHint(mriCase: MriCase, action: 'prepare' | 'model'): string {
+  if (mriCase.capabilities.is_busy) return 'Processing is already running for this scan.'
+  if (action === 'prepare') return 'This scan is already prepared or cannot be prepared yet.'
+  return 'Prepare the scan first, then create the 3D model and measurements.'
 }
 
 export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics, onOpenTimeComparison }: CaseDetailPageProps) {
@@ -64,7 +67,6 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
       setError(apiMessage(artifactError))
     }
   }, [caseId])
-
 
   const refreshAll = useCallback(async () => {
     setIsLoading(true)
@@ -122,9 +124,7 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
 
   async function handleUpdateCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!caseDraft) {
-      return
-    }
+    if (!caseDraft) return
 
     setIsUpdatingCase(true)
     setError(null)
@@ -132,7 +132,6 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
       const response = await updateCase(caseId, {
         acquisition_date: caseDraft.acquisitionDate,
         notes: caseDraft.notes.trim() || null,
-        status: caseDraft.status.trim() || null,
       })
       setMriCase(response.case)
       setCaseDraft(null)
@@ -145,15 +144,11 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
   }
 
   async function handleDeleteCase() {
-    if (!mriCase) {
-      return
-    }
+    if (!mriCase) return
     const confirmed = window.confirm(
-      `Delete case #${mriCase.id} from ${mriCase.acquisition_date}? This deletes the database row and its local workspace files.`,
+      `Delete the MRI scan from ${formatDateLabel(mriCase.acquisition_date)}?`,
     )
-    if (!confirmed) {
-      return
-    }
+    if (!confirmed) return
 
     setIsDeletingCase(true)
     setError(null)
@@ -167,16 +162,14 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
     }
   }
 
-  const capabilities = mriCase?.capabilities
-
   return (
     <main className="page stack">
       <section className="page-header-card">
         <div>
-          <button type="button" className="link-button" onClick={onBack}>← Back to cases</button>
-          <p className="eyebrow">Case workspace</p>
-          <h1>Case #{caseId}</h1>
-          <p className="muted">Inspect metadata, start processing jobs, download artifacts, or edit/delete this case.</p>
+          <button type="button" className="link-button" onClick={onBack}>← Back to scans</button>
+          <p className="eyebrow">MRI scan</p>
+          <h1>{mriCase ? formatCaseName(mriCase) : 'MRI scan'}</h1>
+          <p className="muted">Follow the guided steps, then open the visual and measurement results.</p>
         </div>
         <button type="button" className="secondary" onClick={refreshAll} disabled={isLoading}>
           Refresh
@@ -184,145 +177,130 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
       </section>
 
       {error && <p className="error-text">{error}</p>}
-      {isLoading && <p className="muted">Loading case...</p>}
+      {isLoading && <p className="muted">Loading scan...</p>}
 
       {mriCase && (
-        <section className="grid-two">
-          <article className="card stack">
-            <div className="row-between">
-              <h2>Case details</h2>
-              <span className="badge">{mriCase.status || 'no status'}</span>
-            </div>
-            <dl className="details-list">
-              <div><dt>Subject</dt><dd>{mriCase.subject_id}</dd></div>
-              <div><dt>Acquisition date</dt><dd>{mriCase.acquisition_date}</dd></div>
-              <div><dt>Status</dt><dd>{mriCase.status || 'none'}</dd></div>
-              <div><dt>Case key</dt><dd>{mriCase.case_key || 'none'}</dd></div>
-              <div><dt>Notes</dt><dd>{mriCase.notes || 'none'}</dd></div>
-            </dl>
-            <div className="button-row">
-              <button type="button" className="secondary" onClick={() => setCaseDraft(toCaseEditorState(mriCase))}>
-                Edit metadata
-              </button>
-              <button type="button" className="danger-button" onClick={handleDeleteCase} disabled={isDeletingCase}>
-                {isDeletingCase ? 'Deleting...' : 'Delete case'}
-              </button>
-            </div>
-          </article>
+        <>
+          <section className="grid-two">
+            <article className="card stack scan-summary-card">
+              <div className="row-between">
+                <div>
+                  <p className="eyebrow">Current state</p>
+                  <h2>{getCaseStageLabel(mriCase)}</h2>
+                </div>
+                <span className="badge">{formatDateLabel(mriCase.acquisition_date)}</span>
+              </div>
+              <p className="muted">{getNextCaseAction(mriCase)}</p>
+              <dl className="details-list clean-details-list">
+                <div><dt>Subject</dt><dd>{mriCase.subject_id}</dd></div>
+                <div><dt>Acquisition date</dt><dd>{formatDateLabel(mriCase.acquisition_date)}</dd></div>
+                <div><dt>Notes</dt><dd>{mriCase.notes || 'No notes added.'}</dd></div>
+              </dl>
+              <div className="button-row">
+                <button type="button" className="secondary" onClick={() => setCaseDraft(toCaseEditorState(mriCase))}>
+                  Edit date/notes
+                </button>
+                <button type="button" className="danger-button" onClick={handleDeleteCase} disabled={isDeletingCase}>
+                  {isDeletingCase ? 'Deleting...' : 'Delete scan'}
+                </button>
+              </div>
+            </article>
 
-          <article className="card stack">
-            <h2>Capabilities</h2>
-            <div className="capability-grid">
-              <span>Raw uploaded</span><strong>{capabilityText(capabilities?.raw_uploaded)}</strong>
-              <span>FAST PVE outputs</span><strong>{capabilityText(capabilities?.has_fast_pve_outputs)}</strong>
-              <span>Meshes</span><strong>{capabilityText(capabilities?.has_meshes)}</strong>
-              <span>Metrics</span><strong>{capabilityText(capabilities?.has_metrics)}</strong>
-              <span>Busy</span><strong>{capabilityText(capabilities?.is_busy)}</strong>
-            </div>
-          </article>
-        </section>
-      )}
+            <article className="card stack">
+              <p className="eyebrow">Progress</p>
+              <h2>Processing checklist</h2>
+              <CaseProgress mriCase={mriCase} />
+            </article>
+          </section>
 
-      {caseDraft && (
-        <form className="card form-grid" onSubmit={handleUpdateCase}>
-          <div className="row-between">
+          {caseDraft && (
+            <form className="card form-grid" onSubmit={handleUpdateCase}>
+              <div className="row-between">
+                <div>
+                  <p className="eyebrow">Edit scan</p>
+                  <h2>Date and notes</h2>
+                </div>
+                <button type="button" className="secondary" onClick={() => setCaseDraft(null)}>
+                  Cancel
+                </button>
+              </div>
+              <label>
+                Acquisition date
+                <input
+                  type="date"
+                  value={caseDraft.acquisitionDate}
+                  onChange={(event) => setCaseDraft({ ...caseDraft, acquisitionDate: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Notes
+                <textarea
+                  value={caseDraft.notes}
+                  onChange={(event) => setCaseDraft({ ...caseDraft, notes: event.target.value })}
+                  rows={4}
+                />
+              </label>
+              <button type="submit" disabled={isUpdatingCase}>
+                {isUpdatingCase ? 'Saving...' : 'Save changes'}
+              </button>
+            </form>
+          )}
+
+          <section className="card stack action-card">
             <div>
-              <p className="eyebrow">Edit case</p>
-              <h2>Metadata</h2>
+              <p className="eyebrow">Next actions</p>
+              <h2>Prepare and review</h2>
             </div>
-            <button type="button" className="secondary" onClick={() => setCaseDraft(null)}>
-              Cancel
-            </button>
-          </div>
-          <label>
-            Acquisition date
-            <input
-              type="date"
-              value={caseDraft.acquisitionDate}
-              onChange={(event) => setCaseDraft({ ...caseDraft, acquisitionDate: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Status
-            <select
-              value={caseDraft.status}
-              onChange={(event) => setCaseDraft({ ...caseDraft, status: event.target.value })}
-            >
-              <option value="">No status</option>
-              <option value="registered">registered</option>
-              <option value="preprocessing_queued">preprocessing_queued</option>
-              <option value="preprocessing">preprocessing</option>
-              <option value="preprocessed">preprocessed</option>
-              <option value="mesh_queued">mesh_queued</option>
-              <option value="mesh_analysis">mesh_analysis</option>
-              <option value="mesh_completed">mesh_completed</option>
-              <option value="failed">failed</option>
-              <option value="preprocessing_cancelled">preprocessing_cancelled</option>
-              <option value="mesh_cancelled">mesh_cancelled</option>
-            </select>
-          </label>
-          <p className="muted small-note">Status is normally changed by backend jobs. Manual editing is mostly for correction/testing.</p>
-          <label>
-            Notes
-            <textarea
-              value={caseDraft.notes}
-              onChange={(event) => setCaseDraft({ ...caseDraft, notes: event.target.value })}
-              rows={4}
-            />
-          </label>
-          <button type="submit" disabled={isUpdatingCase}>
-            {isUpdatingCase ? 'Saving...' : 'Save case changes'}
-          </button>
-        </form>
-      )}
-
-      {mriCase && (
-        <section className="card stack">
-          <h2>Processing actions</h2>
-          <div className="button-row">
-            <button
-              type="button"
-              onClick={handleStartPreprocessing}
-              disabled={!mriCase.capabilities.can_start_preprocessing || isStartingPreprocessing}
-            >
-              {isStartingPreprocessing ? 'Starting...' : 'Start preprocessing'}
-            </button>
-            <button
-              type="button"
-              onClick={handleStartMeshAnalysis}
-              disabled={!mriCase.capabilities.can_start_mesh_analysis || isStartingMesh}
-            >
-              {isStartingMesh ? 'Starting...' : 'Start mesh analysis'}
-            </button>
-          </div>
-          <p className="muted">
-            Buttons are disabled when the backend says the case is not ready or is already busy.
-          </p>
-          <div className="button-row disabled-action-row">
-            <button
-              type="button"
-              onClick={onOpenViewer}
-              disabled={!mriCase.capabilities.can_view_meshes}
-            >
-              Open 3D view
-            </button>
-            <button
-              type="button"
-              onClick={onOpenStatistics}
-              disabled={!mriCase.capabilities.can_view_metrics}
-            >
-              Open statistics
-            </button>
-            <button
-              type="button"
-              onClick={onOpenTimeComparison}
-              disabled={!mriCase.capabilities.can_view_metrics}
-            >
-              Compare over time
-            </button>
-          </div>
-        </section>
+            <div className="guided-action-grid">
+              <article>
+                <strong>1. Prepare scan</strong>
+                <p className="muted small-note">
+                  Isolates the brain and prepares the tissue data needed for measurements.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleStartPreprocessing}
+                  disabled={!mriCase.capabilities.can_start_preprocessing || isStartingPreprocessing}
+                  title={!mriCase.capabilities.can_start_preprocessing ? disabledHint(mriCase, 'prepare') : undefined}
+                >
+                  {isStartingPreprocessing ? 'Starting...' : 'Prepare scan'}
+                </button>
+              </article>
+              <article>
+                <strong>2. Create results</strong>
+                <p className="muted small-note">
+                  Builds the 3D tissue model and calculates volume and surface measurements.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleStartMeshAnalysis}
+                  disabled={!mriCase.capabilities.can_start_mesh_analysis || isStartingMesh}
+                  title={!mriCase.capabilities.can_start_mesh_analysis ? disabledHint(mriCase, 'model') : undefined}
+                >
+                  {isStartingMesh ? 'Starting...' : 'Create 3D model'}
+                </button>
+              </article>
+              <article>
+                <strong>3. Review</strong>
+                <p className="muted small-note">
+                  Open the finished model, measurements, or compare dates for this subject.
+                </p>
+                <div className="button-row">
+                  <button type="button" onClick={onOpenViewer} disabled={!mriCase.capabilities.can_view_meshes}>
+                    3D view
+                  </button>
+                  <button type="button" className="secondary" onClick={onOpenStatistics} disabled={!mriCase.capabilities.can_view_metrics}>
+                    Measurements
+                  </button>
+                  <button type="button" className="secondary" onClick={onOpenTimeComparison} disabled={!mriCase.capabilities.can_view_metrics}>
+                    Compare dates
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </>
       )}
 
       {activeJob && (
@@ -335,9 +313,12 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
 
       <section className="card stack">
         <div className="row-between">
-          <h2>Artifacts</h2>
+          <div>
+            <p className="eyebrow">Downloads</p>
+            <h2>Result files</h2>
+          </div>
           <button type="button" className="secondary" onClick={refreshArtifacts}>
-            Refresh artifacts
+            Refresh files
           </button>
         </div>
         <ArtifactList artifacts={artifacts?.artifacts ?? []} />

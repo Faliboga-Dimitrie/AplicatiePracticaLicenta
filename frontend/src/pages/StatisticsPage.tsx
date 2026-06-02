@@ -128,7 +128,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCaseId])
 
-  const metricReadyCases = subjectCases.filter((entry) => entry.capabilities?.can_view_metrics || entry.capabilities?.has_metrics)
+  const measurementReadyCases = subjectCases.filter((entry) => entry.capabilities?.can_view_metrics || entry.capabilities?.has_metrics)
 
   const maxVolume = useMemo(() => {
     if (!metrics) return 0
@@ -145,9 +145,9 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
       <section className="page-header-card">
         <div>
           <button type="button" className="link-button" onClick={onBack}>← Back</button>
-          <p className="eyebrow">Case statistics</p>
+          <p className="eyebrow">Measurements</p>
           <h1>{metrics ? `${metrics.subject_id} · ${metrics.acquisition_date}` : 'Choose a case'}</h1>
-          <p className="muted">Volume and surface-area metrics produced by mesh analysis.</p>
+          <p className="muted">Review tissue volumes and surface areas for a completed scan.</p>
         </div>
         <div className="button-row">
           {onOpenViewer && selectedCaseId !== '' && <button type="button" className="secondary" onClick={() => onOpenViewer(selectedSubjectId || metrics?.subject_id, Number(selectedCaseId))}>Open 3D view</button>}
@@ -158,7 +158,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
       {error && <p className="error-text">{error}</p>}
 
       <section className="card form-grid">
-        <h2>Choose metrics source</h2>
+        <h2>Choose scan</h2>
         <label>
           Subject
           <select value={selectedSubjectId} disabled={isLoadingSelection} onChange={(event) => { setSelectedSubjectId(event.target.value); setSelectedCaseId(''); setMetrics(null) }}>
@@ -169,8 +169,8 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
         <label>
           Case
           <select value={selectedCaseId} disabled={!selectedSubjectId || isLoadingCases} onChange={(event) => setSelectedCaseId(event.target.value ? Number(event.target.value) : '')}>
-            <option value="">Choose metric-ready case</option>
-            {metricReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date} · case #{entry.id}</option>)}
+            <option value="">Choose completed scan</option>
+            {measurementReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date}</option>)}
           </select>
         </label>
         <label>
@@ -182,7 +182,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
         </label>
       </section>
 
-      {isLoading && <p className="muted">Loading metrics...</p>}
+      {isLoading && <p className="muted">Loading measurements...</p>}
 
       {metrics && (
         <>
@@ -201,8 +201,8 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
               <strong>{TISSUES.reduce((best, tissue) => ((metrics.volumes[tissue.volumeKey] ?? 0) > (metrics.volumes[best.volumeKey] ?? 0) ? tissue : best), TISSUES[0]).label}</strong>
             </article>
             <article className="metric-card">
-              <span>Status</span>
-              <strong>{metrics.status || 'none'}</strong>
+              <span>Subject</span>
+              <strong>{metrics.subject_id}</strong>
             </article>
           </section>
 
@@ -242,7 +242,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
           </section>
 
           <section className="card stack">
-            <h2>Metric table</h2>
+            <h2>Measurement table</h2>
             <div className="table-wrap">
               <table className="data-table">
                 <thead>

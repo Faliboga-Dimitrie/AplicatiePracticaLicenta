@@ -31,7 +31,7 @@ export function LoginPage() {
         <div>
           <p className="eyebrow">Brain MRI Processing</p>
           <h1>Sign in</h1>
-          <p className="muted">Use the same test account that worked with Swagger or the smoke test.</p>
+          <p className="muted">Access your saved MRI subjects, scans and results.</p>
         </div>
 
         <form className="form-grid" onSubmit={handleSubmit}>

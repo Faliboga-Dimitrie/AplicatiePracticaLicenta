@@ -21,7 +21,7 @@ export function UploadCaseForm({ subjectId, onCreated }: UploadCaseFormProps) {
     const form = event.currentTarget
 
     if (!file) {
-      setError('Choose a .nii or .nii.gz file first.')
+      setError('Choose a .nii or .nii.gz MRI file first.')
       return
     }
 
@@ -48,7 +48,11 @@ export function UploadCaseForm({ subjectId, onCreated }: UploadCaseFormProps) {
 
   return (
     <form className="card form-grid" onSubmit={handleSubmit}>
-      <h3>Upload MRI case</h3>
+      <div>
+        <p className="eyebrow">New MRI scan</p>
+        <h3>Upload acquisition</h3>
+        <p className="muted small-note">Add the scan date and the NIfTI file. Processing starts after upload from the scan page.</p>
+      </div>
       <label>
         Acquisition date
         <input
@@ -59,11 +63,7 @@ export function UploadCaseForm({ subjectId, onCreated }: UploadCaseFormProps) {
         />
       </label>
       <label>
-        Notes
-        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
-      </label>
-      <label>
-        Raw MRI file
+        MRI file
         <input
           type="file"
           accept=".nii,.gz,.nii.gz"
@@ -71,9 +71,13 @@ export function UploadCaseForm({ subjectId, onCreated }: UploadCaseFormProps) {
           required
         />
       </label>
+      <label>
+        Notes
+        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+      </label>
       {error && <p className="error-text">{error}</p>}
       <button type="submit" disabled={isUploading}>
-        {isUploading ? 'Uploading...' : 'Upload case'}
+        {isUploading ? 'Uploading...' : 'Save scan'}
       </button>
     </form>
   )

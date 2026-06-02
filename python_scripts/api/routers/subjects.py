@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...access_control import UserRecord
+from ...access_control import UserRecord, SubjectWithCases
 from ...access_control.utils import UNSET
 from ..dependencies import get_current_user, get_subject_service
 from ..errors import unwrap_bool_result, unwrap_result
@@ -127,7 +127,7 @@ def update_subject(
     unwrap_bool_result(result, not_found_message="Subject not found or nothing changed.")
 
     refreshed = subjects.get_for_user(current_user, subject_id, include_cases=False)
-    subject = unwrap_result(refreshed, not_found_message="Subject not found after update.")
+    subject: SubjectWithCases = unwrap_result(refreshed, not_found_message="Subject not found after update.")
 
     return {
         "updated": True,

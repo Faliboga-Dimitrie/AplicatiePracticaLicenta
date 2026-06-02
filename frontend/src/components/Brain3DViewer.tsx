@@ -235,7 +235,7 @@ export function Brain3DViewer({
   items,
   title,
   subtitle,
-  loadingText = 'Loading GLB artifacts...',
+  loadingText = 'Loading 3D model...',
   isLoading = false,
   error = null,
   onReload,
@@ -292,7 +292,7 @@ export function Brain3DViewer({
 
         {onReload && (
           <button type="button" className="secondary" onClick={onReload} disabled={isLoading}>
-            Reload GLBs
+            Reload model
           </button>
         )}
 
@@ -301,11 +301,11 @@ export function Brain3DViewer({
             <>
               <label className="checkbox-row">
                 <input type="checkbox" checked={showMeshes} disabled={!hasMeshes} onChange={(event) => setShowMeshes(event.target.checked)} />
-                Meshes
+                3D tissue layers
               </label>
               <label className="checkbox-row">
                 <input type="checkbox" checked={doubleSided} onChange={(event) => setDoubleSided(event.target.checked)} />
-                Double-sided material
+                Show inside surfaces
               </label>
             </>
           )}
@@ -363,13 +363,13 @@ export function Brain3DViewer({
             </select>
           </label>
           <p className="muted small-note">
-            The grid assumes mesh coordinates are in millimetres. In cm mode, labels are converted from mm to cm.
+            Use the grid as an approximate measurement reference for the model.
           </p>
         </div>
 
         <div className="stack compact-stack">
           <div className="row-between">
-            <h3>Model transform</h3>
+            <h3>Model position</h3>
             <button type="button" className="secondary mini-button" onClick={resetTransform}>Reset</button>
           </div>
           <label className="range-label">
@@ -420,14 +420,14 @@ export function Brain3DViewer({
 
         <div className="viewer-help-card">
           <strong>Orbit controls</strong>
-          <p>Drag to rotate, scroll to zoom, right-drag to pan. Inside/fly camera will come in the next iteration.</p>
+          <p>Drag to rotate, scroll to zoom, right-drag to pan. Use the controls to inspect the model from any direction.</p>
         </div>
       </aside>
 
       <section className="card viewer-canvas-card">
         <div className="viewer-canvas-toolbar">
           <span className="badge">{visibleCount}/{items.length} layers visible</span>
-          <span className="muted small-note">Runtime controls are applied in WebGL. The GLB files are not re-exported.</span>
+          <span className="muted small-note">Display changes affect only this preview.</span>
         </div>
         {error && <p className="error-text">{error}</p>}
         {isLoading && <p className="muted">{loadingText}</p>}
@@ -445,8 +445,8 @@ export function Brain3DViewer({
             />
           ) : (
             <div className="viewer-empty-state">
-              <h2>No GLB artifacts found</h2>
-              <p className="muted">Run mesh analysis or public processing first, then return to this viewer.</p>
+              <h2>No 3D model found</h2>
+              <p className="muted">Create the 3D model first, then return to this viewer.</p>
             </div>
           )}
         </div>

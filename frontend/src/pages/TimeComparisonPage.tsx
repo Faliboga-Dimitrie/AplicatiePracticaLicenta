@@ -228,9 +228,9 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
       <section className="page-header-card">
         <div>
           <button type="button" className="link-button" onClick={onBack}>← Back</button>
-          <p className="eyebrow">Time comparison</p>
+          <p className="eyebrow">Compare over time</p>
           <h1>{selectedSubjectId || 'Choose a subject'}</h1>
-          <p className="muted">Compare volume and surface metrics between multiple acquisition dates.</p>
+          <p className="muted">Compare tissue measurements between acquisition dates for one subject.</p>
         </div>
         <button type="button" className="secondary" onClick={loadDates} disabled={isLoadingDates || !selectedSubjectId}>Refresh dates</button>
       </section>
@@ -238,7 +238,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
       {error && <p className="error-text">{error}</p>}
 
       <section className="card form-grid">
-        <h2>Choose subject and scale</h2>
+        <h2>Choose subject</h2>
         <label>
           Subject
           <select value={selectedSubjectId} disabled={isLoadingSubjects} onChange={(event) => handleSubjectChange(event.target.value)}>
@@ -257,24 +257,24 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
 
       <section className="grid-two">
         <article className="card stack">
-          <h2>Metric-ready dates</h2>
+          <h2>Available dates</h2>
           {isLoadingDates && <p className="muted">Loading dates...</p>}
           {!isLoadingDates && selectedSubjectId && readyDates.length < 2 && (
-            <p className="muted">At least two cases with mesh-analysis metrics are required for time comparison.</p>
+            <p className="muted">At least two completed scans are required for comparison.</p>
           )}
           {!selectedSubjectId && <p className="muted">Choose a subject to load available acquisition dates.</p>}
           <div className="date-chip-grid">
             {dateEntries.map((entry) => (
               <span className={`date-chip ${entry.ready_for_json ? 'ready' : ''}`} key={entry.case_id}>
                 <strong>{entry.acquisition_date}</strong>
-                <small>{entry.ready_for_json ? 'metrics ready' : 'no metrics'}</small>
+                <small>{entry.ready_for_json ? 'ready' : 'not ready'}</small>
               </span>
             ))}
           </div>
         </article>
 
         <form className="card form-grid" onSubmit={(event) => { event.preventDefault(); buildReport() }}>
-          <h2>Build comparison</h2>
+          <h2>Compare dates</h2>
           <label>
             Start date
             <select value={startDate} onChange={(event) => setStartDate(event.target.value)}>
@@ -289,7 +289,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
               {readyDates.map((entry) => <option value={entry.acquisition_date} key={entry.case_id}>{entry.acquisition_date}</option>)}
             </select>
           </label>
-          <button type="submit" disabled={readyDates.length < 2 || isLoadingReport}>{isLoadingReport ? 'Building...' : 'Build report'}</button>
+          <button type="submit" disabled={readyDates.length < 2 || isLoadingReport}>{isLoadingReport ? 'Comparing...' : 'Compare dates'}</button>
         </form>
       </section>
 
@@ -298,7 +298,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
           <section className="card stack">
             <div className="row-between">
               <div>
-                <h2>Evolution report</h2>
+                <h2>Measurement evolution</h2>
                 <p className="muted">Baseline: {report.baseline_date}. Interval: {report.start_date} → {report.end_date}.</p>
               </div>
               <div className="button-row">
@@ -310,47 +310,47 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                   {TISSUES.map((tissue) => <option key={tissue.key} value={tissue.key}>{tissue.label}</option>)}
                 </select>
                 <label className="inline-field">
-                  Method
+                  3D comparison
                   <select value={comparisonMethod} onChange={(event) => setComparisonMethod(event.target.value as EvolutionComparisonMethod)}>
-                    <option value="nearest_distance">Nearest distance · fast / less precise</option>
-                    <option value="pve">PVE comparison · slower / more precise</option>
+                    <option value="nearest_distance">Surface distance</option>
+                    <option value="pve">Tissue probability</option>
                   </select>
                 </label>
                 {comparisonMethod === 'pve' ? (
                   <label className="inline-field">
-                    PVE threshold
+                    Sensitivity
                     <input type="number" min="0" step="0.05" max="1" value={pveThreshold} onChange={(event) => setPveThreshold(Number(event.target.value))} />
-                    <span className="muted small-note">probability Δ</span>
+                    <span className="muted small-note">change threshold</span>
                   </label>
                 ) : (
                   <label className="inline-field">
-                    Distance threshold
+                    Sensitivity
                     <input type="number" min="0" step="0.25" value={distanceThresholdMm} onChange={(event) => setDistanceThresholdMm(Number(event.target.value))} />
                     <span className="muted small-note">mm</span>
                   </label>
                 )}
                 <button type="button" className="secondary" onClick={handleOpenVisualComparison} disabled={isLoadingVisual}>
-                  {visualOpen ? 'Reload 3D comparison' : 'Open 3D comparison'}
+                  {visualOpen ? 'Reload visual comparison' : 'Open visual comparison'}
                 </button>
               </div>
             </div>
             <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} scale={measurementScale} />
             {visualOpen && (
               <p className="muted small-note">
-                The 3D comparison is rebuilt automatically when the selected tissue, method, or threshold changes. Current tissue: {tissueLabel(selectedTissue)}. Method: {comparisonMethod === 'pve' ? 'PVE comparison' : 'nearest-distance comparison'}.
+                The visual comparison updates when the selected tissue or sensitivity changes. Current tissue: {tissueLabel(selectedTissue)}. 3D comparison: {comparisonMethod === 'pve' ? 'tissue probability' : 'surface distance'}.
               </p>
             )}
           </section>
 
           {visualOpen && (
-            <Suspense fallback={<section className="card"><p className="muted">Loading 3D comparison viewer...</p></section>}>
+            <Suspense fallback={<section className="card"><p className="muted">Loading visual comparison...</p></section>}>
               <Comparison3DViewer
                 objectUrl={visualObjectUrl}
-                title="3D visual comparison"
+                title="Visual comparison"
                 subtitle={comparisonMethod === 'pve'
-                  ? `PVE comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. PVE threshold: ${pveThreshold}.`
-                  : `Nearest-distance comparison for ${tissueLabel(selectedTissue)}. The GLB contains two layers: unchanged and changed. If tissue volume increased, the target mesh is used as reference; otherwise the baseline mesh is used. Distance threshold: ${distanceThresholdMm} mm.`}
-                loadingText="Building comparison GLB..."
+                  ? `Shows areas of tissue-probability change for ${tissueLabel(selectedTissue)}. Sensitivity: ${pveThreshold}.`
+                  : `Shows areas where the ${tissueLabel(selectedTissue)} surface changed by more than ${distanceThresholdMm} mm.`}
+                loadingText="Building visual comparison..."
                 isLoading={isLoadingVisual}
                 error={visualError}
                 onReload={loadVisualComparison}
@@ -359,7 +359,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
           )}
 
           <section className="card stack">
-            <h2>Point-by-point comparison</h2>
+            <h2>Comparison table</h2>
             <div className="table-wrap">
               <table className="data-table">
                 <thead>

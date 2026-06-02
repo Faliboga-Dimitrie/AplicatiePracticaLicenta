@@ -6,51 +6,52 @@ type HomePageProps = {
   onOpenSettings: () => void
 }
 
-const upcomingModules = [
+const reviewCards = [
   {
-    title: '3D tissue viewer',
-    description: 'Interactive GLB inspection for grey matter, white matter and CSF meshes.',
+    title: 'Manage people and scans',
+    text: 'Keep each subject together with their MRI acquisitions and notes.',
   },
   {
-    title: 'Statistics dashboard',
-    description: 'Volume and surface-area cards, charts and export-ready summaries for processed cases.',
+    title: 'Prepare scans when needed',
+    text: 'Start the required processing from a single guided case page.',
   },
   {
-    title: 'Time comparison',
-    description: 'Longitudinal comparison across acquisition dates for subjects with multiple MRI cases.',
+    title: 'Review results visually',
+    text: 'Open the 3D model, inspect measurements, and compare dates over time.',
   },
 ]
 
-const pipelineSteps = [
-  'Upload or reuse a T1-weighted NIfTI MRI',
-  'Run reorientation, skull stripping and FAST segmentation',
-  'Generate GLB meshes and tissue metrics',
-  'Download artifacts or inspect them in future visual modules',
+const workflow = [
+  'Create or open a subject',
+  'Upload a T1 MRI scan for an acquisition date',
+  'Prepare the scan, then create the 3D model and measurements',
+  'Review the model, statistics, comparison, or download files',
 ]
 
 export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProps) {
+  const firstName = user.email.split('@')[0]
+
   return (
     <main className="page stack dashboard-page">
-      <section className="dashboard-hero card">
+      <section className="dashboard-hero card user-hero-card">
         <div>
-          <p className="eyebrow">Workspace home</p>
-          <h1>Welcome back, {user.email}</h1>
+          <p className="eyebrow">Dashboard</p>
+          <h1>Welcome back, {firstName}</h1>
           <p className="hero-text">
-            This is the persistent side of the application. Use it to manage subjects, upload MRI cases,
-            start processing jobs, monitor progress and download generated artifacts.
+            Continue working with saved MRI scans, create new subject records, and open finished results without
+            needing to follow the technical processing details.
           </p>
           <div className="button-row hero-actions">
-            <button type="button" onClick={onOpenWorkspace}>Open subjects workspace</button>
+            <button type="button" onClick={onOpenWorkspace}>Open subjects</button>
             <button type="button" className="secondary" onClick={onOpenSettings}>Account settings</button>
           </div>
         </div>
 
         <aside className="hero-summary-card">
-          <p className="eyebrow">Current session</p>
-          <h2>Authenticated operator</h2>
+          <p className="eyebrow">Signed in as</p>
+          <h2>{user.email}</h2>
           <p className="muted">
-            Your authenticated session unlocks persistent subject/case storage, job control and artifact access.
-            Anonymous users can only use the temporary public ZIP workflow.
+            Your scans and results are saved to your account so you can return later and compare acquisitions over time.
           </p>
         </aside>
       </section>
@@ -58,16 +59,15 @@ export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProp
       <section className="dashboard-grid">
         <article className="card stack">
           <div>
-            <p className="eyebrow">Main workflow</p>
-            <h2>Persistent MRI workspace</h2>
+            <p className="eyebrow">Recommended flow</p>
+            <h2>Start from a subject</h2>
             <p className="muted">
-              The tested smoke-flow is now available from the browser: subject selection, case upload,
-              preprocessing, mesh analysis, job polling, cancellation and artifact download.
+              The app now guides the user by result-oriented steps instead of exposing implementation details.
             </p>
           </div>
 
           <ol className="timeline-list">
-            {pipelineSteps.map((step, index) => (
+            {workflow.map((step, index) => (
               <li key={step}>
                 <span>{index + 1}</span>
                 <p>{step}</p>
@@ -75,27 +75,25 @@ export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProp
             ))}
           </ol>
 
-          <button type="button" onClick={onOpenWorkspace}>Start from subjects</button>
+          <button type="button" onClick={onOpenWorkspace}>Go to subjects</button>
         </article>
 
         <article className="card stack">
           <div>
-            <p className="eyebrow">Coming next</p>
-            <h2>Analysis modules</h2>
+            <p className="eyebrow">What you can do</p>
+            <h2>Review MRI results</h2>
             <p className="muted">
-              These actions are intentionally disabled for now. They reserve the final app flow without pretending
-              those screens are already implemented.
+              Once a scan is processed, the result pages can also be opened directly from the sidebar.
             </p>
           </div>
 
           <div className="feature-card-list">
-            {upcomingModules.map((module) => (
-              <div className="feature-card disabled-feature" key={module.title}>
+            {reviewCards.map((card) => (
+              <div className="feature-card" key={card.title}>
                 <div>
-                  <strong>{module.title}</strong>
-                  <p className="muted">{module.description}</p>
+                  <strong>{card.title}</strong>
+                  <p className="muted">{card.text}</p>
                 </div>
-                <button type="button" disabled>Coming soon</button>
               </div>
             ))}
           </div>
@@ -104,19 +102,19 @@ export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProp
 
       <section className="dashboard-grid three-cards">
         <article className="metric-card card">
-          <span className="metric-value">01</span>
-          <h3>Validated backend</h3>
-          <p className="muted">The browser flow now covers the same ground as the original API smoke test.</p>
+          <span className="metric-value">3D</span>
+          <h3>Interactive model</h3>
+          <p className="muted">Toggle brain tissues, rotate the view, and adjust display settings.</p>
         </article>
         <article className="metric-card card">
-          <span className="metric-value">02</span>
-          <h3>Persistent mode</h3>
-          <p className="muted">Logged-in work is connected to users, subjects, cases and protected artifacts.</p>
+          <span className="metric-value">Σ</span>
+          <h3>Measurements</h3>
+          <p className="muted">Review tissue volumes and surface areas in millimetres or centimetres.</p>
         </article>
         <article className="metric-card card">
-          <span className="metric-value">03</span>
-          <h3>Public mode</h3>
-          <p className="muted">Guests can still process one MRI through the temporary ZIP-based route.</p>
+          <span className="metric-value">↔</span>
+          <h3>Evolution</h3>
+          <p className="muted">Compare different acquisition dates for the same subject.</p>
         </article>
       </section>
     </main>

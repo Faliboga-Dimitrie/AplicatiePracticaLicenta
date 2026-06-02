@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { cancelJob, getJob } from '../api/jobsApi'
 import type { Job } from '../types/api'
+import { friendlyJobStatus, friendlyJobTitle } from '../utils/userFacing'
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 
@@ -18,12 +19,9 @@ export function JobStatusCard({ initialJob, onJobChanged, onFinished }: JobStatu
   const notifiedFinishedJobId = useRef<string | null>(null)
 
   const isTerminal = TERMINAL_STATUSES.has(job.status)
-  const progressLabel = useMemo(() => {
-    if (job.progress === null || job.progress === undefined) {
-      return 'Progress unavailable'
-    }
-    return `${Math.round(job.progress)}%`
-  }, [job.progress])
+  const progress = job.progress ?? 0
+  const progressLabel = useMemo(() => `${Math.round(progress)}%`, [progress])
+  const statusLabel = friendlyJobStatus(job.status)
 
   useEffect(() => {
     setJob(initialJob)
@@ -38,9 +36,7 @@ export function JobStatusCard({ initialJob, onJobChanged, onFinished }: JobStatu
   }, [job, onJobChanged])
 
   useEffect(() => {
-    if (!isTerminal) {
-      return undefined
-    }
+    if (!isTerminal) return undefined
 
     if (notifiedFinishedJobId.current !== job.id) {
       notifiedFinishedJobId.current = job.id
@@ -51,9 +47,7 @@ export function JobStatusCard({ initialJob, onJobChanged, onFinished }: JobStatu
   }, [isTerminal, job, onFinished])
 
   useEffect(() => {
-    if (isTerminal) {
-      return undefined
-    }
+    if (isTerminal) return undefined
 
     let stopped = false
     const jobId = job.id
@@ -66,9 +60,7 @@ export function JobStatusCard({ initialJob, onJobChanged, onFinished }: JobStatu
           setError(null)
         }
       } catch (pollError) {
-        if (!stopped) {
-          setError(apiMessage(pollError))
-        }
+        if (!stopped) setError(apiMessage(pollError))
       }
     }
 
@@ -97,22 +89,22 @@ export function JobStatusCard({ initialJob, onJobChanged, onFinished }: JobStatu
     <article className="card job-card">
       <div className="row-between">
         <div>
-          <h3>{job.type}</h3>
-          <p className="muted">Job {job.id}</p>
+          <p className="eyebrow">Processing</p>
+          <h3>{friendlyJobTitle(job.type)}</h3>
         </div>
-        <span className={`badge badge-${job.status}`}>{job.status}</span>
+        <span className={`badge badge-${job.status}`}>{statusLabel}</span>
       </div>
 
       <div className="progress-wrap" aria-label={progressLabel}>
-        <div className="progress-bar" style={{ width: `${job.progress ?? 0}%` }} />
+        <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
-      <p>{job.message || 'No message yet.'}</p>
+      <p>{job.message || (isTerminal ? statusLabel : 'Working on this scan...')}</p>
       {job.error && <p className="error-text">{job.error}</p>}
       {error && <p className="error-text">{error}</p>}
 
       {!isTerminal && (
         <button type="button" className="secondary" onClick={handleCancel} disabled={isCancelling}>
-          {isCancelling ? 'Cancelling...' : 'Cancel job'}
+          {isCancelling ? 'Stopping...' : 'Stop processing'}
         </button>
       )}
     </article>

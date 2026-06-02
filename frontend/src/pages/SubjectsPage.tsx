@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { createSubject, deleteSubject, listSubjects, updateSubject } from '../api/subjectsApi'
 import type { AuthorizedSubject } from '../types/api'
+import { formatSubjectName } from '../utils/userFacing'
 
 type SubjectsPageProps = {
   onSelectSubject: (subjectId: string) => void
@@ -84,9 +85,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
 
   async function handleUpdateSubject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!editingSubject) {
-      return
-    }
+    if (!editingSubject) return
 
     setIsUpdating(true)
     setError(null)
@@ -107,19 +106,15 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
 
   async function handleDeleteSubject(subject: AuthorizedSubject) {
     const confirmed = window.confirm(
-      `Delete subject ${subject.id}? This also deletes its MRI cases and local workspace files.`,
+      `Delete ${formatSubjectName(subject)} and all MRI scans saved for this subject?`,
     )
-    if (!confirmed) {
-      return
-    }
+    if (!confirmed) return
 
     setDeletingSubjectId(subject.id)
     setError(null)
     try {
       await deleteSubject(subject.id)
-      if (editingSubject?.id === subject.id) {
-        setEditingSubject(null)
-      }
+      if (editingSubject?.id === subject.id) setEditingSubject(null)
       setSubjects((current) => current.filter((item) => item.id !== subject.id))
     } catch (deleteError) {
       setError(apiMessage(deleteError))
@@ -132,11 +127,10 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
     <main className="page stack">
       <section className="page-header-card">
         <div>
-          <p className="eyebrow">Persistent workspace</p>
-          <h1>Subjects & cases</h1>
+          <p className="eyebrow">Subjects</p>
+          <h1>Choose a subject</h1>
           <p className="muted">
-            Create, edit and delete subjects that belong to your account. A subject is the root container
-            for dated MRI acquisitions.
+            Each subject groups MRI scans by acquisition date, so results and comparisons stay easy to find.
           </p>
         </div>
         <button type="button" className="secondary" onClick={refreshSubjects} disabled={isLoading}>
@@ -146,16 +140,20 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
 
       <section className="metric-grid">
         <article className="metric-card">
-          <span>Visible subjects</span>
+          <span>Subjects</span>
           <strong>{subjects.length}</strong>
         </article>
         <article className="metric-card">
-          <span>Total cases</span>
+          <span>MRI scans</span>
           <strong>{totalCases}</strong>
         </article>
         <article className="metric-card">
-          <span>Subjects with cases</span>
+          <span>With scans</span>
           <strong>{subjects.filter((subject) => subject.case_count > 0).length}</strong>
+        </article>
+        <article className="metric-card">
+          <span>Ready to start</span>
+          <strong>{subjects.length === 0 ? 'No' : 'Yes'}</strong>
         </article>
       </section>
 
@@ -167,18 +165,19 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
           {!isLoading && subjects.length === 0 && (
             <article className="card empty-state">
               <h2>No subjects yet</h2>
-              <p className="muted">Create your first subject from the form on the right.</p>
+              <p className="muted">Create the first subject, then upload an MRI scan for that subject.</p>
             </article>
           )}
 
           <div className="card-list">
             {subjects.map((subject) => (
               <article className="card subject-card" key={subject.id}>
-                <div>
-                  <h2>{subject.id}</h2>
-                  <p className="muted">
-                    {subject.name || 'No display name'} · {subject.case_count} case(s)
-                  </p>
+                <div className="row-between">
+                  <div>
+                    <h2>{formatSubjectName(subject)}</h2>
+                    <p className="muted">Subject code: {subject.id} · {subject.case_count} MRI scan{subject.case_count === 1 ? '' : 's'}</p>
+                  </div>
+                  <span className="badge">{subject.case_count > 0 ? 'Has scans' : 'New'}</span>
                 </div>
 
                 {subject.age !== null && <p className="muted">Age: {subject.age}</p>}
@@ -186,10 +185,10 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
 
                 <div className="button-row">
                   <button type="button" onClick={() => onSelectSubject(subject.id)}>
-                    Open cases
+                    Open subject
                   </button>
                   <button type="button" className="secondary" onClick={() => setEditingSubject(toEditorState(subject))}>
-                    Edit subject
+                    Edit details
                   </button>
                   <button
                     type="button"
@@ -208,15 +207,16 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
         <aside className="stack">
           <form className="card form-grid" onSubmit={handleCreateSubject}>
             <div>
-              <p className="eyebrow">Create</p>
-              <h2>New subject</h2>
+              <p className="eyebrow">New subject</p>
+              <h2>Add subject</h2>
+              <p className="muted small-note">Use a code that helps you recognize the subject without exposing unnecessary personal data.</p>
             </div>
             <label>
-              Subject ID
+              Subject code
               <input value={subjectId} onChange={(event) => setSubjectId(event.target.value)} required />
             </label>
             <label>
-              Name
+              Display name
               <input value={name} onChange={(event) => setName(event.target.value)} />
             </label>
             <label>
@@ -236,7 +236,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
             <form className="card form-grid" onSubmit={handleUpdateSubject}>
               <div className="row-between">
                 <div>
-                  <p className="eyebrow">Edit</p>
+                  <p className="eyebrow">Edit subject</p>
                   <h2>{editingSubject.id}</h2>
                 </div>
                 <button type="button" className="secondary" onClick={() => setEditingSubject(null)}>
@@ -244,7 +244,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
                 </button>
               </div>
               <label>
-                Name
+                Display name
                 <input
                   value={editingSubject.name}
                   onChange={(event) => setEditingSubject({ ...editingSubject, name: event.target.value })}
@@ -268,7 +268,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
                 />
               </label>
               <button type="submit" disabled={isUpdating}>
-                {isUpdating ? 'Saving...' : 'Save subject changes'}
+                {isUpdating ? 'Saving...' : 'Save changes'}
               </button>
             </form>
           )}
