@@ -85,7 +85,6 @@ class PublicProcessingService:
                 workspace=workspace,
                 result=result,
                 upload_filename=safe_filename,
-                pve_paths=segmentation.pve_paths,
             )
             return zip_bytes, f"{subject_id}_brain_mri_outputs.zip"
 
@@ -109,7 +108,6 @@ class PublicProcessingService:
         workspace,
         result,
         upload_filename: str,
-        pve_paths: dict[str, Path],
     ) -> bytes:
         payload = result.to_dict()
         payload["upload_filename"] = upload_filename
@@ -124,25 +122,16 @@ class PublicProcessingService:
             for tissue, path in workspace.mesh_paths.items():
                 self._write_existing_file(archive, path, f"meshes/{path.name}")
 
-
-            # Keep these optional but useful for debugging/scientific inspection.
-            # They are PVE probability maps, not required by the UI viewer.
-            for tissue, path in pve_paths.items():
-                self._write_existing_file(archive, path, f"pve/{path.name}")
-
-            archive.writestr(
-                "README.txt",
-                "Anonymous Brain MRI Processing output.\n"
-                "meshes/ contains GLB files.\n"
-                "metrics.json contains volume and surface-area values.\n"
-                "pve/ contains FAST probability maps used to create the meshes.\n",
-            )
-
         return buffer.getvalue()
 
     def _write_existing_file(self, archive: zipfile.ZipFile, path: Path, arcname: str) -> None:
         if not path.exists() or not path.is_file():
             raise FileNotFoundError(f"Expected public output file was not created: {path}")
+
+        lower = path.name.lower()
+        if not (lower.endswith(".glb") or lower.endswith(".json")):
+            raise ValueError(f"Public downloads may contain only GLB and JSON files: {path.name}")
+
         archive.write(path, arcname)
 
     def _subject_id_from_filename(self, filename: str) -> str:

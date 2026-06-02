@@ -34,7 +34,7 @@ class ArtifactFile:
 
 @dataclass(frozen=True)
 class CaseArtifactBundle:
-    """Artifacts discovered for one authorized MRI case."""
+    """Downloadable artifacts discovered for one authorized MRI case."""
 
     case_db_id: int
     subject_id: str
@@ -47,14 +47,17 @@ class ArtifactService:
     """
     Web-facing artifact service.
 
-    This service turns the files known by CaseWorkspace into frontend-safe
-    ArtifactRef objects and FileResponse-ready paths. React sees stable URLs like:
+    Only final user-facing outputs are published: GLB 3D models and JSON metrics.
+    Intermediate NIfTI/PVE/debug files can still exist on disk for the processing
+    pipeline, but they are not listed or downloadable through the API.
 
-        /cases/12/artifacts/csf_mesh.glb
+    React sees stable URLs like:
 
-    It never receives raw local filesystem paths. File serving is also safe
-    because get_file_for_case only returns files from the known workspace artifact
-    manifest, not an arbitrary path provided by the client.
+        /cases/12/artifacts/gm_mesh.glb
+        /cases/12/artifacts/metrics.json
+
+    The URL path parameter is matched only against this discovered manifest, so
+    file serving does not expose arbitrary local paths.
     """
 
     def __init__(
@@ -93,10 +96,10 @@ class ArtifactService:
     ) -> DbResult[CaseArtifactBundle]:
         """Return only artifacts needed by the interactive 3D viewer.
 
-        The normal artifact endpoint intentionally lists everything useful for
-        download/debugging. The viewer should be narrower: GLB meshes and the
-        metrics JSON reference. This avoids React considering NIfTI preprocessing
-        files when opening the WebGL page.
+        Since the normal artifact endpoint now publishes only final files, this
+        endpoint simply filters the same manifest to GLB meshes plus JSON metrics.
+        It is kept as a dedicated route so the frontend can stay explicit about
+        what it needs to load the viewer.
         """
         bundle_result = self.list_for_case(user, case_id)
         if not bundle_result.success:
@@ -104,14 +107,10 @@ class ArtifactService:
         if bundle_result.data is None:
             return DbResult.ok(None)
 
-        viewer_kinds = {
-            ArtifactKind.MESH,
-            ArtifactKind.METRICS,
-        }
         viewer_artifacts = tuple(
             artifact
             for artifact in bundle_result.data.artifacts
-            if artifact.ref.kind in viewer_kinds
+            if artifact.ref.kind in {ArtifactKind.MESH, ArtifactKind.METRICS}
         )
 
         return DbResult.ok(
@@ -154,59 +153,71 @@ class ArtifactService:
             workspace = self.workspace_provider.get_workspace(domain_case)
 
         artifacts: list[ArtifactFile] = []
+        seen_paths: set[Path] = set()
+        used_names: set[str] = set()
 
-        # Main 3D display outputs.
-        for tissue, path in workspace.mesh_paths.items():
-            artifacts.append(
-                self._known_file(
-                    case_id=case.id,
-                    name=f"{tissue}_mesh.glb",
-                    kind=ArtifactKind.MESH,
-                    path=path,
-                    metadata={"tissue": tissue},
-                )
-            )
-
-
-        artifacts.append(
-            self._known_file(
+        def add_if_present(
+            *,
+            name: str,
+            kind: ArtifactKind,
+            path: Path,
+            metadata: dict[str, Any] | None = None,
+        ) -> None:
+            artifact = self._known_file(
                 case_id=case.id,
-                name="metrics.json",
-                kind=ArtifactKind.METRICS,
-                path=workspace.metrics_json_path,
+                name=self._unique_name(name, used_names),
+                kind=kind,
+                path=path,
+                metadata=metadata,
             )
+            if artifact is None:
+                return
+            resolved = artifact.path.resolve()
+            if resolved in seen_paths:
+                return
+            seen_paths.add(resolved)
+            used_names.add(artifact.ref.name)
+            artifacts.append(artifact)
+
+        # Stable public names for the outputs produced by the current pipeline.
+        # The actual filesystem filenames still include the subject id.
+        for tissue, path in workspace.mesh_paths.items():
+            add_if_present(
+                name=f"{tissue}_mesh.glb",
+                kind=ArtifactKind.MESH,
+                path=path,
+                metadata={"tissue": tissue},
+            )
+
+        add_if_present(
+            name="metrics.json",
+            kind=ArtifactKind.METRICS,
+            path=workspace.metrics_json_path,
         )
 
-
-        # Preprocessing outputs are not the main browser display target, but they
-        # are useful for debugging/downloads and make the artifact list complete.
-        preprocessing_outputs: list[tuple[str, Path, dict[str, Any]]] = [
-            ("reoriented.nii.gz", workspace.reoriented_path, {"stage": "reorientation"}),
-            ("skull_stripped.nii.gz", workspace.skull_stripped_path, {"stage": "hd_bet"}),
-        ]
-        for tissue, path in workspace.fast_pve_paths.items():
-            preprocessing_outputs.append(
-                (f"fast_pve_{tissue}.nii.gz", path, {"stage": "fast", "tissue": tissue})
-            )
-
-        for name, path, metadata in preprocessing_outputs:
-            artifacts.append(
-                self._known_file(
-                    case_id=case.id,
-                    name=name,
-                    kind=ArtifactKind.NIFTI,
+        # Backward-compatible discovery for cases created by older versions or
+        # manually copied into the workspace. Anything downloadable must still be
+        # final user-facing output: .glb or .json from the mesh/results folder.
+        if workspace.mesh_dir.exists() and workspace.mesh_dir.is_dir():
+            for path in sorted(workspace.mesh_dir.iterdir(), key=lambda item: item.name.lower()):
+                if not path.is_file():
+                    continue
+                kind = self._downloadable_kind(path)
+                if kind is None:
+                    continue
+                add_if_present(
+                    name=path.name,
+                    kind=kind,
                     path=path,
-                    metadata=metadata,
+                    metadata=self._artifact_metadata_from_filename(path),
                 )
-            )
 
-        existing_artifacts = tuple(artifact for artifact in artifacts if artifact is not None)
         return CaseArtifactBundle(
             case_db_id=case.id,
             subject_id=case.subject_id,
             acquisition_date=case.acquisition_date,
             case_key=case.case_key,
-            artifacts=existing_artifacts,
+            artifacts=tuple(artifacts),
         )
 
     def _known_file(
@@ -220,6 +231,9 @@ class ArtifactService:
     ) -> ArtifactFile | None:
         path = Path(path)
         if not path.exists() or not path.is_file():
+            return None
+
+        if self._downloadable_kind(path) is None:
             return None
 
         stat = path.stat()
@@ -243,12 +257,7 @@ class ArtifactService:
         )
 
     def public_bundle_dict(self, bundle: CaseArtifactBundle) -> dict[str, Any]:
-        """Return the frontend-safe artifact payload used by job results.
-
-        This intentionally mirrors the /cases/{case_id}/artifacts response, but
-        avoids importing API serializers into the service layer. No local
-        filesystem paths are exposed.
-        """
+        """Return the frontend-safe artifact payload used by job results."""
         return {
             "case_id": bundle.case_db_id,
             "case_key": bundle.case_key,
@@ -273,6 +282,45 @@ class ArtifactService:
 
     def _artifact_url(self, case_id: int, artifact_name: str) -> str:
         return f"/cases/{case_id}/artifacts/{quote(artifact_name, safe='')}"
+
+    def _downloadable_kind(self, path: Path) -> ArtifactKind | None:
+        lower = path.name.lower()
+        if lower.endswith(".glb"):
+            return ArtifactKind.MESH
+        if lower.endswith(".json"):
+            return ArtifactKind.METRICS
+        return None
+
+    def _artifact_metadata_from_filename(self, path: Path) -> dict[str, Any]:
+        lower = path.name.lower()
+        metadata: dict[str, Any] = {}
+        if lower.endswith(".glb"):
+            if "csf" in lower:
+                metadata["tissue"] = "csf"
+            elif "gm" in lower or "gray" in lower or "grey" in lower:
+                metadata["tissue"] = "gm"
+            elif "wm" in lower or "white" in lower:
+                metadata["tissue"] = "wm"
+        return metadata
+
+    def _unique_name(self, preferred: str, used_names: set[str]) -> str:
+        if preferred not in used_names:
+            return preferred
+
+        path = Path(preferred)
+        stem = path.stem
+        suffix = path.suffix
+        # Keep .nii.gz handling harmless even though NIfTI files are no longer public.
+        if preferred.lower().endswith(".nii.gz"):
+            stem = preferred[:-7]
+            suffix = ".nii.gz"
+
+        index = 2
+        while True:
+            candidate = f"{stem}_{index}{suffix}"
+            if candidate not in used_names:
+                return candidate
+            index += 1
 
 
 __all__ = ["ArtifactFile", "ArtifactService", "CaseArtifactBundle"]

@@ -12,6 +12,28 @@ from ..access_control import MriCaseRecord, SubjectRecord, SubjectSummaryRecord,
 from ..project_core import CaseWorkspace
 
 
+def _has_file_with_suffix(directory: Path, *suffixes: str) -> bool:
+    if not directory.exists() or not directory.is_dir():
+        return False
+    lowered_suffixes = tuple(suffix.lower() for suffix in suffixes)
+    return any(
+        path.is_file() and path.name.lower().endswith(lowered_suffixes)
+        for path in directory.iterdir()
+    )
+
+def _metrics_json_exists(workspace: CaseWorkspace) -> bool:
+    return (
+        workspace.metrics_json_path.exists()
+        or _has_file_with_suffix(workspace.mesh_dir, ".json")
+    )
+
+def _mesh_glb_exists(workspace: CaseWorkspace) -> bool:
+    return (
+        any(path.exists() for path in workspace.mesh_paths.values())
+        or _has_file_with_suffix(workspace.mesh_dir, ".glb")
+    )
+
+
 def workspace_to_dict(workspace: CaseWorkspace | None) -> dict[str, object] | None:
     """Return frontend-safe workspace state without local filesystem paths."""
     if workspace is None:
@@ -21,8 +43,8 @@ def workspace_to_dict(workspace: CaseWorkspace | None) -> dict[str, object] | No
     reoriented_exists = workspace.reoriented_path.exists()
     skull_stripped_exists = workspace.skull_stripped_path.exists()
     fast_pve_outputs_exist = bool(getattr(workspace, "has_fast_pve_outputs", False))
-    metrics_exists = workspace.metrics_json_path.exists()
-    any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_analysis_outputs", False))
+    metrics_exists = _metrics_json_exists(workspace)
+    any_mesh_outputs_exist = _mesh_glb_exists(workspace)
     complete_mesh_outputs_exist = bool(getattr(workspace, "has_complete_mesh_analysis_outputs", False))
 
     return {
@@ -69,16 +91,9 @@ def case_capabilities_to_dict(case: MriCaseRecord) -> dict[str, bool]:
 
     raw_exists = workspace.raw_path.exists()
     has_fast_pve_outputs = bool(getattr(workspace, "has_fast_pve_outputs", False))
-    has_any_mesh_outputs = bool(getattr(workspace, "has_any_mesh_analysis_outputs", False))
-    has_metrics = workspace.metrics_json_path.exists()
-    can_view_artifacts = any([
-        raw_exists,
-        workspace.reoriented_path.exists(),
-        workspace.skull_stripped_path.exists(),
-        has_fast_pve_outputs,
-        has_any_mesh_outputs,
-        has_metrics,
-    ])
+    has_any_mesh_outputs = _mesh_glb_exists(workspace)
+    has_metrics = _metrics_json_exists(workspace)
+    can_view_artifacts = has_any_mesh_outputs or has_metrics
 
     return {
         "raw_uploaded": raw_exists,

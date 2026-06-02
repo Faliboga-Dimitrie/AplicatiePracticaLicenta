@@ -21,21 +21,14 @@ function friendlyArtifactName(artifact: Artifact): string {
     if (lower.includes('csf')) return 'CSF 3D model'
     return '3D model'
   }
-  if (lower.endsWith('.csv')) {
-    if (lower.includes('volume')) return 'Volume measurements table'
-    if (lower.includes('surface')) return 'Surface measurements table'
-    return 'Measurements table'
-  }
   if (lower.endsWith('.json')) return 'Measurement data'
-  if (lower.endsWith('.nii') || lower.endsWith('.nii.gz')) return 'MRI processing file'
   return artifact.name
 }
 
 function friendlyArtifactDescription(artifact: Artifact): string {
   const lower = artifact.name.toLowerCase()
   if (lower.endsWith('.glb')) return `3D file · ${formatBytes(artifact.size_bytes)}`
-  if (lower.endsWith('.csv')) return `Spreadsheet-friendly file · ${formatBytes(artifact.size_bytes)}`
-  if (lower.endsWith('.json')) return `Structured data file · ${formatBytes(artifact.size_bytes)}`
+  if (lower.endsWith('.json')) return `Structured measurement data · ${formatBytes(artifact.size_bytes)}`
   return `${artifact.name} · ${formatBytes(artifact.size_bytes)}`
 }
 
@@ -55,7 +48,12 @@ export function ArtifactList({ artifacts }: ArtifactListProps) {
     }
   }
 
-  if (artifacts.length === 0) {
+  const downloadableArtifacts = artifacts.filter((artifact) => {
+    const lower = artifact.name.toLowerCase()
+    return lower.endsWith('.glb') || lower.endsWith('.json')
+  })
+
+  if (downloadableArtifacts.length === 0) {
     return <p className="muted">No result files are available yet. Create the 3D model and measurements first.</p>
   }
 
@@ -63,7 +61,7 @@ export function ArtifactList({ artifacts }: ArtifactListProps) {
     <div className="stack">
       {error && <p className="error-text">{error}</p>}
       <div className="table-like download-list">
-        {artifacts.map((artifact) => (
+        {downloadableArtifacts.map((artifact) => (
           <div className="table-row" key={`${artifact.kind}-${artifact.name}`}>
             <div>
               <strong>{friendlyArtifactName(artifact)}</strong>

@@ -63,11 +63,11 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])
+    app.include_router(artifacts.router, prefix="/cases", tags=["artifacts"])
     app.include_router(cases.router, prefix="/cases", tags=["cases"])
     app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
     app.include_router(processing.router, prefix="/processing", tags=["processing"])
     app.include_router(public.router, prefix="/public", tags=["public"])
-    app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
 
     return app
 

@@ -280,7 +280,8 @@ def test_artifact_service_lists_only_existing_artifacts_and_filters_viewer_files
     names = [artifact.ref.name for artifact in bundle.data.artifacts]
     assert "csf_mesh.glb" in names
     assert "metrics.json" in names
-    assert "reoriented.nii.gz" in names
+    assert "reoriented.nii.gz" not in names
+    assert all(a.ref.name.lower().endswith((".glb", ".json")) for a in bundle.data.artifacts)
     assert all(a.ref.kind in {ArtifactKind.MESH, ArtifactKind.METRICS} for a in viewer.data.artifacts)
     assert file_result.data.ref.name == "metrics.json"
     assert missing.data is None

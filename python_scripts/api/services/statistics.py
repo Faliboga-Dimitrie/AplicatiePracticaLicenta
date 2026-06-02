@@ -175,7 +175,7 @@ class StatisticsService:
             workspace = getattr(case, "workspace", None)
             if workspace is None:
                 continue
-            if require_metrics and not workspace.metrics_json_path.exists():
+            if require_metrics and self._metrics_json_path(workspace) is None:
                 continue
             workspaces.append(workspace)
 
@@ -183,10 +183,11 @@ class StatisticsService:
 
     def _metrics_payload_for_case(self, case: MriCaseRecord) -> dict[str, Any]:
         workspace = getattr(case, "workspace", None)
-        if workspace is None or not workspace.metrics_json_path.exists():
+        metrics_path = self._metrics_json_path(workspace)
+        if metrics_path is None:
             raise FileNotFoundError("Metrics JSON does not exist for this case.")
 
-        with workspace.metrics_json_path.open("r", encoding="utf-8") as f:
+        with metrics_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
 
         volumes = TissueVolumes.from_mapping(payload.get("volumes") or {}).to_dict()
@@ -216,8 +217,8 @@ class StatisticsService:
 
     def _date_entry(self, case: MriCaseRecord) -> dict[str, Any]:
         workspace = getattr(case, "workspace", None)
-        metrics_ready = bool(workspace is not None and workspace.metrics_json_path.exists())
-        mesh_ready = bool(workspace is not None and getattr(workspace, "has_any_mesh_analysis_outputs", False))
+        metrics_ready = self._metrics_json_path(workspace) is not None
+        mesh_ready = bool(workspace is not None and self._has_glb_outputs(workspace))
         pve_ready = bool(workspace is not None and getattr(workspace, "has_fast_pve_outputs", False))
         complete_visual = pve_ready
 
@@ -231,6 +232,34 @@ class StatisticsService:
             "has_meshes": mesh_ready,
             "has_pve_outputs": pve_ready,
         }
+
+    def _metrics_json_path(self, workspace: CaseWorkspace | None) -> Any:
+        if workspace is None:
+            return None
+
+        expected_path = workspace.metrics_json_path
+        if expected_path.exists() and expected_path.is_file():
+            return expected_path
+
+        mesh_dir = getattr(workspace, "mesh_dir", None)
+        if mesh_dir is None or not mesh_dir.exists() or not mesh_dir.is_dir():
+            return None
+
+        json_files = sorted(
+            (path for path in mesh_dir.iterdir() if path.is_file() and path.name.lower().endswith(".json")),
+            key=lambda path: ("metrics" not in path.name.lower(), path.name.lower()),
+        )
+        return json_files[0] if json_files else None
+
+    def _has_glb_outputs(self, workspace: CaseWorkspace) -> bool:
+        if any(path.exists() and path.is_file() for path in workspace.mesh_paths.values()):
+            return True
+
+        mesh_dir = getattr(workspace, "mesh_dir", None)
+        if mesh_dir is None or not mesh_dir.exists() or not mesh_dir.is_dir():
+            return False
+
+        return any(path.is_file() and path.name.lower().endswith(".glb") for path in mesh_dir.iterdir())
 
 
 __all__ = ["StatisticsService"]
