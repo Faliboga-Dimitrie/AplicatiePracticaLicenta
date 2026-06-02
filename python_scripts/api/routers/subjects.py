@@ -131,7 +131,7 @@ def update_subject(
 
     return {
         "updated": True,
-        "subject": subject_to_dict(subject),
+        "subject": subject_to_dict(subject.subject),
     }
 
 
