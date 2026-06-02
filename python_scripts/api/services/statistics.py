@@ -5,6 +5,7 @@ from typing import Any
 
 from ...access_control import DbResult, MriCaseRecord, UserRecord
 from ...mesh_analysis.evolution_in_time import MriEvolutionInTime
+from ...project_core import CaseWorkspace
 from ...project_core.domain import TissueSurfaces, TissueVolumes, validate_acquisition_date
 from .cases import CaseService
 
@@ -53,38 +54,26 @@ class StatisticsService:
         start_date: str,
         end_date: str,
     ) -> DbResult[dict[str, Any]]:
-        try:
-            start_date = validate_acquisition_date(start_date)
-            end_date = validate_acquisition_date(end_date)
-        except Exception as exc:
-            return DbResult.fail(str(exc))
-
-        cases_result = self.cases.list_for_subject(user, subject_id)
-        if not cases_result.success:
-            return DbResult.fail(cases_result.error or "Could not load MRI cases.")
-        if cases_result.data is None:
+        selection = self._comparison_workspaces_for_interval(
+            user=user,
+            subject_id=subject_id,
+            start_date=start_date,
+            end_date=end_date,
+            require_metrics=True,
+        )
+        if not selection.success:
+            return DbResult.fail(selection.error or "Could not select comparison workspaces.")
+        if selection.data is None:
             return DbResult.ok(None)
 
-        selected_cases = [
-            case
-            for case in cases_result.data
-            if start_date <= case.acquisition_date.isoformat() <= end_date
-        ]
-        selected_cases.sort(key=lambda case: case.acquisition_date)
-
-        workspaces = []
-        for case in selected_cases:
-            workspace = getattr(case, "workspace", None)
-            if workspace is not None and workspace.metrics_json_path.exists():
-                workspaces.append(workspace)
-
+        normalized_start_date, normalized_end_date, workspaces = selection.data
         if len(workspaces) < 2:
             return DbResult.fail("Time comparison requires at least two metric-ready MRI cases in the selected interval.")
 
         try:
             evolution = MriEvolutionInTime.from_workspaces(
-                start_date=start_date,
-                end_date=end_date,
+                start_date=normalized_start_date,
+                end_date=normalized_end_date,
                 workspaces=workspaces,
             )
             return DbResult.ok(evolution.build_comparison_json())
@@ -108,10 +97,63 @@ class StatisticsService:
         marching_cubes_step_size: int = 1,
     ) -> DbResult[bytes]:
         try:
-            start_date = validate_acquisition_date(start_date)
-            end_date = validate_acquisition_date(end_date)
-            if target_date is not None:
-                target_date = validate_acquisition_date(target_date)
+            normalized_target_date = (
+                validate_acquisition_date(target_date)
+                if target_date is not None
+                else None
+            )
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
+        selection = self._comparison_workspaces_for_interval(
+            user=user,
+            subject_id=subject_id,
+            start_date=start_date,
+            end_date=end_date,
+            require_metrics=False,
+        )
+        if not selection.success:
+            return DbResult.fail(selection.error or "Could not select comparison workspaces.")
+        if selection.data is None:
+            return DbResult.ok(None)
+
+        normalized_start_date, normalized_end_date, workspaces = selection.data
+        if len(workspaces) < 2:
+            return DbResult.fail("Visual comparison requires at least two MRI cases in the selected interval.")
+
+        try:
+            evolution = MriEvolutionInTime.from_workspaces(
+                start_date=normalized_start_date,
+                end_date=normalized_end_date,
+                workspaces=workspaces,
+            )
+            return DbResult.ok(
+                evolution.build_visual_comparison_glb(
+                    target_date=normalized_target_date,
+                    tissues=tissues,
+                    comparison_method=comparison_method,
+                    pve_threshold=pve_threshold,
+                    distance_threshold_mm=distance_threshold_mm,
+                    baseline_color=baseline_color,
+                    changed_color=changed_color,
+                    marching_cubes_step_size=marching_cubes_step_size,
+                )
+            )
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
+    def _comparison_workspaces_for_interval(
+        self,
+        *,
+        user: UserRecord,
+        subject_id: str,
+        start_date: str,
+        end_date: str,
+        require_metrics: bool,
+    ) -> DbResult[tuple[str, str, list[CaseWorkspace]]]:
+        try:
+            normalized_start_date = validate_acquisition_date(start_date)
+            normalized_end_date = validate_acquisition_date(end_date)
         except Exception as exc:
             return DbResult.fail(str(exc))
 
@@ -124,39 +166,20 @@ class StatisticsService:
         selected_cases = [
             case
             for case in cases_result.data
-            if start_date <= case.acquisition_date.isoformat() <= end_date
+            if normalized_start_date <= case.acquisition_date.isoformat() <= normalized_end_date
         ]
         selected_cases.sort(key=lambda case: case.acquisition_date)
 
-        workspaces = []
+        workspaces: list[CaseWorkspace] = []
         for case in selected_cases:
             workspace = getattr(case, "workspace", None)
-            if workspace is not None:
-                workspaces.append(workspace)
+            if workspace is None:
+                continue
+            if require_metrics and not workspace.metrics_json_path.exists():
+                continue
+            workspaces.append(workspace)
 
-        if len(workspaces) < 2:
-            return DbResult.fail("Visual comparison requires at least two MRI cases in the selected interval.")
-
-        try:
-            evolution = MriEvolutionInTime.from_workspaces(
-                start_date=start_date,
-                end_date=end_date,
-                workspaces=workspaces,
-            )
-            return DbResult.ok(
-                evolution.build_visual_comparison_glb(
-                    target_date=target_date,
-                    tissues=tissues,
-                    comparison_method=comparison_method,
-                    pve_threshold=pve_threshold,
-                    distance_threshold_mm=distance_threshold_mm,
-                    baseline_color=baseline_color,
-                    changed_color=changed_color,
-                    marching_cubes_step_size=marching_cubes_step_size,
-                )
-            )
-        except Exception as exc:
-            return DbResult.fail(str(exc))
+        return DbResult.ok((normalized_start_date, normalized_end_date, workspaces))
 
     def _metrics_payload_for_case(self, case: MriCaseRecord) -> dict[str, Any]:
         workspace = getattr(case, "workspace", None)
@@ -194,7 +217,7 @@ class StatisticsService:
     def _date_entry(self, case: MriCaseRecord) -> dict[str, Any]:
         workspace = getattr(case, "workspace", None)
         metrics_ready = bool(workspace is not None and workspace.metrics_json_path.exists())
-        mesh_ready = bool(workspace is not None and getattr(workspace, "has_any_mesh_outputs", False))
+        mesh_ready = bool(workspace is not None and getattr(workspace, "has_any_mesh_analysis_outputs", False))
         pve_ready = bool(workspace is not None and getattr(workspace, "has_fast_pve_outputs", False))
         complete_visual = pve_ready
 

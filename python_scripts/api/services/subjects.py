@@ -71,27 +71,6 @@ class SubjectService:
         return DbResult.ok(subjects[0])
 
 
-    def get_subject(
-        self,
-        subject_id: str,
-    ) -> DbResult[SubjectRecord]:
-        return self.access.get_subject(subject_id)
-
-    def update_subject(
-        self,
-        subject_id: str,
-        *,
-        name: str | None | object = UNSET,
-        age: int | None | object = UNSET,
-        notes: str | None | object = UNSET,
-    ) -> DbResult[bool]:
-        return self.access.update_subject(
-            subject_id,
-            name=name,
-            age=age,
-            notes=notes,
-        )
-    
     def update_subject_for_user(
         self,
         user: UserRecord,

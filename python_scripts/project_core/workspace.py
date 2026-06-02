@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from uuid import uuid4
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +31,43 @@ def _remove_tree(path: Path) -> bool:
         raise ValueError(f"Expected directory path, got file path: {path}")
     shutil.rmtree(path)
     return True
+
+def _stage_remove_tree(path: Path) -> tuple[Path, Path] | None:
+    """Move a directory aside so a delete can be committed or rolled back."""
+    if not path.exists():
+        return None
+    if not path.is_dir():
+        raise ValueError(f"Expected directory path, got file path: {path}")
+
+    backup = path.parent / f".{path.name}.delete_{uuid4().hex}"
+    shutil.move(str(path), str(backup))
+    return backup, path
+
+
+def _rollback_staged_trees(staged: list[tuple[Path, Path]]) -> None:
+    """Move staged-delete directories back to their original paths."""
+    for backup, original in reversed(staged):
+        if not backup.exists():
+            continue
+        if original.exists():
+            raise FileExistsError(f"Cannot restore {original}; path already exists.")
+        original.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(backup), str(original))
+
+
+def _commit_staged_trees(
+    staged: list[tuple[Path, Path]],
+    *,
+    prune_empty_subject_dirs: bool = False,
+) -> list[Path]:
+    """Permanently remove staged-delete backups."""
+    removed: list[Path] = []
+    for backup, original in staged:
+        if _remove_tree(backup):
+            removed.append(original)
+            if prune_empty_subject_dirs:
+                _prune_empty_parent(original)
+    return removed
 
 def _move_tree(source: Path, target: Path, *, overwrite: bool = False) -> bool:
     """
@@ -129,10 +167,6 @@ class CaseWorkspace:
         """All local directories owned by this case, including the staged input."""
         return [self.input_mri_dir, *self.processed_stage_dirs]
 
-    @property
-    def workspace_exists(self) -> bool:
-        return any(directory.exists() for directory in self.stage_dirs)
-
     def ensure_directories(self) -> None:
         """Create all local workspace directories for this acquisition."""
         for directory in self.stage_dirs:
@@ -193,6 +227,32 @@ class CaseWorkspace:
 
         return removed
     
+    def stage_delete_workspace(
+        self,
+        *,
+        include_input: bool = True,
+    ) -> list[tuple[Path, Path]]:
+        """
+        Move this case's workspace directories aside before a DB delete.
+
+        The returned list contains (backup_path, original_path). Call
+        FileSystemWorkspaceProvider.commit_staged_delete(...) after the database
+        delete succeeds, or rollback_staged_delete(...) if it fails.
+        """
+        directories = self.stage_dirs if include_input else self.processed_stage_dirs
+        staged: list[tuple[Path, Path]] = []
+
+        try:
+            for directory in directories:
+                moved = _stage_remove_tree(directory)
+                if moved is not None:
+                    staged.append(moved)
+        except Exception:
+            _rollback_staged_trees(staged)
+            raise
+
+        return staged
+
     # ------------------------------------------------------------------
     # rename
     # ------------------------------------------------------------------
@@ -273,23 +333,11 @@ class CaseWorkspace:
         return self.fast_dir / self.subject_id
 
     @property
-    def fast_pve_csf_path(self) -> Path:
-        return self.fast_dir / f"{self.subject_id}_pve_0.nii.gz"
-
-    @property
-    def fast_pve_gm_path(self) -> Path:
-        return self.fast_dir / f"{self.subject_id}_pve_1.nii.gz"
-
-    @property
-    def fast_pve_wm_path(self) -> Path:
-        return self.fast_dir / f"{self.subject_id}_pve_2.nii.gz"
-
-    @property
     def fast_pve_paths(self) -> dict[str, Path]:
         return {
-            TissueName.CSF.value: self.fast_pve_csf_path,
-            TissueName.GM.value: self.fast_pve_gm_path,
-            TissueName.WM.value: self.fast_pve_wm_path,
+            TissueName.CSF.value: self.fast_dir / f"{self.subject_id}_pve_0.nii.gz",
+            TissueName.GM.value: self.fast_dir / f"{self.subject_id}_pve_1.nii.gz",
+            TissueName.WM.value: self.fast_dir / f"{self.subject_id}_pve_2.nii.gz",
         }
 
     @property
@@ -308,54 +356,20 @@ class CaseWorkspace:
         key = tissue_key(tissue)
         return self.mesh_dir / f"{self.subject_id}_{key}_mesh.glb"
 
-
-    @property
-    def mesh_csf_mesh_path(self) -> Path:
-        return self.mesh_path_for(TissueName.CSF)
-
-    @property
-    def mesh_gm_mesh_path(self) -> Path:
-        return self.mesh_path_for(TissueName.GM)
-
-    @property
-    def mesh_wm_mesh_path(self) -> Path:
-        return self.mesh_path_for(TissueName.WM)
-
-
-    @property
-    def mesh_metrics_json_path(self) -> Path:
-        return self.mesh_dir / f"{self.subject_id}_metrics.json"
-
-    # Preferred shorter name for new code.
     @property
     def metrics_json_path(self) -> Path:
-        return self.mesh_metrics_json_path
+        return self.mesh_dir / f"{self.subject_id}_metrics.json"
 
     @property
     def mesh_paths(self) -> dict[str, Path]:
         return {tissue.value: self.mesh_path_for(tissue) for tissue in TISSUE_NAMES}
 
-
-    @property
-    def mesh_output_paths(self) -> list[Path]:
-        return [*self.mesh_paths.values(), self.mesh_metrics_json_path]
-
-
     @property
     def mesh_analysis_output_paths(self) -> list[Path]:
         return [
             *self.mesh_paths.values(),
-            self.mesh_metrics_json_path,
+            self.metrics_json_path,
         ]
-
-    @property
-    def has_complete_mesh_outputs(self) -> bool:
-        return all(path.exists() for path in self.mesh_output_paths)
-
-    @property
-    def has_any_mesh_outputs(self) -> bool:
-        return any(path.exists() for path in self.mesh_output_paths)
-
 
     @property
     def has_complete_mesh_analysis_outputs(self) -> bool:
@@ -426,6 +440,29 @@ class FileSystemWorkspaceProvider:
             prune_empty_subject_dirs=prune_empty_subject_dirs,
         )
 
+    def stage_workspace_delete(
+        self,
+        case: MRICase,
+        *,
+        include_input: bool = True,
+    ) -> list[tuple[Path, Path]]:
+        workspace = self.build_workspace(case)
+        return workspace.stage_delete_workspace(include_input=include_input)
+
+    def commit_staged_delete(
+        self,
+        staged: list[tuple[Path, Path]],
+        *,
+        prune_empty_subject_dirs: bool = False,
+    ) -> list[Path]:
+        return _commit_staged_trees(
+            staged,
+            prune_empty_subject_dirs=prune_empty_subject_dirs,
+        )
+
+    def rollback_staged_delete(self, staged: list[tuple[Path, Path]]) -> None:
+        _rollback_staged_trees(staged)
+
     def delete_subject_workspaces(self, subject_id: str) -> list[Path]:
         """
         Delete every local workspace directory owned by one subject.
@@ -437,14 +474,7 @@ class FileSystemWorkspaceProvider:
 
         Returns the subject directories that were actually removed.
         """
-        safe_subject_id = _safe_case_segment(subject_id)
-        subject_dirs = [
-            Path(self.settings.input_mri_dir) / safe_subject_id,
-            Path(self.settings.reoriented_dir) / safe_subject_id,
-            Path(self.settings.hd_bet_dir) / safe_subject_id,
-            Path(self.settings.fast_dir) / safe_subject_id,
-            Path(self.settings.mesh_dir) / safe_subject_id,
-        ]
+        subject_dirs = self._subject_workspace_dirs(subject_id)
 
         removed: list[Path] = []
         for directory in subject_dirs:
@@ -452,6 +482,29 @@ class FileSystemWorkspaceProvider:
                 removed.append(directory)
 
         return removed
+
+    def stage_subject_workspaces_delete(self, subject_id: str) -> list[tuple[Path, Path]]:
+        """Move all subject workspace directories aside before deleting DB rows."""
+        staged: list[tuple[Path, Path]] = []
+        try:
+            for directory in self._subject_workspace_dirs(subject_id):
+                moved = _stage_remove_tree(directory)
+                if moved is not None:
+                    staged.append(moved)
+        except Exception:
+            _rollback_staged_trees(staged)
+            raise
+        return staged
+
+    def _subject_workspace_dirs(self, subject_id: str) -> list[Path]:
+        safe_subject_id = _safe_case_segment(subject_id)
+        return [
+            Path(self.settings.input_mri_dir) / safe_subject_id,
+            Path(self.settings.reoriented_dir) / safe_subject_id,
+            Path(self.settings.hd_bet_dir) / safe_subject_id,
+            Path(self.settings.fast_dir) / safe_subject_id,
+            Path(self.settings.mesh_dir) / safe_subject_id,
+        ]
 
 
 def build_case_workspace(case: MRICase, settings: Settings) -> CaseWorkspace:

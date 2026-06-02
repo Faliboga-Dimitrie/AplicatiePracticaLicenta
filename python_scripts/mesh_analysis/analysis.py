@@ -80,6 +80,7 @@ class MeshAnalysisPipeline:
             subject_id=self.workspace.subject_id,
             volumes=volumes,
             surfaces=surfaces,
+            acquisition_date=self.workspace.acquisition_date,
         )
 
         self._write_metrics_json(result, export_result)
@@ -130,7 +131,7 @@ class MeshAnalysisPipeline:
                 path.unlink()
 
     def _load_existing_result(self) -> MeshAnalysisResult:
-        metrics_path = self.workspace.mesh_metrics_json_path
+        metrics_path = self.workspace.metrics_json_path
 
         with metrics_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
@@ -139,6 +140,7 @@ class MeshAnalysisPipeline:
             subject_id=str(payload["subject_id"]),
             volumes=TissueVolumes.from_mapping(payload["volumes"]),
             surfaces=TissueSurfaces.from_mapping(payload["surfaces"]),
+            acquisition_date=str(payload.get("acquisition_date") or payload.get("aquisition_date") or self.workspace.acquisition_date),
         )
 
     def _validate_inputs(self) -> None:
@@ -158,8 +160,8 @@ class MeshAnalysisPipeline:
         payload = result.to_dict()
         payload["mesh_paths"] = _stringify_paths(export_result.mesh_paths)
 
-        self.workspace.mesh_metrics_json_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.workspace.mesh_metrics_json_path.open("w", encoding="utf-8") as f:
+        self.workspace.metrics_json_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.workspace.metrics_json_path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
 
 

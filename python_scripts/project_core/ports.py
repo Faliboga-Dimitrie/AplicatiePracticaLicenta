@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar, Any
+from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
 
 from datetime import date
 
@@ -172,13 +172,13 @@ class WorkspaceGateway(Protocol):
         subject_id: str,
         acquisition_date: date,
         source_raw_path: Path | None = None,
-    ) -> Any:
+    ) -> CaseWorkspace:
         ...
 
-    def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> None:
+    def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> list[Path]:
         ...
 
-    def delete_subject_workspaces(self, *, subject_id: str) -> None:
+    def delete_subject_workspaces(self, *, subject_id: str) -> list[Path]:
         ...
 
     def rename_case_workspace(
@@ -188,10 +188,27 @@ class WorkspaceGateway(Protocol):
         old_acquisition_date: date,
         new_acquisition_date: date,
         overwrite: bool = False,
-    ) -> Any:
+    ) -> list[tuple[Path, Path]]:
         ...
 
-    def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> Any:
+    def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> CaseWorkspace:
+        ...
+
+    def stage_case_workspace_delete(
+        self,
+        *,
+        subject_id: str,
+        acquisition_date: date,
+    ) -> list[tuple[Path, Path]]:
+        ...
+
+    def stage_subject_workspaces_delete(self, *, subject_id: str) -> list[tuple[Path, Path]]:
+        ...
+
+    def commit_staged_delete(self, staged: list[tuple[Path, Path]]) -> list[Path]:
+        ...
+
+    def rollback_staged_delete(self, staged: list[tuple[Path, Path]]) -> None:
         ...
 
 

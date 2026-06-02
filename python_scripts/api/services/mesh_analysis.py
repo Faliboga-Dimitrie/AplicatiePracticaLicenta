@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from ...project_core import CaseWorkspace
+
 from ...access_control import DbResult, UserRecord
 from ...project_core.config import Settings, ensure_main_directories, settings as project_settings
 from ...project_core.domain import MRICase
@@ -78,11 +80,11 @@ class MeshAnalysisService:
         if case_result.data is None:
             return DbResult.ok(None)
 
-        active = self.jobs.active_for_user_case_type(
-            user,
-            job_type=self.JOB_TYPE,
+        active = self.jobs.active_for_case_type(
             case_id=case_id,
+            job_type=self.JOB_TYPE,
         )
+
         if not active.success:
             return DbResult.fail(active.error or "Could not check active mesh-analysis jobs.")
         if active.data is not None:
@@ -172,14 +174,6 @@ class MeshAnalysisService:
             workspace = self.workspace_provider.get_workspace(domain_case)
             workspace.ensure_directories()
 
-            missing = workspace.missing_fast_pve_paths
-            if missing:
-                missing_str = ", ".join(str(path) for path in missing)
-                raise FileNotFoundError(
-                    "Mesh analysis requires FAST PVE outputs, but some files are missing: "
-                    f"{missing_str}"
-                )
-
             require_not_cancelled(context, "Mesh-analysis job was cancelled.")
             context.checkpoint("Computing volumes, surfaces and GLB meshes...", progress=35)
             pipeline = self.pipeline_factory(workspace)
@@ -236,7 +230,7 @@ class MeshAnalysisService:
         *,
         user: UserRecord,
         case_db_id: int,
-        workspace: Any,
+        workspace: CaseWorkspace,
         result: Any,
     ) -> dict[str, Any]:
         artifact_bundle_result = self.artifacts.list_for_case(user, case_db_id)

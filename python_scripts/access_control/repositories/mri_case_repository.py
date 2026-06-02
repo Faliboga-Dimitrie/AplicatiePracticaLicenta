@@ -80,31 +80,10 @@ class MriCaseRepository:
             (case_id,),
         )
 
+
     # ------------------------------------------------------------------
     # Public/application-style access
     # ------------------------------------------------------------------
-
-    def get_first_for_subject(self, subject_id: str) -> DbResult[MriCaseRecord]:
-        """
-        Return the first case for a subject.
-
-        I am using acquisition_date ASC here so 'first' means the earliest
-        recorded acquisition. Without ORDER BY, SQL does not guarantee order.
-        """
-        try:
-            row = self.db.fetch_one(
-                """
-                SELECT id, subject_id, acquisition_date, notes, status
-                FROM mri_case
-                WHERE subject_id = %s
-                ORDER BY acquisition_date ASC
-                LIMIT 1
-                """,
-                (subject_id,),
-            )
-            return DbResult.ok(mri_case_from_row(row) if row else None)
-        except Exception as exc:
-            return DbResult.fail(str(exc))
 
     def get_by_subject_date(
         self,

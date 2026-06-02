@@ -64,6 +64,33 @@ class ProjectCaseWorkspaceGateway:
     def delete_subject_workspaces(self, *, subject_id: str) -> list[Path]:
         return self._provider().delete_subject_workspaces(subject_id)
 
+
+    def stage_case_workspace_delete(
+        self,
+        *,
+        subject_id: str,
+        acquisition_date: date,
+    ) -> list[tuple[Path, Path]]:
+        placeholder_raw = Path("__staged_delete_case_placeholder__.nii.gz")
+        case = MRICase(
+            subject_id=subject_id,
+            acquisition_date=acquisition_date.isoformat(),
+            raw_path=placeholder_raw,
+        )
+        return self._provider().stage_workspace_delete(
+            case,
+            include_input=True,
+        )
+
+    def stage_subject_workspaces_delete(self, *, subject_id: str) -> list[tuple[Path, Path]]:
+        return self._provider().stage_subject_workspaces_delete(subject_id)
+
+    def commit_staged_delete(self, staged: list[tuple[Path, Path]]) -> list[Path]:
+        return self._provider().commit_staged_delete(staged)
+
+    def rollback_staged_delete(self, staged: list[tuple[Path, Path]]) -> None:
+        self._provider().rollback_staged_delete(staged)
+
     def _find_existing_raw_input(self, *, subject_id: str, acquisition_date: date) -> Path | None:
         """Return the first staged raw NIfTI file for this case, if one exists.
 

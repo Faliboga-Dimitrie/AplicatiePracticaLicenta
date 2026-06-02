@@ -174,7 +174,7 @@ class ArtifactService:
                 case_id=case.id,
                 name="metrics.json",
                 kind=ArtifactKind.METRICS,
-                path=workspace.mesh_metrics_json_path,
+                path=workspace.metrics_json_path,
             )
         )
 

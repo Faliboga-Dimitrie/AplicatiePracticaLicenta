@@ -6,6 +6,12 @@ from pathlib import Path
 from ...access_control import AccessControlService, DbResult, MriCaseRecord, UserRecord
 from ...access_control.utils import UNSET
 
+CASE_BUSY_STATUSES = {
+    "preprocessing_queued",
+    "preprocessing",
+    "mesh_queued",
+    "mesh_analysis",
+}
 
 class CaseService:
     """
@@ -76,22 +82,6 @@ class CaseService:
 
         return self.access.get_mri_case(case_id)
 
-    def get_first_for_subject(
-        self,
-        user: UserRecord,
-        subject_id: str,
-    ) -> DbResult[MriCaseRecord]:
-        allowed = self._user_has_subject_access(
-            user,
-            subject_id,
-            minimum_role="viewer",
-        )
-        if not allowed.success:
-            return DbResult.fail(allowed.error or "Could not check subject access.")
-        if not allowed.data:
-            return DbResult.ok(None)
-
-        return self.access.get_first_mri_case_for_subject(subject_id)
 
     def get_by_subject_date(
         self,
@@ -321,4 +311,4 @@ class CaseService:
         )
 
 
-__all__ = ["CaseService"]
+__all__ = ["CaseService", "CASE_BUSY_STATUSES"]

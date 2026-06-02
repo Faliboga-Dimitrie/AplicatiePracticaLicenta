@@ -14,23 +14,9 @@ from ..errors import raise_api_error, unwrap_result
 from ..schemas import CreateMriCaseRequest, MriCaseResponse, UpdateMriCaseRequest
 from ..serialization import mri_case_to_dict
 from ..services import CaseService
+from ..upload_validation import safe_nifti_upload_filename
 
 router = APIRouter()
-
-def _safe_upload_filename(filename: str | None) -> str:
-    name = Path(filename or "raw_mri.nii.gz").name.strip()
-    if not name:
-        name = "raw_mri.nii.gz"
-
-    lower = name.lower()
-    if not (lower.endswith(".nii") or lower.endswith(".nii.gz")):
-        raise_api_error(
-            400,
-            "Raw MRI upload must be a NIfTI file ending in .nii or .nii.gz.",
-            code="INVALID_UPLOAD_FILE",
-        )
-
-    return name
 
 
 @router.post("/upload")
@@ -49,7 +35,14 @@ def create_case_with_upload(
     upload to a temporary file, then reuses CaseService.create_for_user so the
     same authorization, duplicate-date check and workspace-copy logic still run.
     """
-    filename = _safe_upload_filename(file.filename)
+    try:
+        filename = safe_nifti_upload_filename(file.filename, default="raw_mri.nii.gz")
+    except ValueError as exc:
+        raise_api_error(
+            400,
+            str(exc),
+            code="INVALID_UPLOAD_FILE",
+        )
 
     with tempfile.TemporaryDirectory(prefix="mri_api_upload_") as tmpdir:
         temp_path = Path(tmpdir) / filename

@@ -326,18 +326,26 @@ class AccessControlService:
 
     def delete_subject(self, subject_id: str) -> DbResult[bool]:
         try:
-            result = self.subjects.delete(subject_id)
-
-            if not result.success or not result.data:
-                return result
+            existing = self.subjects.get(subject_id)
+            if not existing.success:
+                return DbResult.fail(existing.error or "Could not load subject before delete.")
+            if existing.data is None:
+                return DbResult.ok(False)
 
             if self.workspace_gateway is None:
-                raise RuntimeError("delete_workspaces=True requires a workspace_gateway.")
+                return DbResult.fail("delete_workspaces=True requires a workspace_gateway.")
 
-            self.workspace_gateway.delete_subject_workspaces(
+            staged_workspace_delete = self.workspace_gateway.stage_subject_workspaces_delete(
                 subject_id=subject_id,
             )
 
+            result = self.subjects.delete(subject_id)
+
+            if not result.success or not result.data:
+                self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
+                return result
+
+            self.workspace_gateway.commit_staged_delete(staged_workspace_delete)
             return result
 
         except Exception as exc:
@@ -362,24 +370,39 @@ class AccessControlService:
             if existing_access.data is None:
                 return DbResult.ok(False)
 
-            revoked = self.access.revoke(user_id, subject_id)
-            if not revoked.success:
-                return DbResult.fail(revoked.error or "Could not revoke subject access before delete.")
-
-            deleted = self.subjects.delete(subject_id)
-            if not deleted.success or not deleted.data:
-                # Best-effort rollback: if the subject was not deleted, restore
-                # the access row that this method removed first.
-                self.access.grant(user_id, subject_id, existing_access.data.role)
-                return deleted
+            existing = self.subjects.get(subject_id)
+            if not existing.success:
+                return DbResult.fail(existing.error or "Could not load subject before delete.")
+            if existing.data is None:
+                return DbResult.ok(False)
 
             if self.workspace_gateway is None:
-                raise RuntimeError("delete_workspaces=True requires a workspace_gateway.")
+                return DbResult.fail("delete_workspaces=True requires a workspace_gateway.")
 
-            self.workspace_gateway.delete_subject_workspaces(
+            staged_workspace_delete = self.workspace_gateway.stage_subject_workspaces_delete(
                 subject_id=subject_id,
             )
 
+            revoked = self.access.revoke(user_id, subject_id)
+            if not revoked.success:
+                self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
+                return DbResult.fail(revoked.error or "Could not revoke subject access before delete.")
+
+            deleted = self.subjects.delete(subject_id)
+            if not deleted.success:
+                self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
+                restored_access = self.access.grant(user_id, subject_id, existing_access.data.role)
+                if not restored_access.success:
+                    return DbResult.fail(
+                        f"Subject delete failed and access rollback also failed: {restored_access.error}"
+                    )
+                return deleted
+            if not deleted.data:
+                self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
+                self.access.grant(user_id, subject_id, existing_access.data.role)
+                return deleted
+
+            self.workspace_gateway.commit_staged_delete(staged_workspace_delete)
             return DbResult.ok(True)
 
         except Exception as exc:
@@ -404,12 +427,24 @@ class AccessControlService:
             if not result.success or result.data is None:
                 return result
 
-            workspace = self._create_workspace(
+            try:
+                workspace = self._create_workspace(
                     subject_id=subject_id,
                     acquisition_date=acq_date,
                     source_raw_path=source_raw_path,
                 )
-            result = DbResult.ok(
+            except Exception as exc:
+                rollback = self.cases.delete(result.data.id)
+                if not rollback.success:
+                    return DbResult.fail(
+                        f"Workspace creation failed after DB case create: {exc}. "
+                        f"DB rollback failed: {rollback.error}"
+                    )
+                return DbResult.fail(
+                    f"Workspace creation failed after DB case create; database rollback succeeded. {exc}"
+                )
+
+            return DbResult.ok(
                 MriCaseRecord(
                     id=result.data.id,
                     subject_id=result.data.subject_id,
@@ -419,8 +454,6 @@ class AccessControlService:
                     workspace=workspace,
                 )
             )
-
-            return result
         except Exception as exc:
             return DbResult.fail(str(exc))
 
@@ -428,17 +461,6 @@ class AccessControlService:
         result = self.cases.get(case_id)
         if not result.success or result.data is None:
             return result
-        return DbResult.ok(self._with_workspace(result.data))
-
-    def get_first_mri_case_for_subject(
-        self,
-        subject_id: str,
-    ) -> DbResult[MriCaseRecord]:
-        result = self.cases.get_first_for_subject(subject_id)
-
-        if not result.success or result.data is None:
-            return result
-
         return DbResult.ok(self._with_workspace(result.data))
 
 
@@ -558,11 +580,21 @@ class AccessControlService:
             if existing.data is None:
                 return DbResult.ok(False)
 
+            if self.workspace_gateway is None:
+                return DbResult.fail("delete_workspace=True requires a workspace_gateway.")
+
+            staged_workspace_delete = self.workspace_gateway.stage_case_workspace_delete(
+                subject_id=existing.data.subject_id,
+                acquisition_date=existing.data.acquisition_date,
+            )
+
             result = self.cases.delete_by_subject_date(subject_id, acquisition_date)
 
-            if result.success and result.data:
-                self._delete_workspace(existing.data)
+            if not result.success or not result.data:
+                self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
+                return result
 
+            self.workspace_gateway.commit_staged_delete(staged_workspace_delete)
             return result
 
         except Exception as exc:

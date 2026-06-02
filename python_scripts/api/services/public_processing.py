@@ -20,6 +20,7 @@ from ...mesh_analysis.mesh_extractors import MarchingCubesMeshExtractor
 from ...mesh_analysis.analysis import MeshAnalysisPipeline
 from ...mesh_analysis.surface_estimators import TrimeshSurfaceEstimator
 from ...mesh_analysis.volume_estimators import PveSumVolumeEstimator
+from ..upload_validation import safe_nifti_upload_filename
 
 
 class PublicProcessingService:
@@ -37,7 +38,7 @@ class PublicProcessingService:
         self.settings = settings_obj
 
     def process_upload_to_zip(self, file_obj: BinaryIO, filename: str | None) -> tuple[bytes, str]:
-        safe_filename = self._safe_upload_filename(filename)
+        safe_filename = safe_nifti_upload_filename(filename, default="anonymous_mri.nii.gz")
 
         with tempfile.TemporaryDirectory(prefix="mri_public_") as tmp:
             root = Path(tmp)
@@ -143,13 +144,6 @@ class PublicProcessingService:
         if not path.exists() or not path.is_file():
             raise FileNotFoundError(f"Expected public output file was not created: {path}")
         archive.write(path, arcname)
-
-    def _safe_upload_filename(self, filename: str | None) -> str:
-        name = (filename or "anonymous_mri.nii.gz").replace("\\", "_").replace("/", "_").strip()
-        lower = name.lower()
-        if not (lower.endswith(".nii") or lower.endswith(".nii.gz")):
-            raise ValueError("Upload must be a .nii or .nii.gz NIfTI file.")
-        return name or "anonymous_mri.nii.gz"
 
     def _subject_id_from_filename(self, filename: str) -> str:
         lower = filename.lower()

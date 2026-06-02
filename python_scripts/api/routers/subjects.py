@@ -126,7 +126,7 @@ def update_subject(
 
     unwrap_bool_result(result, not_found_message="Subject not found or nothing changed.")
 
-    refreshed = subjects.get_subject(subject_id)
+    refreshed = subjects.get_for_user(current_user, subject_id, include_cases=False)
     subject = unwrap_result(refreshed, not_found_message="Subject not found after update.")
 
     return {

@@ -4,8 +4,15 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from ..api.services import JobRecord, CaseArtifactBundle, ArtifactFile
+from ..api.services.cases import CASE_BUSY_STATUSES
 
-def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
+from ..access_control import MriCaseRecord, SubjectRecord, SubjectSummaryRecord, SubjectWithCases
+
+from ..project_core import CaseWorkspace
+
+
+def workspace_to_dict(workspace: CaseWorkspace | None) -> dict[str, object] | None:
     """Return frontend-safe workspace state without local filesystem paths."""
     if workspace is None:
         return None
@@ -15,8 +22,8 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
     skull_stripped_exists = workspace.skull_stripped_path.exists()
     fast_pve_outputs_exist = bool(getattr(workspace, "has_fast_pve_outputs", False))
     metrics_exists = workspace.metrics_json_path.exists()
-    any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_outputs", False))
-    complete_mesh_outputs_exist = bool(getattr(workspace, "has_complete_mesh_outputs", False))
+    any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_analysis_outputs", False))
+    complete_mesh_outputs_exist = bool(getattr(workspace, "has_complete_mesh_analysis_outputs", False))
 
     return {
         "case_id": getattr(workspace, "case_id", None),
@@ -42,16 +49,11 @@ def workspace_to_dict(workspace: Any | None) -> dict[str, object] | None:
     }
 
 
-def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
-    workspace = getattr(case, "workspace", None)
+def case_capabilities_to_dict(case: MriCaseRecord) -> dict[str, bool]:
+    workspace: CaseWorkspace | None = getattr(case, "workspace", None)
     status = (getattr(case, "status", None) or "").lower()
 
-    active_statuses = {
-        "preprocessing_queued",
-        "preprocessing",
-        "mesh_queued",
-        "mesh_analysis",
-    }
+    active_statuses = CASE_BUSY_STATUSES
     is_busy = status in active_statuses
 
     if workspace is None:
@@ -67,7 +69,7 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
 
     raw_exists = workspace.raw_path.exists()
     has_fast_pve_outputs = bool(getattr(workspace, "has_fast_pve_outputs", False))
-    has_any_mesh_outputs = bool(getattr(workspace, "has_any_mesh_outputs", False))
+    has_any_mesh_outputs = bool(getattr(workspace, "has_any_mesh_analysis_outputs", False))
     has_metrics = workspace.metrics_json_path.exists()
     can_view_artifacts = any([
         raw_exists,
@@ -93,15 +95,7 @@ def case_capabilities_to_dict(case: Any) -> dict[str, bool]:
         "is_busy": is_busy,
     }
 
-
-def user_to_dict(user: Any) -> dict[str, object]:
-    return {
-        "id": user.id,
-        "email": user.email,
-    }
-
-
-def subject_to_dict(subject: Any) -> dict[str, object]:
+def subject_to_dict(subject: SubjectRecord) -> dict[str, object]:
     return {
         "id": subject.id,
         "name": subject.name,
@@ -110,7 +104,7 @@ def subject_to_dict(subject: Any) -> dict[str, object]:
     }
 
 
-def mri_case_to_dict(case: Any) -> dict[str, object]:
+def mri_case_to_dict(case: MriCaseRecord) -> dict[str, object]:
     acquisition_date = case.acquisition_date
     if hasattr(acquisition_date, "isoformat"):
         acquisition_date = acquisition_date.isoformat()
@@ -127,7 +121,7 @@ def mri_case_to_dict(case: Any) -> dict[str, object]:
     }
 
 
-def subject_summary_to_dict(subject_summary: Any) -> dict[str, object]:
+def subject_summary_to_dict(subject_summary: SubjectSummaryRecord) -> dict[str, object]:
     subject = subject_summary.subject
 
     return {
@@ -140,7 +134,7 @@ def subject_summary_to_dict(subject_summary: Any) -> dict[str, object]:
     }
 
 def subject_with_cases_to_dict(
-    subject_with_cases: Any,
+    subject_with_cases: SubjectWithCases,
     *,
     include_cases: bool = True,
 ) -> dict[str, object]:
@@ -179,7 +173,7 @@ def _json_safe(value):
     return str(value)
 
 
-def job_to_dict(job) -> dict[str, Any]:
+def job_to_dict(job: JobRecord) -> dict[str, Any]:
     return {
         "id": job.id,
         "type": job.type,
@@ -199,7 +193,7 @@ def job_to_dict(job) -> dict[str, Any]:
 
 
 
-def artifact_to_dict(artifact) -> dict[str, Any]:
+def artifact_to_dict(artifact: ArtifactFile) -> dict[str, Any]:
     ref = artifact.ref
     return {
         "name": ref.name,
@@ -211,7 +205,7 @@ def artifact_to_dict(artifact) -> dict[str, Any]:
     }
 
 
-def case_artifacts_to_dict(bundle) -> dict[str, Any]:
+def case_artifacts_to_dict(bundle: CaseArtifactBundle) -> dict[str, Any]:
     return {
         "case_id": bundle.case_db_id,
         "case_key": bundle.case_key,

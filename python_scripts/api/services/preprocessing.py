@@ -82,10 +82,9 @@ class PreprocessingService:
         if case_result.data is None:
             return DbResult.ok(None)
 
-        active = self.jobs.active_for_user_case_type(
-            user,
-            job_type=self.JOB_TYPE,
+        active = self.jobs.active_for_case_type(
             case_id=case_id,
+            job_type=self.JOB_TYPE,
         )
         if not active.success:
             return DbResult.fail(active.error or "Could not check active preprocessing jobs.")
@@ -181,6 +180,7 @@ class PreprocessingService:
                 workspace,
             )
 
+            require_not_cancelled(context, "Preprocessing job was cancelled.")
             completed = self.cases.set_status_for_user(
                 user,
                 case_id,

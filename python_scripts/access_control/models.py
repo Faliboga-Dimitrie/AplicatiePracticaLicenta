@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+
+from ..project_core import CaseWorkspace
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ class MriCaseRecord:
     acquisition_date: date
     notes: str | None
     status: str | None
-    workspace: Any | None = None
+    workspace: CaseWorkspace | None = None
 
     @property
     def case_key(self) -> str:

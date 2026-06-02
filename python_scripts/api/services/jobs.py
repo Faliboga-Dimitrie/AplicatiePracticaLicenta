@@ -168,21 +168,14 @@ class JobService:
 
         jobs.sort(key=lambda job: job.created_at, reverse=True)
         return DbResult.ok(jobs)
-
-    def active_for_user_case_type(
-        self,
-        user: UserRecord,
-        *,
-        job_type: str,
-        case_id: int,
-    ) -> DbResult[JobRecord]:
-        """Return the newest non-terminal job of this type for this user's case."""
+    
+    def active_for_case_type(self, *, case_id: int, job_type: str) -> DbResult[JobRecord | None]:
+        """Return the newest non-terminal job of this type for this case, regardless of user."""
         with self._lock:
             matches = [
                 job
                 for job in self._jobs.values()
-                if job.user_id == user.id
-                and job.case_id == case_id
+                if job.case_id == case_id
                 and job.type == job_type
                 and job.status not in JobStatus.TERMINAL
             ]

@@ -10,7 +10,6 @@ from .domain import (
     TissueSurfaces,
     CaseMetrics,
     MeshAnalysisResult,
-    CaseProcessingResult,
 )
 
 from .workspace import (
@@ -58,7 +57,6 @@ __all__ = [
     "TissueSurfaces",
     "CaseMetrics",
     "MeshAnalysisResult",
-    "CaseProcessingResult",
     # workspace
     "CaseWorkspace",
     "FileSystemWorkspaceProvider",
