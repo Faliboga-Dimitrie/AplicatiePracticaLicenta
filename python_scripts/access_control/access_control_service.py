@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,23 @@ from .utils import (
 from .workspace_gateway import WorkspaceGateway
 
 
+@dataclass(frozen=True)
+class AccessControlRepositories:
+    """Repository bundle used to inject storage dependencies in tests.
+
+    Production code does not need to construct this object. If no repositories
+    are supplied to AccessControlService, the service builds the standard
+    MySQL-backed repositories from the configured database helper.
+    """
+
+    users: Any
+    sessions: Any
+    subjects: Any
+    cases: Any
+    access: Any
+    search: Any
+
+
 class AccessControlService:
     """
     Authentication, authorization, and metadata service for the MRI application.
@@ -45,23 +63,54 @@ class AccessControlService:
 
     def __init__(
         self,
-        config: DatabaseConfig,
+        config: DatabaseConfig | None = None,
         *,
+        db: Any | None = None,
+        schema: Any | None = None,
+        repositories: AccessControlRepositories | None = None,
+        users: Any | None = None,
+        sessions: Any | None = None,
+        subjects: Any | None = None,
+        cases: Any | None = None,
+        access: Any | None = None,
+        search: Any | None = None,
         password_hasher: PasswordHasher | None = None,
         workspace_gateway: WorkspaceGateway | None = None,
     ):
-        self.config = config
+        """Build the access-control service.
+
+        The default constructor path is still production-ready: if db, schema,
+        and repositories are omitted, the service creates the normal MySQL
+        database helper, schema manager, and repository objects.
+
+        Unit tests can inject any dependency they want:
+        - db/schema, when testing schema setup without the real connector;
+        - individual repositories, when testing service logic with fakes;
+        - an AccessControlRepositories bundle, when replacing all repositories;
+        - password_hasher/workspace_gateway, for authentication and filesystem
+          side-effect tests.
+        """
+        self.config = config or DatabaseConfig()
         self.password_hasher = password_hasher or PasswordHasher()
         self.workspace_gateway = workspace_gateway
 
-        self.db = MySqlDatabase(config)
-        self.schema = SchemaManager(self.db, config)
-        self.users = UserRepository(self.db)
-        self.sessions = AuthSessionRepository(self.db)
-        self.subjects = SubjectRepository(self.db)
-        self.cases = MriCaseRepository(self.db)
-        self.access = SubjectAccessRepository(self.db)
-        self.search = SubjectSearchRepository(self.db)
+        self.db = db if db is not None else MySqlDatabase(self.config)
+        self.schema = schema if schema is not None else SchemaManager(self.db, self.config)
+
+        if repositories is not None:
+            self.users = users if users is not None else repositories.users
+            self.sessions = sessions if sessions is not None else repositories.sessions
+            self.subjects = subjects if subjects is not None else repositories.subjects
+            self.cases = cases if cases is not None else repositories.cases
+            self.access = access if access is not None else repositories.access
+            self.search = search if search is not None else repositories.search
+        else:
+            self.users = users if users is not None else UserRepository(self.db)
+            self.sessions = sessions if sessions is not None else AuthSessionRepository(self.db)
+            self.subjects = subjects if subjects is not None else SubjectRepository(self.db)
+            self.cases = cases if cases is not None else MriCaseRepository(self.db)
+            self.access = access if access is not None else SubjectAccessRepository(self.db)
+            self.search = search if search is not None else SubjectSearchRepository(self.db)
 
     # ------------------------------------------------------------------
     # database/schema setup
@@ -800,4 +849,4 @@ class AccessControlService:
             acquisition_date=case.acquisition_date,
         )
 
-__all__ = ["AccessControlService"]
+__all__ = ["AccessControlRepositories", "AccessControlService"]
