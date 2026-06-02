@@ -9,6 +9,24 @@ from .errors import error_payload, normalize_error_detail
 from .routers import artifacts, auth, cases, health, jobs, processing, public, subjects
 
 
+LOCAL_DEV_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
+    "http://localhost:3003",
+    "http://127.0.0.1:3003",
+    "http://localhost:3004",
+    "http://127.0.0.1:3004",
+    "http://localhost:3005",
+    "http://127.0.0.1:3005",
+]
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Brain MRI Processing API",
@@ -17,12 +35,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ],
+        allow_origins=LOCAL_DEV_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -54,7 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
     app.include_router(processing.router, prefix="/processing", tags=["processing"])
     app.include_router(public.router, prefix="/public", tags=["public"])
-    app.include_router(artifacts.router, prefix="/cases", tags=["artifacts"])
+    app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
 
     return app
 
