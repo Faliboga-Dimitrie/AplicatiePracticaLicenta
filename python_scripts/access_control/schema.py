@@ -88,7 +88,6 @@ class SchemaManager:
             CREATE TABLE IF NOT EXISTS subject_access (
                 user_id BIGINT NOT NULL,
                 subject_id VARCHAR(100) NOT NULL,
-                role VARCHAR(50) NOT NULL DEFAULT 'viewer',
                 PRIMARY KEY (user_id, subject_id),
                 KEY idx_subject_access_subject (subject_id),
                 CONSTRAINT fk_subject_access_user
@@ -105,8 +104,15 @@ class SchemaManager:
             cursor = conn.cursor()
             for statement in statements:
                 cursor.execute(statement)
+            self._drop_legacy_subject_access_level_column(cursor)
             conn.commit()
             cursor.close()
+
+    def _drop_legacy_subject_access_level_column(self, cursor) -> None:
+        """Remove the old access-level column when upgrading an existing database."""
+        cursor.execute("SHOW COLUMNS FROM subject_access LIKE 'role'")
+        if cursor.fetchone() is not None:
+            cursor.execute("ALTER TABLE subject_access DROP COLUMN role")
 
 
 __all__ = ["SchemaManager"]

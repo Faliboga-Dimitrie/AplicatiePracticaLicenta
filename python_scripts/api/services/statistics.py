@@ -17,7 +17,7 @@ class StatisticsService:
         self.cases = cases
 
     def metrics_for_case(self, user: UserRecord, case_id: int) -> DbResult[dict[str, Any]]:
-        case_result = self.cases.get_for_user(user, case_id, minimum_role="viewer")
+        case_result = self.cases.get_for_user(user, case_id)
         if not case_result.success:
             return DbResult.fail(case_result.error or "Could not load MRI case.")
         if case_result.data is None:

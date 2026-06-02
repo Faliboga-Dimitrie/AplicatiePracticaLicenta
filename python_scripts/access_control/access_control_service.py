@@ -17,7 +17,6 @@ from .repositories import (
     UserRepository,
 )
 from .results import AuthResult, DbResult
-from .roles import ROLE_LEVELS, is_known_role, role_allows
 from .schema import SchemaManager
 from .utils import (
     UNSET,
@@ -116,11 +115,10 @@ class AccessControlService:
         Rule used by the React settings screen:
         - the user row and all of that user's refresh sessions/access rows are removed;
         - every subject visible to that user is inspected before the user is deleted;
-        - if, after removing this user, at least one remaining account has editor/admin/owner access,
+        - if, after removing this user, at least one remaining account still has access,
           the subject is kept;
-        - if no remaining account has editor-or-higher access, the subject and its cases/workspaces
-          are deleted too. This includes subjects with no remaining accounts and subjects with only
-          viewer accounts left.
+        - if no remaining account has access, the subject and its cases/workspaces
+          are deleted too.
         """
         try:
             user = self.users.get_by_id(user_id)
@@ -147,12 +145,8 @@ class AccessControlService:
                     return DbResult.fail(remaining_result.error or f"Could not inspect remaining access for subject '{subject_id}'.")
 
                 remaining_access = remaining_result.data or []
-                has_remaining_maintainer = any(
-                    role_allows(access.role, "editor")
-                    for access in remaining_access
-                )
 
-                if has_remaining_maintainer:
+                if remaining_access:
                     kept_subject_ids.append(subject_id)
                 else:
                     deleted_subject_ids.append(subject_id)
@@ -319,8 +313,6 @@ class AccessControlService:
             return DbResult.fail(access.error or "Could not check subject access.")
         if access.data is None:
             return DbResult.ok(False)
-        if not role_allows(access.data.role, "editor"):
-            return DbResult.ok(False)
 
         return self.subjects.update(subject_id, name=name, age=age, notes=notes)
 
@@ -391,7 +383,7 @@ class AccessControlService:
             deleted = self.subjects.delete(subject_id)
             if not deleted.success:
                 self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
-                restored_access = self.access.grant(user_id, subject_id, existing_access.data.role)
+                restored_access = self.access.grant(user_id, subject_id)
                 if not restored_access.success:
                     return DbResult.fail(
                         f"Subject delete failed and access rollback also failed: {restored_access.error}"
@@ -399,7 +391,7 @@ class AccessControlService:
                 return deleted
             if not deleted.data:
                 self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
-                self.access.grant(user_id, subject_id, existing_access.data.role)
+                self.access.grant(user_id, subject_id)
                 return deleted
 
             self.workspace_gateway.commit_staged_delete(staged_workspace_delete)
@@ -613,10 +605,8 @@ class AccessControlService:
     # authorization / subject access
     # ------------------------------------------------------------------
 
-    def grant_subject_access(self, user_id: int, subject_id: str, role: str = "viewer") -> DbResult[bool]:
-        if not is_known_role(role):
-            return DbResult.fail(f"Unknown role '{role}'. Expected one of: {sorted(ROLE_LEVELS)}")
-        return self.access.grant(user_id, subject_id, role)
+    def grant_subject_access(self, user_id: int, subject_id: str) -> DbResult[bool]:
+        return self.access.grant(user_id, subject_id)
 
     def get_subject_access(self, user_id: int, subject_id: str):
         return self.access.get(user_id, subject_id)
@@ -625,35 +615,21 @@ class AccessControlService:
         self,
         user_id: int,
         subject_id: str,
-        *,
-        minimum_role: str = "viewer",
     ) -> DbResult[bool]:
-        if not is_known_role(minimum_role):
-            return DbResult.fail(f"Unknown minimum_role '{minimum_role}'.")
-
         access = self.access.get(user_id, subject_id)
         if not access.success:
             return DbResult.fail(access.error or "Could not check subject access.")
-        if access.data is None:
-            return DbResult.ok(False)
-        return DbResult.ok(role_allows(access.data.role, minimum_role))
+        return DbResult.ok(access.data is not None)
 
     def user_has_case_access(
         self,
         user_id: int,
         case_id: int,
-        *,
-        minimum_role: str = "viewer",
     ) -> DbResult[bool]:
-        if not is_known_role(minimum_role):
-            return DbResult.fail(f"Unknown minimum_role '{minimum_role}'.")
-
-        result = self.access.user_case_role(user_id, case_id)
+        result = self.access.user_has_case_access(user_id, case_id)
         if not result.success:
             return DbResult.fail(result.error or "Could not check case access.")
-        if result.data is None:
-            return DbResult.ok(False)
-        return DbResult.ok(role_allows(result.data, minimum_role))
+        return result
 
     # ------------------------------------------------------------------
     # authorized searches
@@ -683,7 +659,6 @@ class AccessControlService:
                     age=row.get("subject_age"),
                     notes=row.get("subject_notes"),
                 ),
-                role=str(row["access_role"]),
                 case_count=int(row.get("case_count") or 0),
             )
             for row in rows.data or []
@@ -762,7 +737,7 @@ class AccessControlService:
         self,
         rows: list[dict[str, Any]],
     ) -> list[SubjectWithCases]:
-        grouped: dict[str, tuple[SubjectRecord, str, list[MriCaseRecord]]] = {}
+        grouped: dict[str, tuple[SubjectRecord, list[MriCaseRecord]]] = {}
 
         for row in rows:
             sid = str(row["subject_id"])
@@ -774,7 +749,6 @@ class AccessControlService:
                         age=row.get("subject_age"),
                         notes=row.get("subject_notes"),
                     ),
-                    str(row["access_role"]),
                     [],
                 )
 
@@ -787,7 +761,7 @@ class AccessControlService:
                         subject_id=str(row["case_subject_id"]),
                         acquisition_date=acq_date,
                     )
-                grouped[sid][2].append(
+                grouped[sid][1].append(
                     MriCaseRecord(
                         id=int(case_id),
                         subject_id=str(row["case_subject_id"]),
@@ -799,8 +773,8 @@ class AccessControlService:
                 )
 
         return [
-            SubjectWithCases(subject=subject, role=role, cases=tuple(cases))
-            for subject, role, cases in grouped.values()
+            SubjectWithCases(subject=subject, cases=tuple(cases))
+            for subject, cases in grouped.values()
         ]
 
     def _create_workspace(

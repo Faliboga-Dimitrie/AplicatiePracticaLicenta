@@ -21,7 +21,6 @@ def mark_case_status_best_effort(
     user: UserRecord,
     case_id: int,
     status: str,
-    minimum_role: str = "editor",
 ) -> None:
     """
     Try to update a case status without hiding the original job exception.
@@ -35,7 +34,6 @@ def mark_case_status_best_effort(
             user,
             case_id,
             status,
-            minimum_role=minimum_role,
         )
     except Exception:
         pass

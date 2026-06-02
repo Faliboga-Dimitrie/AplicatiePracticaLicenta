@@ -75,7 +75,6 @@ class PreprocessingService:
         case_result = self.cases.get_for_user(
             user,
             case_id,
-            minimum_role="editor",
         )
         if not case_result.success:
             return DbResult.fail(case_result.error or "Could not load MRI case.")
@@ -95,7 +94,6 @@ class PreprocessingService:
             user,
             case_id,
             PreprocessingStatus.QUEUED,
-            minimum_role="editor",
         )
         if not queued.success:
             return DbResult.fail(queued.error or "Could not mark preprocessing as queued.")
@@ -133,7 +131,6 @@ class PreprocessingService:
                 user,
                 case_id,
                 PreprocessingStatus.RUNNING,
-                minimum_role="editor",
             )
             if not running.success:
                 raise RuntimeError(running.error or "Could not mark preprocessing as running.")
@@ -185,7 +182,6 @@ class PreprocessingService:
                 user,
                 case_id,
                 PreprocessingStatus.COMPLETED,
-                minimum_role="editor",
             )
             if not completed.success:
                 raise RuntimeError(completed.error or "Could not mark preprocessing as completed.")

@@ -219,8 +219,7 @@ def delete_account(
 ):
     """Delete the current user account and cascade unmaintained subjects.
 
-    Subjects are deleted only when no remaining user has editor/admin/owner
-    access. Subjects that still have a maintainer are kept and only this user's
+    Subjects are deleted only when no remaining user still has access. Subjects that still have a maintainer are kept and only this user's
     access is removed by the user deletion cascade.
     """
     result = auth.delete_account(current_user)

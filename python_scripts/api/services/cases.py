@@ -13,19 +13,14 @@ CASE_BUSY_STATUSES = {
     "mesh_analysis",
 }
 
+
 class CaseService:
     """
     Web-facing MRI case service.
 
     Case routes should not read MRI cases directly from the database, because a
     case belongs to a subject and subject access is what authorizes the user.
-    This service keeps that rule in one place:
-
-    - reading a case requires at least viewer access;
-    - creating/updating/deleting a case requires at least editor access.
-
-    Later, the preprocessing and mesh job services can also depend on this class
-    before starting expensive work.
+    Any subject access row grants access to that subject and its cases.
     """
 
     def __init__(self, access: AccessControlService):
@@ -51,11 +46,7 @@ class CaseService:
         user: UserRecord,
         subject_id: str,
     ) -> DbResult[list[MriCaseRecord]]:
-        allowed = self._user_has_subject_access(
-            user,
-            subject_id,
-            minimum_role="viewer",
-        )
+        allowed = self._user_has_subject_access(user, subject_id)
         if not allowed.success:
             return DbResult.fail(allowed.error or "Could not check subject access.")
         if not allowed.data:
@@ -67,14 +58,8 @@ class CaseService:
         self,
         user: UserRecord,
         case_id: int,
-        *,
-        minimum_role: str = "viewer",
     ) -> DbResult[MriCaseRecord]:
-        allowed = self._user_has_case_access(
-            user,
-            case_id,
-            minimum_role=minimum_role,
-        )
+        allowed = self._user_has_case_access(user, case_id)
         if not allowed.success:
             return DbResult.fail(allowed.error or "Could not check case access.")
         if not allowed.data:
@@ -82,20 +67,13 @@ class CaseService:
 
         return self.access.get_mri_case(case_id)
 
-
     def get_by_subject_date(
         self,
         user: UserRecord,
         subject_id: str,
         acquisition_date: str | date,
-        *,
-        minimum_role: str = "viewer",
     ) -> DbResult[MriCaseRecord]:
-        allowed = self._user_has_subject_access(
-            user,
-            subject_id,
-            minimum_role=minimum_role,
-        )
+        allowed = self._user_has_subject_access(user, subject_id)
         if not allowed.success:
             return DbResult.fail(allowed.error or "Could not check subject access.")
         if not allowed.data:
@@ -116,11 +94,7 @@ class CaseService:
         if source_raw_path is None:
             return DbResult.fail("source_raw_path is required for this server-side create flow. Use POST /cases/upload for browser uploads.")
 
-        allowed = self._user_has_subject_access(
-            user,
-            subject_id,
-            minimum_role="editor",
-        )
+        allowed = self._user_has_subject_access(user, subject_id)
         if not allowed.success:
             return DbResult.fail(allowed.error or "Could not check subject access.")
         if not allowed.data:
@@ -149,7 +123,7 @@ class CaseService:
         notes: str | None | object = UNSET,
         status: str | None | object = UNSET,
     ) -> DbResult[MriCaseRecord]:
-        current = self.get_for_user(user, case_id, minimum_role="editor")
+        current = self.get_for_user(user, case_id)
         if not current.success:
             return DbResult.fail(current.error or "Could not load MRI case before update.")
         if current.data is None:
@@ -191,7 +165,6 @@ class CaseService:
             user,
             subject_id,
             acquisition_date,
-            minimum_role="editor",
         )
         if not current.success:
             return DbResult.fail(current.error or "Could not load MRI case before update.")
@@ -211,7 +184,7 @@ class CaseService:
         user: UserRecord,
         case_id: int,
     ) -> DbResult[MriCaseRecord]:
-        current = self.get_for_user(user, case_id, minimum_role="editor")
+        current = self.get_for_user(user, case_id)
         if not current.success:
             return DbResult.fail(current.error or "Could not load MRI case before delete.")
         if current.data is None:
@@ -238,7 +211,6 @@ class CaseService:
             user,
             subject_id,
             acquisition_date,
-            minimum_role="editor",
         )
         if not current.success:
             return DbResult.fail(current.error or "Could not load MRI case before delete.")
@@ -252,16 +224,14 @@ class CaseService:
         user: UserRecord,
         case_id: int,
         status: str,
-        *,
-        minimum_role: str = "editor",
     ) -> DbResult[MriCaseRecord]:
         """
-        Update only the status of a case the user may edit.
+        Update only the status of a case the user can access.
 
         This is intentionally tolerant of setting the same status twice, because
         background jobs may retry a transition or restart after a previous run.
         """
-        current = self.get_for_user(user, case_id, minimum_role=minimum_role)
+        current = self.get_for_user(user, case_id)
         if not current.success:
             return DbResult.fail(current.error or "Could not load MRI case before status update.")
         if current.data is None:
@@ -288,26 +258,20 @@ class CaseService:
         self,
         user: UserRecord,
         subject_id: str,
-        *,
-        minimum_role: str,
     ) -> DbResult[bool]:
         return self.access.user_has_subject_access(
             user.id,
             subject_id,
-            minimum_role=minimum_role,
         )
 
     def _user_has_case_access(
         self,
         user: UserRecord,
         case_id: int,
-        *,
-        minimum_role: str,
     ) -> DbResult[bool]:
         return self.access.user_has_case_access(
             user.id,
             case_id,
-            minimum_role=minimum_role,
         )
 
 

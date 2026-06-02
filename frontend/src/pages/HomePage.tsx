@@ -46,7 +46,7 @@ export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProp
         </div>
 
         <aside className="hero-summary-card">
-          <p className="eyebrow">Current role</p>
+          <p className="eyebrow">Current session</p>
           <h2>Authenticated operator</h2>
           <p className="muted">
             Your authenticated session unlocks persistent subject/case storage, job control and artifact access.

@@ -57,7 +57,6 @@ class SubjectSearchRepository:
                     s.name AS subject_name,
                     s.age AS subject_age,
                     s.notes AS subject_notes,
-                    sa.role AS access_role,
                     {case_columns}
                 FROM subject_access sa
                 JOIN subject s ON s.id = sa.subject_id
@@ -85,7 +84,6 @@ class SubjectSearchRepository:
                     s.name AS subject_name,
                     s.age AS subject_age,
                     s.notes AS subject_notes,
-                    sa.role AS access_role,
                     COUNT(c.id) AS case_count
                 FROM subject_access sa
                 JOIN subject s ON s.id = sa.subject_id
@@ -95,12 +93,10 @@ class SubjectSearchRepository:
                     s.id,
                     s.name,
                     s.age,
-                    s.notes,
-                    sa.role
+                    s.notes
                 ORDER BY s.id
             """
 
             return DbResult.ok(self.db.fetch_all(sql, (user_id,)))
         except Exception as exc:
             return DbResult.fail(str(exc))
-

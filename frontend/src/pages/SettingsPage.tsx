@@ -39,7 +39,7 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
     }
 
     const confirmed = window.confirm(
-      'Delete this account permanently? Subjects without a remaining editor/admin/owner will also be deleted with their cases and local workspaces.',
+      'Delete this account permanently? Subjects without any remaining linked user will also be deleted with their cases and local workspaces.',
     )
     if (!confirmed) {
       return
@@ -106,8 +106,8 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
             <h2>Account deletion</h2>
             <p className="muted">
               This permanently deletes your user account and refresh sessions. Subjects are deleted only if,
-              after removing your account, no remaining user has editor/admin/owner access. Subjects with
-              another maintainer are kept.
+              after removing your account, no remaining user is linked to them. Subjects with
+              at least one remaining linked user are kept.
             </p>
           </div>
           <label>

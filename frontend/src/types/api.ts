@@ -30,7 +30,6 @@ type Subject = {
 }
 
 export type AuthorizedSubject = Subject & {
-  role: string
   case_count: number
   cases?: MriCase[] | null
 }

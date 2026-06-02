@@ -109,7 +109,6 @@ def access_from_row(row: dict[str, Any]) -> SubjectAccessRecord:
     return SubjectAccessRecord(
         user_id=int(row["user_id"]),
         subject_id=str(row["subject_id"]),
-        role=str(row["role"]),
     )
 
 

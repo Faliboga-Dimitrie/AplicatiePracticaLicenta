@@ -69,14 +69,12 @@ class MriCaseRecord:
 class SubjectAccessRecord:
     user_id: int
     subject_id: str
-    role: str
 
 
 @dataclass(frozen=True)
 class SubjectWithCases:
     subject: SubjectRecord
     cases: tuple[MriCaseRecord, ...]
-    role: str
 
 
 @dataclass(frozen=True)
@@ -89,7 +87,6 @@ class SubjectSummaryRecord:
     """
 
     subject: SubjectRecord
-    role: str
     case_count: int
 
 

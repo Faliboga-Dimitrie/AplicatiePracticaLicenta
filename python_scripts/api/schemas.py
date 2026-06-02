@@ -92,7 +92,6 @@ class AuthorizedSubjectResponse(BaseModel):
     name: str | None = None
     age: int | None = None
     notes: str | None = None
-    role: str
     case_count: int
     cases: list[MriCaseResponse] | None = None
 

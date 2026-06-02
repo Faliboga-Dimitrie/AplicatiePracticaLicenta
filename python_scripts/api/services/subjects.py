@@ -83,7 +83,7 @@ class SubjectService:
         """
         Update subject metadata, but only if the user has access to that subject.
 
-        This is the user-facing alternative to the old admin/test CRUD route. The
+        This is the user-facing alternative to the user-facing CRUD route. The
         important rule is that the same operation updates the subject row and
         checks the subject_access row, otherwise a user would be able to update
         subjects they don't have access to by guessing their IDs.
@@ -129,12 +129,11 @@ class SubjectService:
         name: str | None = None,
         age: int | None = None,
         notes: str | None = None,
-        owner_role: str = "owner",
     ) -> DbResult[SubjectWithCases]:
         """
         Create a subject from the normal web UI and give the creator access.
 
-        This is the user-facing alternative to the old admin/test CRUD route. The
+        This is the user-facing alternative to the user-facing CRUD route. The
         important rule is that the same operation creates the subject row and the
         subject_access row, otherwise the creator would not see the subject when
         React calls GET /subjects.
@@ -149,7 +148,7 @@ class SubjectService:
                 return DbResult.fail(access.error or "Could not check existing subject access.")
             if access.data is not None:
                 return DbResult.fail("Subject already exists and is already visible to this user.")
-            return DbResult.fail("Subject already exists. Ask an administrator to grant access instead of claiming it from the UI.")
+            return DbResult.fail("Subject already exists. The subject is linked to another account and cannot be claimed from the UI.")
 
         created = self.access.create_subject(
             subject_id,
@@ -165,7 +164,6 @@ class SubjectService:
         granted = self.access.grant_subject_access(
             user.id,
             created.data.id,
-            role=owner_role,
         )
         if not granted.success:
             # Best-effort rollback: the subject has no cases yet because it was

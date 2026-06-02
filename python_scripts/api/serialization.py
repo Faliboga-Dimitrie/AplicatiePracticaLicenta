@@ -129,7 +129,6 @@ def subject_summary_to_dict(subject_summary: SubjectSummaryRecord) -> dict[str, 
         "name": subject.name,
         "age": subject.age,
         "notes": subject.notes,
-        "role": subject_summary.role,
         "case_count": int(subject_summary.case_count or 0),
     }
 
@@ -146,7 +145,6 @@ def subject_with_cases_to_dict(
         "name": subject.name,
         "age": subject.age,
         "notes": subject.notes,
-        "role": subject_with_cases.role,
         "case_count": len(cases),
     }
 

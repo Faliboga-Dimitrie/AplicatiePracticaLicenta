@@ -12,7 +12,6 @@ from .models import (
 )
 from .password_hashing import PasswordHasher
 from .results import AuthResult, DbResult
-from .roles import ROLE_LEVELS
 from .access_control_service import AccessControlService
 from .workspace_gateway import ProjectCaseWorkspaceGateway, WorkspaceGateway
 
@@ -26,7 +25,6 @@ __all__ = [
     "MriCaseRecord",
     "PasswordHasher",
     "ProjectCaseWorkspaceGateway",
-    "ROLE_LEVELS",
     "SubjectAccessRecord",
     "SubjectRecord",
     "SubjectSummaryRecord",

@@ -68,7 +68,7 @@ def list_subject_cases(
     React-facing endpoint.
 
     Used after the user selects a subject in the UI. It returns the cases for
-    that subject only if the user has at least viewer access.
+    that subject only if the user has access.
     """
     result = subjects.list_cases_for_subject(current_user, subject_id)
     cases = unwrap_result(
@@ -79,7 +79,7 @@ def list_subject_cases(
 
 
 # -----------------------------------------------------------------------------
-# User-facing subject creation + temporary admin/test update/delete
+# User-facing subject creation, update and delete
 # -----------------------------------------------------------------------------
 
 @router.post("", response_model=AuthorizedSubjectResponse)
@@ -91,7 +91,7 @@ def create_subject(
     """
     React-facing endpoint.
 
-    Create a new subject and immediately grant the logged-in user owner access.
+    Create a new subject and immediately link it to the logged-in user.
     Without this subject_access row, the newly created subject would not appear
     in GET /subjects for the same user.
     """

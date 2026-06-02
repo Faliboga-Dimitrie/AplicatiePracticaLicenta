@@ -133,7 +133,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
       <section className="page-header-card">
         <div>
           <p className="eyebrow">Persistent workspace</p>
-          <h1>Subjects & case ownership</h1>
+          <h1>Subjects & cases</h1>
           <p className="muted">
             Create, edit and delete subjects that belong to your account. A subject is the root container
             for dated MRI acquisitions.
@@ -154,8 +154,8 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
           <strong>{totalCases}</strong>
         </article>
         <article className="metric-card">
-          <span>Editable subjects</span>
-          <strong>{subjects.filter((subject) => ['editor', 'admin', 'owner'].includes(subject.role)).length}</strong>
+          <span>Subjects with cases</span>
+          <strong>{subjects.filter((subject) => subject.case_count > 0).length}</strong>
         </article>
       </section>
 
@@ -174,14 +174,11 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
           <div className="card-list">
             {subjects.map((subject) => (
               <article className="card subject-card" key={subject.id}>
-                <div className="row-between">
-                  <div>
-                    <h2>{subject.id}</h2>
-                    <p className="muted">
-                      {subject.name || 'No display name'} · {subject.case_count} case(s)
-                    </p>
-                  </div>
-                  <span className="badge">{subject.role}</span>
+                <div>
+                  <h2>{subject.id}</h2>
+                  <p className="muted">
+                    {subject.name || 'No display name'} · {subject.case_count} case(s)
+                  </p>
                 </div>
 
                 {subject.age !== null && <p className="muted">Age: {subject.age}</p>}

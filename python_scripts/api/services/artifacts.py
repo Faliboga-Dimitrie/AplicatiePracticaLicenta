@@ -74,7 +74,6 @@ class ArtifactService:
         case_result = self.cases.get_for_user(
             user,
             case_id,
-            minimum_role="viewer",
         )
         if not case_result.success:
             return DbResult.fail(case_result.error or "Could not load MRI case.")
