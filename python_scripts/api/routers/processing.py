@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from ...access_control import UserRecord
 from ..dependencies import (
     get_current_user,
+    get_full_processing_service,
     get_mesh_analysis_service,
     get_preprocessing_service,
     get_statistics_service,
@@ -12,9 +13,27 @@ from ..dependencies import (
 from ..errors import raise_api_error, unwrap_result
 from ..schemas import JobResponse
 from ..serialization import job_to_dict
-from ..services import MeshAnalysisService, PreprocessingService, StatisticsService
+from ..services import FullProcessingService, MeshAnalysisService, PreprocessingService, StatisticsService
 
 router = APIRouter()
+
+
+@router.post("/cases/{case_id}/processing-jobs", response_model=JobResponse)
+def start_processing_job(
+    case_id: int,
+    current_user: UserRecord = Depends(get_current_user),
+    processing: FullProcessingService = Depends(get_full_processing_service),
+):
+    """Start the complete user-facing MRI processing workflow for one case."""
+    result = processing.start_for_case(current_user, case_id)
+    if not result.success and result.error == processing.ACTIVE_JOB_MESSAGE:
+        raise_api_error(409, result.error, code="ACTIVE_JOB_EXISTS")
+
+    job = unwrap_result(
+        result,
+        not_found_message="MRI case not found or not enough permissions to process it.",
+    )
+    return job_to_dict(job)
 
 
 @router.post("/cases/{case_id}/preprocessing-jobs", response_model=JobResponse)

@@ -135,8 +135,8 @@ function AppContent() {
             type="button"
             className={currentSection === 'home' ? 'active' : ''}
             onClick={() => setView({ name: 'home' })}
-            title={isSidebarCollapsed ? 'Expand the sidebar to use navigation' : 'Home'}
             disabled={isSidebarCollapsed}
+            title="Home"
           >
             <span>Home</span>
           </button>
@@ -144,8 +144,8 @@ function AppContent() {
             type="button"
             className={currentSection === 'workspace' ? 'active' : ''}
             onClick={() => setView({ name: 'subjects' })}
-            title={isSidebarCollapsed ? 'Expand the sidebar to use navigation' : 'Subjects & scans'}
             disabled={isSidebarCollapsed}
+            title="Subjects & scans"
           >
             <span>Subjects & scans</span>
           </button>
@@ -153,8 +153,8 @@ function AppContent() {
             type="button"
             className={view.name === 'caseViewer' ? 'active' : ''}
             onClick={() => recentCase ? openCaseViewer(recentCase.subjectId, recentCase.caseId) : setView({ name: 'caseViewer' })}
-            title={isSidebarCollapsed ? 'Expand the sidebar to use navigation' : recentCase ? 'Open latest 3D viewer' : 'Choose a subject and completed scan'}
             disabled={isSidebarCollapsed}
+            title={recentCase ? 'Open latest 3D viewer' : 'Choose a subject and completed scan'}
           >
             <span>3D view</span>
           </button>
@@ -162,8 +162,8 @@ function AppContent() {
             type="button"
             className={view.name === 'statistics' ? 'active' : ''}
             onClick={() => recentCase ? openStatistics(recentCase.subjectId, recentCase.caseId) : setView({ name: 'statistics' })}
-            title={isSidebarCollapsed ? 'Expand the sidebar to use navigation' : recentCase ? 'Open statistics for latest case' : 'Choose a subject and completed scan'}
             disabled={isSidebarCollapsed}
+            title={recentCase ? 'Open statistics for latest case' : 'Choose a subject and completed scan'}
           >
             <span>Statistics</span>
           </button>
@@ -171,8 +171,8 @@ function AppContent() {
             type="button"
             className={view.name === 'timeComparison' ? 'active' : ''}
             onClick={() => recentSubjectId ? openTimeComparison(recentSubjectId) : setView({ name: 'timeComparison' })}
-            title={isSidebarCollapsed ? 'Expand the sidebar to use navigation' : recentSubjectId ? 'Compare completed dates for latest subject' : 'Choose a subject to compare dates'}
             disabled={isSidebarCollapsed}
+            title={recentSubjectId ? 'Compare completed dates for latest subject' : 'Choose a subject to compare dates'}
           >
             <span>Time comparison</span>
           </button>
@@ -180,8 +180,8 @@ function AppContent() {
             type="button"
             className={currentSection === 'settings' ? 'active' : ''}
             onClick={() => setView({ name: 'settings' })}
-            title={isSidebarCollapsed ? 'Expand the sidebar to use navigation' : 'Settings'}
             disabled={isSidebarCollapsed}
+            title="Settings"
           >
             <span>Settings</span>
           </button>
@@ -204,7 +204,9 @@ function AppContent() {
           </nav>
         </header>
 
-        {view.name === 'home' && <HomePage />}
+        {view.name === 'home' && (
+          <HomePage />
+        )}
 
         {view.name === 'subjects' && (
           <SubjectsPage onSelectSubject={(subjectId) => { setRecentSubjectId(subjectId); setView({ name: 'subjectCases', subjectId }) }} />

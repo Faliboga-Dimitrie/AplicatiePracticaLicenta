@@ -7,6 +7,7 @@ from ...access_control import AccessControlService, DbResult, MriCaseRecord, Use
 from ...access_control.utils import UNSET
 
 CASE_BUSY_STATUSES = {
+    "processing_queued",
     "preprocessing_queued",
     "preprocessing",
     "mesh_queued",

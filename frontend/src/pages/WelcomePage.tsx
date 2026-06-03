@@ -120,7 +120,7 @@ export function WelcomePage({ onOpenAuth }: WelcomePageProps) {
     }
   }
 
-  const showProgress = isPublicProcessing && publicJob?.status !== 'completed'
+  const showProgress = isPublicProcessing || publicProgress > 0
   const showViewerLoader = publicViewerItems.length > 0 && !isPublicViewerReady
 
   return (

@@ -15,6 +15,7 @@ from .services import (
     AuthService,
     CaseService,
     JobService,
+    FullProcessingService,
     MeshAnalysisService,
     PreprocessingService,
     PublicProcessingService,
@@ -22,6 +23,7 @@ from .services import (
     SubjectService,
     TokenService,
     build_default_artifact_service,
+    build_default_full_processing_service,
     build_default_job_service,
     build_default_mesh_analysis_service,
     build_default_preprocessing_service,
@@ -85,6 +87,17 @@ def get_preprocessing_service(
     jobs: JobService = Depends(get_job_service),
 ) -> PreprocessingService:
     return build_default_preprocessing_service(
+        cases=cases,
+        jobs=jobs,
+        settings_obj=settings,
+    )
+
+
+def get_full_processing_service(
+    cases: CaseService = Depends(get_case_service),
+    jobs: JobService = Depends(get_job_service),
+) -> FullProcessingService:
+    return build_default_full_processing_service(
         cases=cases,
         jobs=jobs,
         settings_obj=settings,

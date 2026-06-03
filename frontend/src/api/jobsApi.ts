@@ -22,3 +22,10 @@ export function startMeshAnalysisJob(caseId: number): Promise<Job> {
     method: 'POST',
   })
 }
+
+
+export function startProcessingJob(caseId: number): Promise<Job> {
+  return apiRequest<Job>(`/processing/cases/${caseId}/processing-jobs`, {
+    method: 'POST',
+  })
+}

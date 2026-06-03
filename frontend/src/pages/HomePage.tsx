@@ -4,8 +4,8 @@ const reviewCards = [
     text: 'Keep each subject together with their MRI acquisitions and notes.',
   },
   {
-    title: 'Prepare scans when needed',
-    text: 'Start the required processing from a single guided case page.',
+    title: 'Process scans when needed',
+    text: 'Start the complete MRI processing flow from a single guided case page.',
   },
   {
     title: 'Review results visually',
@@ -16,7 +16,7 @@ const reviewCards = [
 const workflow = [
   'Create or open a subject from the sidebar',
   'Upload a T1 MRI scan for an acquisition date',
-  'Prepare the scan, then create the 3D model and measurements',
+  'Process the MRI to create the 3D model and measurements',
   'Review the model, statistics, comparison, or download files',
 ]
 
@@ -26,18 +26,16 @@ export function HomePage() {
       <section className="dashboard-hero card user-hero-card">
         <div>
           <p className="eyebrow">Dashboard</p>
-          <h1>Welcome to your MRI workspace</h1>
+          <h1>Welcome back</h1>
           <p className="hero-text">
             Continue working with saved MRI scans, create new subject records, and open finished results without
-            needing to follow the technical processing details. Use the sidebar to move between subjects, 3D views,
-            measurements, comparisons and settings.
+            needing to follow the technical processing details.
           </p>
         </div>
 
-        <aside className="hero-summary-card simple-summary-card">
+        <aside className="hero-summary-card">
           <p className="muted">
-            Your scans and results are saved to your account so you can return later, review completed cases and compare
-            acquisitions over time.
+            Your scans and results are saved to your account so you can return later and compare acquisitions over time.
           </p>
         </aside>
       </section>
@@ -48,7 +46,7 @@ export function HomePage() {
             <p className="eyebrow">Recommended flow</p>
             <h2>Start from a subject</h2>
             <p className="muted">
-              The app guides the user by result-oriented steps instead of exposing implementation details.
+              Use the sidebar to move between subjects, the 3D viewer, measurements, time comparison, and account settings.
             </p>
           </div>
 
@@ -67,7 +65,7 @@ export function HomePage() {
             <p className="eyebrow">What you can do</p>
             <h2>Review MRI results</h2>
             <p className="muted">
-              Once a scan is processed, result pages can be opened directly from the sidebar.
+              Once a scan is processed, the result pages can also be opened directly from the sidebar.
             </p>
           </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { getCaseMetrics } from '../api/metricsApi'
 import { listSubjectCases, listSubjects } from '../api/subjectsApi'
@@ -54,21 +54,25 @@ function percentage(value: number | undefined, total: number | undefined): strin
 }
 
 export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: StatisticsPageProps) {
+  const openedFromCase = Boolean(caseId && subjectId)
   const [subjects, setSubjects] = useState<AuthorizedSubject[]>([])
   const [subjectCases, setSubjectCases] = useState<MriCase[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState(subjectId ?? '')
   const [selectedCaseId, setSelectedCaseId] = useState<number | ''>(caseId ?? '')
   const [metrics, setMetrics] = useState<CaseMetricsResponse | null>(null)
   const [measurementScale, setMeasurementScale] = useState<MeasurementScale>('mm')
-  const [isLoadingSelection, setIsLoadingSelection] = useState(true)
+  const [isLoadingSubjects, setIsLoadingSubjects] = useState(true)
   const [isLoadingCases, setIsLoadingCases] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false)
+  const [subjectTouched, setSubjectTouched] = useState(Boolean(subjectId))
+  const [caseTouched, setCaseTouched] = useState(Boolean(caseId))
+  const [hasCaseFieldBeenShown, setHasCaseFieldBeenShown] = useState(Boolean(subjectId))
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     async function loadSubjects() {
-      setIsLoadingSelection(true)
+      setIsLoadingSubjects(true)
       setError(null)
       try {
         const loaded = await listSubjects()
@@ -76,7 +80,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
       } catch (loadError) {
         if (!cancelled) setError(apiMessage(loadError))
       } finally {
-        if (!cancelled) setIsLoadingSelection(false)
+        if (!cancelled) setIsLoadingSubjects(false)
       }
     }
     loadSubjects()
@@ -86,7 +90,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
   useEffect(() => {
     if (!selectedSubjectId) {
       setSubjectCases([])
-      if (!caseId) setSelectedCaseId('')
+      setSelectedCaseId('')
       return
     }
     let cancelled = false
@@ -95,7 +99,10 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
       setError(null)
       try {
         const loaded = await listSubjectCases(selectedSubjectId)
-        if (!cancelled) setSubjectCases(loaded)
+        if (!cancelled) {
+          setSubjectCases(loaded)
+          setHasCaseFieldBeenShown(true)
+        }
       } catch (loadError) {
         if (!cancelled) setError(apiMessage(loadError))
       } finally {
@@ -104,31 +111,31 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
     }
     loadCases()
     return () => { cancelled = true }
-  }, [selectedSubjectId, caseId])
+  }, [selectedSubjectId])
 
-  async function loadMetrics() {
-    if (selectedCaseId === '') {
-      setMetrics(null)
-      return
-    }
-    setIsLoading(true)
+  const loadMetrics = useCallback(async () => {
+    if (selectedCaseId === '') return
+    setIsLoadingMetrics(true)
     setError(null)
     try {
-      setMetrics(await getCaseMetrics(Number(selectedCaseId)))
+      const loadedMetrics = await getCaseMetrics(Number(selectedCaseId))
+      setMetrics(loadedMetrics)
     } catch (loadError) {
-      setMetrics(null)
       setError(apiMessage(loadError))
     } finally {
-      setIsLoading(false)
+      setIsLoadingMetrics(false)
     }
-  }
+  }, [selectedCaseId])
 
   useEffect(() => {
     loadMetrics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCaseId])
+  }, [loadMetrics])
 
   const measurementReadyCases = subjectCases.filter((entry) => entry.capabilities?.can_view_metrics || entry.capabilities?.has_metrics)
+  const showCaseField = Boolean(selectedSubjectId) && (hasCaseFieldBeenShown || !isLoadingCases)
+  const hasMetrics = Boolean(metrics)
+  const isChangingCase = hasMetrics && isLoadingMetrics
+  const initialStatsStillLoading = openedFromCase && !hasMetrics && (isLoadingMetrics || isLoadingSubjects || isLoadingCases)
 
   const maxVolume = useMemo(() => {
     if (!metrics) return 0
@@ -140,49 +147,76 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
     return Math.max(...TISSUES.map((tissue) => metrics.surfaces[tissue.surfaceKey] ?? 0))
   }, [metrics])
 
+  function handleSubjectChange(nextSubjectId: string) {
+    setSelectedSubjectId(nextSubjectId)
+    setSelectedCaseId('')
+    setSubjectTouched(true)
+    setCaseTouched(false)
+    if (nextSubjectId) setHasCaseFieldBeenShown(true)
+  }
+
+  function handleCaseChange(nextCaseId: string) {
+    setSelectedCaseId(nextCaseId ? Number(nextCaseId) : '')
+    setCaseTouched(Boolean(nextCaseId))
+  }
+
   return (
     <main className="page stack">
       <section className="page-header-card">
         <div>
           <button type="button" className="link-button" onClick={onBack}>← Back</button>
           <p className="eyebrow">Measurements</p>
-          <h1>{metrics ? `${metrics.subject_id} · ${metrics.acquisition_date}` : 'Choose a case'}</h1>
+          <h1>{metrics ? `${metrics.subject_id} · ${metrics.acquisition_date}` : 'Choose a scan'}</h1>
           <p className="muted">Review tissue volumes and surface areas for a completed scan.</p>
         </div>
         <div className="button-row">
           {onOpenViewer && selectedCaseId !== '' && <button type="button" className="secondary" onClick={() => onOpenViewer(selectedSubjectId || metrics?.subject_id, Number(selectedCaseId))}>Open 3D view</button>}
-          <button type="button" className="secondary" onClick={loadMetrics} disabled={isLoading || selectedCaseId === ''}>Refresh</button>
+          <button type="button" className="secondary" onClick={loadMetrics} disabled={isLoadingMetrics || selectedCaseId === ''}>Refresh</button>
         </div>
       </section>
 
       {error && <p className="error-text">{error}</p>}
 
-      <section className="card form-grid">
-        <h2>Choose scan</h2>
-        <label>
-          Subject
-          <select value={selectedSubjectId} disabled={isLoadingSelection} onChange={(event) => { setSelectedSubjectId(event.target.value); setSelectedCaseId(''); setMetrics(null) }}>
-            <option value="">Choose subject</option>
-            {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.id} · {subject.case_count} cases</option>)}
-          </select>
-        </label>
-        <label>
-          Case
-          <select value={selectedCaseId} disabled={!selectedSubjectId || isLoadingCases} onChange={(event) => setSelectedCaseId(event.target.value ? Number(event.target.value) : '')}>
-            <option value="">Choose completed scan</option>
-            {measurementReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date}</option>)}
-          </select>
-        </label>
-        <label>
-          Measurement scale
-          <select value={measurementScale} onChange={(event) => setMeasurementScale(event.target.value as MeasurementScale)}>
-            <option value="mm">Millimetres</option>
-            <option value="cm">Centimetres</option>
-          </select>
-        </label>
-      </section>
+      {initialStatsStillLoading ? (
+        <section className="card loading-card"><p className="muted">Loading statistics...</p></section>
+      ) : (
+        <section className="card form-grid choose-scan-card">
+          <h2>Choose scan</h2>
+          <label className={subjectTouched ? 'touched-field' : undefined}>
+            Subject
+            {isLoadingSubjects && <span className="muted small-note">Loading subjects...</span>}
+            <select value={selectedSubjectId} disabled={isLoadingSubjects} onChange={(event) => handleSubjectChange(event.target.value)}>
+              <option value="">Choose subject</option>
+              {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.id} · {subject.case_count} cases</option>)}
+            </select>
+          </label>
 
-      {isLoading && <p className="muted">Loading measurements...</p>}
+          {selectedSubjectId && isLoadingCases && <p className="muted small-note">Loading cases...</p>}
+
+          {showCaseField && (
+            <label className={caseTouched ? 'touched-field' : undefined}>
+              Case
+              <select value={selectedCaseId} disabled={!selectedSubjectId || isLoadingCases} onChange={(event) => handleCaseChange(event.target.value)}>
+                <option value="">Choose completed scan</option>
+                {measurementReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date}</option>)}
+              </select>
+            </label>
+          )}
+
+          {showCaseField && (
+            <label>
+              Measurement scale
+              <select value={measurementScale} onChange={(event) => setMeasurementScale(event.target.value as MeasurementScale)}>
+                <option value="mm">Millimetres</option>
+                <option value="cm">Centimetres</option>
+              </select>
+            </label>
+          )}
+        </section>
+      )}
+
+      {isChangingCase && <section className="card loading-card"><p className="muted">Loading for new case...</p></section>}
+      {!hasMetrics && selectedCaseId !== '' && !isLoadingMetrics && <section className="card loading-card"><p className="muted">Loading statistics...</p></section>}
 
       {metrics && (
         <>

@@ -70,8 +70,7 @@ export function getCaseStageLabel(mriCase: MriCase): string {
 
 export function getNextCaseAction(mriCase: MriCase): string {
   if (mriCase.capabilities.is_busy) return 'Processing is in progress. You can leave this page and come back later.'
-  if (mriCase.capabilities.can_start_preprocessing) return 'Prepare this MRI scan.'
-  if (mriCase.capabilities.can_start_mesh_analysis) return 'Create the 3D model and measurements.'
+  if (mriCase.capabilities.can_start_preprocessing || mriCase.capabilities.can_start_mesh_analysis) return 'Process this MRI scan to create the 3D model and measurements.'
   if (mriCase.capabilities.can_view_metrics || mriCase.capabilities.has_metrics) return 'Open the 3D model, review measurements, or compare this subject over time.'
   if (mriCase.capabilities.can_view_meshes || mriCase.capabilities.has_meshes) return 'Open the 3D model or review the generated files.'
   return 'Upload or refresh the case, then continue processing.'
@@ -79,6 +78,7 @@ export function getNextCaseAction(mriCase: MriCase): string {
 
 export function friendlyJobTitle(type: string): string {
   const lower = type.toLowerCase()
+  if (lower.includes('full') || lower.includes('processing')) return 'Processing MRI scan'
   if (lower.includes('preprocess')) return 'Preparing MRI scan'
   if (lower.includes('mesh') || lower.includes('analysis')) return 'Creating 3D model and measurements'
   return 'Processing MRI scan'

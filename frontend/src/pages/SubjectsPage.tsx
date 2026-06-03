@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { createSubject, deleteSubject, listSubjects, updateSubject } from '../api/subjectsApi'
+import { Modal } from '../components/Modal'
 import type { AuthorizedSubject } from '../types/api'
 import { formatSubjectName } from '../utils/userFacing'
 
@@ -36,6 +37,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [editingSubject, setEditingSubject] = useState<SubjectEditorState | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<AuthorizedSubject | null>(null)
   const [deletingSubjectId, setDeletingSubjectId] = useState<string | null>(null)
 
   const totalCases = useMemo(
@@ -104,18 +106,16 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
     }
   }
 
-  async function handleDeleteSubject(subject: AuthorizedSubject) {
-    const confirmed = window.confirm(
-      `Delete ${formatSubjectName(subject)} and all MRI scans saved for this subject?`,
-    )
-    if (!confirmed) return
+  async function handleDeleteSubject() {
+    if (!deleteTarget) return
 
-    setDeletingSubjectId(subject.id)
+    setDeletingSubjectId(deleteTarget.id)
     setError(null)
     try {
-      await deleteSubject(subject.id)
-      if (editingSubject?.id === subject.id) setEditingSubject(null)
-      setSubjects((current) => current.filter((item) => item.id !== subject.id))
+      await deleteSubject(deleteTarget.id)
+      if (editingSubject?.id === deleteTarget.id) setEditingSubject(null)
+      setSubjects((current) => current.filter((item) => item.id !== deleteTarget.id))
+      setDeleteTarget(null)
     } catch (deleteError) {
       setError(apiMessage(deleteError))
     } finally {
@@ -138,7 +138,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
         </button>
       </section>
 
-      <section className="metric-grid">
+      <section className="metric-grid three-metric-grid">
         <article className="metric-card">
           <span>Subjects</span>
           <strong>{subjects.length}</strong>
@@ -150,10 +150,6 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
         <article className="metric-card">
           <span>With scans</span>
           <strong>{subjects.filter((subject) => subject.case_count > 0).length}</strong>
-        </article>
-        <article className="metric-card">
-          <span>Ready to start</span>
-          <strong>{subjects.length === 0 ? 'No' : 'Yes'}</strong>
         </article>
       </section>
 
@@ -193,7 +189,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
                   <button
                     type="button"
                     className="danger-button"
-                    onClick={() => handleDeleteSubject(subject)}
+                    onClick={() => setDeleteTarget(subject)}
                     disabled={deletingSubjectId === subject.id}
                   >
                     {deletingSubjectId === subject.id ? 'Deleting...' : 'Delete'}
@@ -231,49 +227,72 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
               {isCreating ? 'Creating...' : 'Create subject'}
             </button>
           </form>
+        </aside>
+      </section>
 
-          {editingSubject && (
-            <form className="card form-grid" onSubmit={handleUpdateSubject}>
-              <div className="row-between">
-                <div>
-                  <p className="eyebrow">Edit subject</p>
-                  <h2>{editingSubject.id}</h2>
-                </div>
-                <button type="button" className="secondary" onClick={() => setEditingSubject(null)}>
-                  Cancel
-                </button>
-              </div>
-              <label>
-                Display name
-                <input
-                  value={editingSubject.name}
-                  onChange={(event) => setEditingSubject({ ...editingSubject, name: event.target.value })}
-                />
-              </label>
-              <label>
-                Age
-                <input
-                  type="number"
-                  min="0"
-                  value={editingSubject.age}
-                  onChange={(event) => setEditingSubject({ ...editingSubject, age: event.target.value })}
-                />
-              </label>
-              <label>
-                Notes
-                <textarea
-                  value={editingSubject.notes}
-                  onChange={(event) => setEditingSubject({ ...editingSubject, notes: event.target.value })}
-                  rows={4}
-                />
-              </label>
+      {editingSubject && (
+        <Modal title={editingSubject.id} eyebrow="Edit subject" onClose={() => setEditingSubject(null)}>
+          <form className="form-grid" onSubmit={handleUpdateSubject}>
+            <label>
+              Display name
+              <input
+                value={editingSubject.name}
+                onChange={(event) => setEditingSubject({ ...editingSubject, name: event.target.value })}
+              />
+            </label>
+            <label>
+              Age
+              <input
+                type="number"
+                min="0"
+                value={editingSubject.age}
+                onChange={(event) => setEditingSubject({ ...editingSubject, age: event.target.value })}
+              />
+            </label>
+            <label>
+              Notes
+              <textarea
+                value={editingSubject.notes}
+                onChange={(event) => setEditingSubject({ ...editingSubject, notes: event.target.value })}
+                rows={4}
+              />
+            </label>
+            <div className="button-row modal-form-actions">
               <button type="submit" disabled={isUpdating}>
                 {isUpdating ? 'Saving...' : 'Save changes'}
               </button>
-            </form>
+              <button type="button" className="secondary" onClick={() => setEditingSubject(null)} disabled={isUpdating}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {deleteTarget && (
+        <Modal
+          title="Delete subject?"
+          eyebrow="Confirm deletion"
+          onClose={() => setDeleteTarget(null)}
+          footer={(
+            <>
+              <button type="button" className="danger-button" onClick={handleDeleteSubject} disabled={deletingSubjectId === deleteTarget.id}>
+                {deletingSubjectId === deleteTarget.id ? 'Deleting...' : 'Delete subject'}
+              </button>
+              <button type="button" className="secondary" onClick={() => setDeleteTarget(null)} disabled={deletingSubjectId === deleteTarget.id}>
+                Cancel
+              </button>
+            </>
           )}
-        </aside>
-      </section>
+        >
+          <p>This will delete the subject and all MRI scans saved for it.</p>
+          <dl className="details-list clean-details-list">
+            <div><dt>Subject</dt><dd>{formatSubjectName(deleteTarget)}</dd></div>
+            <div><dt>Subject code</dt><dd>{deleteTarget.id}</dd></div>
+            <div><dt>MRI scans</dt><dd>{deleteTarget.case_count}</dd></div>
+          </dl>
+        </Modal>
+      )}
     </main>
   )
 }

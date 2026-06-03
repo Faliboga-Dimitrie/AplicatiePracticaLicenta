@@ -31,27 +31,54 @@ function toViewerItem(artifact: Artifact, objectUrl: string): BrainViewerItem | 
 }
 
 export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPageProps) {
+  const openedFromCase = Boolean(caseId && subjectId)
   const [subjects, setSubjects] = useState<AuthorizedSubject[]>([])
   const [subjectCases, setSubjectCases] = useState<MriCase[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState(subjectId ?? '')
   const [selectedCaseId, setSelectedCaseId] = useState<number | ''>(caseId ?? '')
-  const [mriCase, setMriCase] = useState<MriCase | null>(null)
-  const [items, setItems] = useState<BrainViewerItem[]>([])
-  const [isLoadingSelection, setIsLoadingSelection] = useState(true)
+  const [activeCase, setActiveCase] = useState<MriCase | null>(null)
+  const [activeItems, setActiveItems] = useState<BrainViewerItem[]>([])
+  const [pendingCase, setPendingCase] = useState<MriCase | null>(null)
+  const [pendingItems, setPendingItems] = useState<BrainViewerItem[]>([])
+  const [isLoadingSubjects, setIsLoadingSubjects] = useState(true)
   const [isLoadingCases, setIsLoadingCases] = useState(false)
   const [isLoadingViewer, setIsLoadingViewer] = useState(false)
+  const [isPreparingScene, setIsPreparingScene] = useState(false)
+  const [subjectTouched, setSubjectTouched] = useState(Boolean(subjectId))
+  const [caseTouched, setCaseTouched] = useState(Boolean(caseId))
+  const [hasCaseFieldBeenShown, setHasCaseFieldBeenShown] = useState(Boolean(subjectId))
   const [error, setError] = useState<string | null>(null)
-  const objectUrlsRef = useRef<string[]>([])
+  const activeObjectUrlsRef = useRef<string[]>([])
+  const pendingObjectUrlsRef = useRef<string[]>([])
 
-  const clearObjectUrls = useCallback(() => {
-    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
-    objectUrlsRef.current = []
+  const revokeUrls = useCallback((urls: string[]) => {
+    urls.forEach((url) => URL.revokeObjectURL(url))
   }, [])
+
+  const clearPending = useCallback(() => {
+    revokeUrls(pendingObjectUrlsRef.current)
+    pendingObjectUrlsRef.current = []
+    setPendingCase(null)
+    setPendingItems([])
+    setIsPreparingScene(false)
+  }, [revokeUrls])
+
+  const promotePendingScene = useCallback(() => {
+    if (!pendingCase) return
+    revokeUrls(activeObjectUrlsRef.current)
+    activeObjectUrlsRef.current = pendingObjectUrlsRef.current
+    pendingObjectUrlsRef.current = []
+    setActiveCase(pendingCase)
+    setActiveItems(pendingItems)
+    setPendingCase(null)
+    setPendingItems([])
+    setIsPreparingScene(false)
+  }, [pendingCase, pendingItems, revokeUrls])
 
   useEffect(() => {
     let cancelled = false
     async function loadSubjects() {
-      setIsLoadingSelection(true)
+      setIsLoadingSubjects(true)
       setError(null)
       try {
         const loaded = await listSubjects()
@@ -59,7 +86,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
       } catch (loadError) {
         if (!cancelled) setError(apiMessage(loadError))
       } finally {
-        if (!cancelled) setIsLoadingSelection(false)
+        if (!cancelled) setIsLoadingSubjects(false)
       }
     }
     loadSubjects()
@@ -69,7 +96,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
   useEffect(() => {
     if (!selectedSubjectId) {
       setSubjectCases([])
-      if (!caseId) setSelectedCaseId('')
+      setSelectedCaseId('')
       return
     }
     let cancelled = false
@@ -78,7 +105,10 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
       setError(null)
       try {
         const loaded = await listSubjectCases(selectedSubjectId)
-        if (!cancelled) setSubjectCases(loaded)
+        if (!cancelled) {
+          setSubjectCases(loaded)
+          setHasCaseFieldBeenShown(true)
+        }
       } catch (loadError) {
         if (!cancelled) setError(apiMessage(loadError))
       } finally {
@@ -87,18 +117,15 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
     }
     loadCases()
     return () => { cancelled = true }
-  }, [selectedSubjectId, caseId])
+  }, [selectedSubjectId])
 
   const loadViewer = useCallback(async () => {
-    if (selectedCaseId === '') {
-      setItems([])
-      setMriCase(null)
-      clearObjectUrls()
-      return
-    }
+    if (selectedCaseId === '') return
 
+    clearPending()
     setIsLoadingViewer(true)
     setError(null)
+    const newUrls: string[] = []
     try {
       const [loadedCase, artifactBundle] = await Promise.all([
         getCase(Number(selectedCaseId)),
@@ -107,7 +134,6 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
 
       const glbArtifacts = artifactBundle.artifacts.filter((artifact) => isGlbName(artifact.name, artifact.mime_type))
       const loadedItems: BrainViewerItem[] = []
-      const newUrls: string[] = []
 
       for (const artifact of glbArtifacts) {
         const objectUrl = await createArtifactObjectUrl(artifact)
@@ -116,28 +142,53 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
         if (item) loadedItems.push(item)
       }
 
-      clearObjectUrls()
-      objectUrlsRef.current = newUrls
-      setMriCase(loadedCase)
-      setItems(loadedItems)
+      pendingObjectUrlsRef.current = newUrls
+      setPendingCase(loadedCase)
+      setPendingItems(loadedItems)
+      setIsPreparingScene(loadedItems.length > 0)
+      if (loadedItems.length === 0) {
+        revokeUrls(activeObjectUrlsRef.current)
+        activeObjectUrlsRef.current = []
+        setActiveCase(loadedCase)
+        setActiveItems([])
+      }
     } catch (loadError) {
-      setItems([])
-      clearObjectUrls()
+      revokeUrls(newUrls)
       setError(apiMessage(loadError))
     } finally {
       setIsLoadingViewer(false)
     }
-  }, [clearObjectUrls, selectedCaseId])
+  }, [clearPending, revokeUrls, selectedCaseId])
 
   useEffect(() => {
     loadViewer()
   }, [loadViewer])
 
   useEffect(() => {
-    return () => clearObjectUrls()
-  }, [clearObjectUrls])
+    return () => {
+      revokeUrls(activeObjectUrlsRef.current)
+      revokeUrls(pendingObjectUrlsRef.current)
+    }
+  }, [revokeUrls])
 
   const meshReadyCases = subjectCases.filter((entry) => entry.capabilities?.can_view_meshes || entry.capabilities?.has_meshes)
+  const showCaseField = Boolean(selectedSubjectId) && (hasCaseFieldBeenShown || !isLoadingCases)
+  const hasVisibleViewer = Boolean(activeCase)
+  const isChangingCase = hasVisibleViewer && (isLoadingViewer || isPreparingScene)
+  const initialCaseStillLoading = openedFromCase && !hasVisibleViewer && (isLoadingViewer || isPreparingScene || isLoadingSubjects || isLoadingCases)
+
+  function handleSubjectChange(nextSubjectId: string) {
+    setSelectedSubjectId(nextSubjectId)
+    setSelectedCaseId('')
+    setSubjectTouched(true)
+    setCaseTouched(false)
+    if (nextSubjectId) setHasCaseFieldBeenShown(true)
+  }
+
+  function handleCaseChange(nextCaseId: string) {
+    setSelectedCaseId(nextCaseId ? Number(nextCaseId) : '')
+    setCaseTouched(Boolean(nextCaseId))
+  }
 
   return (
     <main className="page stack">
@@ -145,7 +196,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
         <div>
           <button type="button" className="link-button" onClick={onBack}>← Back</button>
           <p className="eyebrow">3D view</p>
-          <h1>{mriCase ? `${mriCase.subject_id} · ${mriCase.acquisition_date}` : 'Choose a case'}</h1>
+          <h1>{activeCase ? `${activeCase.subject_id} · ${activeCase.acquisition_date}` : 'Choose a scan'}</h1>
           <p className="muted">Select a subject and a completed scan to open its 3D brain tissue model.</p>
         </div>
         <button type="button" className="secondary" onClick={loadViewer} disabled={isLoadingViewer || selectedCaseId === ''}>Refresh model</button>
@@ -153,35 +204,66 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
 
       {error && <p className="error-text">{error}</p>}
 
-      <section className="card form-grid">
-        <h2>Choose scan</h2>
-        <label>
-          Subject
-          <select value={selectedSubjectId} disabled={isLoadingSelection} onChange={(event) => { setSelectedSubjectId(event.target.value); setSelectedCaseId('') }}>
-            <option value="">Choose subject</option>
-            {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.id} · {subject.case_count} cases</option>)}
-          </select>
-        </label>
-        <label>
-          Case
-          <select value={selectedCaseId} disabled={!selectedSubjectId || isLoadingCases} onChange={(event) => setSelectedCaseId(event.target.value ? Number(event.target.value) : '')}>
-            <option value="">Choose completed scan</option>
-            {meshReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date}</option>)}
-          </select>
-        </label>
-        <p className="muted small-note">Only scans with a completed 3D model are shown here.</p>
-      </section>
+      {initialCaseStillLoading ? (
+        <section className="card loading-card"><p className="muted">Loading 3D visualization...</p></section>
+      ) : (
+        <section className="card form-grid choose-scan-card">
+          <h2>Choose scan</h2>
+          <label className={subjectTouched ? 'touched-field' : undefined}>
+            Subject
+            {isLoadingSubjects && <span className="muted small-note">Loading subjects...</span>}
+            <select value={selectedSubjectId} disabled={isLoadingSubjects} onChange={(event) => handleSubjectChange(event.target.value)}>
+              <option value="">Choose subject</option>
+              {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.id} · {subject.case_count} cases</option>)}
+            </select>
+          </label>
 
-      <Suspense fallback={<section className="card"><p className="muted">Loading 3D view...</p></section>}>
-        <Brain3DViewer
-          items={items}
-          title="3D brain tissue viewer"
-          subtitle={mriCase ? `Loaded ${items.length} tissue layers.` : 'Choose a completed scan to load its 3D model.'}
-          isLoading={isLoadingViewer}
-          error={selectedCaseId === '' ? null : error}
-          onReload={selectedCaseId === '' ? undefined : loadViewer}
-        />
-      </Suspense>
+          {selectedSubjectId && isLoadingCases && <p className="muted small-note">Loading cases...</p>}
+
+          {showCaseField && (
+            <label className={caseTouched ? 'touched-field' : undefined}>
+              Case
+              <select value={selectedCaseId} disabled={!selectedSubjectId || isLoadingCases} onChange={(event) => handleCaseChange(event.target.value)}>
+                <option value="">Choose completed scan</option>
+                {meshReadyCases.map((entry) => <option key={entry.id} value={entry.id}>{entry.acquisition_date}</option>)}
+              </select>
+            </label>
+          )}
+
+          {showCaseField && !isLoadingCases && <p className="muted small-note">Only scans with a completed 3D model are shown here.</p>}
+        </section>
+      )}
+
+      {isChangingCase && <section className="card loading-card"><p className="muted">Loading for new case...</p></section>}
+      {!hasVisibleViewer && selectedCaseId !== '' && !isLoadingViewer && !isPreparingScene && <section className="card loading-card"><p className="muted">Loading 3D visualization...</p></section>}
+
+      {hasVisibleViewer && (
+        <Suspense fallback={<section className="card"><p className="muted">Loading 3D view...</p></section>}>
+          <Brain3DViewer
+            items={activeItems}
+            title="3D brain tissue viewer"
+            subtitle={activeCase ? `Loaded ${activeItems.length} tissue layers.` : 'Choose a completed scan to load its 3D model.'}
+            isLoading={false}
+            error={error}
+            onReload={selectedCaseId === '' ? undefined : loadViewer}
+          />
+        </Suspense>
+      )}
+
+      {pendingItems.length > 0 && (
+        <div className="viewer-preload-hidden" aria-hidden="true">
+          <Suspense fallback={null}>
+            <Brain3DViewer
+              items={pendingItems}
+              title="3D brain tissue viewer"
+              subtitle="Preparing preview."
+              isLoading={false}
+              error={null}
+              onSceneReady={promotePendingScene}
+            />
+          </Suspense>
+        </div>
+      )}
     </main>
   )
 }

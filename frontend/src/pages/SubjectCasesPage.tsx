@@ -4,6 +4,7 @@ import { apiMessage } from '../api/client'
 import { deleteCase, updateCase } from '../api/casesApi'
 import { listSubjectCases } from '../api/subjectsApi'
 import { CaseProgress } from '../components/CaseProgress'
+import { Modal } from '../components/Modal'
 import { UploadCaseForm } from '../components/UploadCaseForm'
 import type { MriCase } from '../types/api'
 import { formatCaseName, formatDateLabel, getCaseStageLabel } from '../utils/userFacing'
@@ -35,6 +36,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
   const [error, setError] = useState<string | null>(null)
   const [editingCase, setEditingCase] = useState<CaseEditorState | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<MriCase | null>(null)
   const [deletingCaseId, setDeletingCaseId] = useState<number | null>(null)
 
   const readyCounts = useMemo(() => {
@@ -91,18 +93,16 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
     }
   }
 
-  async function handleDeleteCase(mriCase: MriCase) {
-    const confirmed = window.confirm(
-      `Delete the MRI scan from ${formatDateLabel(mriCase.acquisition_date)}?`,
-    )
-    if (!confirmed) return
+  async function handleDeleteCase() {
+    if (!deleteTarget) return
 
-    setDeletingCaseId(mriCase.id)
+    setDeletingCaseId(deleteTarget.id)
     setError(null)
     try {
-      await deleteCase(mriCase.id)
-      if (editingCase?.id === mriCase.id) setEditingCase(null)
-      setCases((currentCases) => currentCases.filter((item) => item.id !== mriCase.id))
+      await deleteCase(deleteTarget.id)
+      if (editingCase?.id === deleteTarget.id) setEditingCase(null)
+      setCases((currentCases) => currentCases.filter((item) => item.id !== deleteTarget.id))
+      setDeleteTarget(null)
     } catch (deleteError) {
       setError(apiMessage(deleteError))
     } finally {
@@ -186,7 +186,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
                   <button
                     type="button"
                     className="danger-button"
-                    onClick={() => handleDeleteCase(mriCase)}
+                    onClick={() => setDeleteTarget(mriCase)}
                     disabled={deletingCaseId === mriCase.id}
                   >
                     {deletingCaseId === mriCase.id ? 'Deleting...' : 'Delete'}
@@ -199,45 +199,68 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
 
         <aside className="stack">
           <UploadCaseForm subjectId={subjectId} onCreated={handleCreatedCase} />
+        </aside>
+      </section>
 
-          {editingCase && (
-            <form className="card form-grid" onSubmit={handleUpdateCase}>
-              <div className="row-between">
-                <div>
-                  <p className="eyebrow">Edit scan</p>
-                  <h2>{formatDateLabel(editingCase.acquisitionDate)}</h2>
-                </div>
-                <button type="button" className="secondary" onClick={() => setEditingCase(null)}>
-                  Cancel
-                </button>
-              </div>
+      {editingCase && (
+        <Modal title={formatDateLabel(editingCase.acquisitionDate)} eyebrow="Edit scan" onClose={() => setEditingCase(null)}>
+          <form className="form-grid" onSubmit={handleUpdateCase}>
+            <label>
+              Acquisition date
+              <input
+                type="date"
+                value={editingCase.acquisitionDate}
+                onChange={(event) => setEditingCase({ ...editingCase, acquisitionDate: event.target.value })}
+                required
+              />
+            </label>
 
-              <label>
-                Acquisition date
-                <input
-                  type="date"
-                  value={editingCase.acquisitionDate}
-                  onChange={(event) => setEditingCase({ ...editingCase, acquisitionDate: event.target.value })}
-                  required
-                />
-              </label>
+            <label>
+              Notes
+              <textarea
+                value={editingCase.notes}
+                onChange={(event) => setEditingCase({ ...editingCase, notes: event.target.value })}
+                rows={4}
+              />
+            </label>
 
-              <label>
-                Notes
-                <textarea
-                  value={editingCase.notes}
-                  onChange={(event) => setEditingCase({ ...editingCase, notes: event.target.value })}
-                  rows={4}
-                />
-              </label>
-
+            <div className="button-row modal-form-actions">
               <button type="submit" disabled={isUpdating}>
                 {isUpdating ? 'Saving...' : 'Save changes'}
               </button>
-            </form>
+              <button type="button" className="secondary" onClick={() => setEditingCase(null)} disabled={isUpdating}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {deleteTarget && (
+        <Modal
+          title="Delete scan?"
+          eyebrow="Confirm deletion"
+          onClose={() => setDeleteTarget(null)}
+          footer={(
+            <>
+              <button type="button" className="danger-button" onClick={handleDeleteCase} disabled={deletingCaseId === deleteTarget.id}>
+                {deletingCaseId === deleteTarget.id ? 'Deleting...' : 'Delete scan'}
+              </button>
+              <button type="button" className="secondary" onClick={() => setDeleteTarget(null)} disabled={deletingCaseId === deleteTarget.id}>
+                Cancel
+              </button>
+            </>
           )}
-        </aside>
-      </section>
+        >
+          <p>This will delete the selected MRI scan and its generated result files.</p>
+          <dl className="details-list clean-details-list">
+            <div><dt>Subject</dt><dd>{deleteTarget.subject_id}</dd></div>
+            <div><dt>Acquisition date</dt><dd>{formatDateLabel(deleteTarget.acquisition_date)}</dd></div>
+            <div><dt>Status</dt><dd>{getCaseStageLabel(deleteTarget)}</dd></div>
+            <div><dt>Notes</dt><dd>{deleteTarget.notes || 'No notes added.'}</dd></div>
+          </dl>
+        </Modal>
+      )}
     </main>
   )
 }

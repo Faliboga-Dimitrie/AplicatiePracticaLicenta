@@ -1428,40 +1428,96 @@ input[type='color'] {
   }
 }
 
-/* Small UX refinements: authentication tabs, dashboard cleanup, collapsed sidebar */
-.segmented-control button {
-  border: 1px solid transparent;
-  background: transparent;
-  color: #2454d6;
-  box-shadow: none;
+/* Quality-of-life modals and guided loading states */
+.three-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.segmented-control button:not(.active) {
-  border-color: #c9d8ff;
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(6px);
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  border: 1px solid #dfe5ef;
+  border-radius: 24px;
   background: #ffffff;
+  box-shadow: 0 32px 90px rgba(15, 23, 42, 0.32);
+  padding: 1.25rem;
 }
 
-.segmented-control button:not(.active):hover {
-  background: #eef2ff;
+.modal-header {
+  align-items: flex-start;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.segmented-control .active {
+.modal-body {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.modal-footer,
+.modal-form-actions {
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+}
+
+.loading-card {
+  border-color: #c9d8ff;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.disabled-card {
+  opacity: 0.68;
+  background: #f8fafc;
+}
+
+.disabled-card button {
+  pointer-events: none;
+}
+
+.single-action-panel {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border: 1px solid #dbe7ff;
+  border-radius: 16px;
+  background: #f8fbff;
+  padding: 1rem;
+}
+
+.choose-scan-card {
+  border-color: #c9d8ff;
+}
+
+.touched-field select,
+.touched-field input,
+.touched-field textarea {
   border-color: #2454d6;
-  background: #2454d6;
-  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.1);
 }
 
-.simple-summary-card {
-  justify-content: center;
-}
+@media (max-width: 700px) {
+  .three-metric-grid {
+    grid-template-columns: 1fr;
+  }
 
-.simple-summary-card .muted {
-  color: #e2e8f0;
-  font-size: 1rem;
-  line-height: 1.65;
-}
-
-.sidebar-collapsed .sidebar-nav button:disabled {
-  border-color: rgba(255, 255, 255, 0.08);
-  opacity: 0.35;
+  .modal-footer,
+  .modal-form-actions,
+  .single-action-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
