@@ -367,21 +367,6 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             )}
           </section>
 
-          {visualOpen && (
-            <Suspense fallback={<section className="card"><p className="muted">Loading visual comparison...</p></section>}>
-              <Comparison3DViewer
-                objectUrl={visualObjectUrl}
-                title="Visual comparison"
-                subtitle={comparisonMethod === 'pve'
-                  ? `Shows areas of tissue-probability change for ${tissueLabel(selectedTissue)}. Sensitivity: ${pveThreshold}.`
-                  : `Shows areas where the ${tissueLabel(selectedTissue)} surface changed by more than ${distanceThresholdMm} mm.`}
-                loadingText="Building visual comparison..."
-                isLoading={isLoadingVisual}
-                error={visualError}
-              />
-            </Suspense>
-          )}
-
           <section className="card stack">
             <h2>Comparison table</h2>
             <div className="table-wrap">
@@ -410,6 +395,22 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
               </table>
             </div>
           </section>
+
+
+          {visualOpen && (
+            <Suspense fallback={<section className="card"><p className="muted">Loading visual comparison...</p></section>}>
+              <Comparison3DViewer
+                objectUrl={visualObjectUrl}
+                title="Visual comparison"
+                subtitle={comparisonMethod === 'pve'
+                  ? `Shows areas of tissue-probability change for ${tissueLabel(selectedTissue)}. Sensitivity: ${pveThreshold}.`
+                  : `Shows areas where the ${tissueLabel(selectedTissue)} surface changed by more than ${distanceThresholdMm} mm.`}
+                loadingText="Building visual comparison..."
+                isLoading={isLoadingVisual}
+                error={visualError}
+              />
+            </Suspense>
+          )}
         </>
       )}
 

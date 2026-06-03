@@ -1600,3 +1600,29 @@ input[type='color'] {
 .viewer-message-pad {
   padding: 0.85rem 1rem 0;
 }
+
+.segmented-control button:not(.active) {
+  border: 1px solid #2454d6;
+  background: transparent;
+  color: #2454d6;
+  box-shadow: none;
+}
+
+.segmented-control button.active {
+  border-color: #2454d6;
+  background: #2454d6;
+  color: #ffffff;
+}
+
+.auth-card .segmented-control button:not(.active) {
+  border: 1px solid #2454d6 !important;
+  background: transparent !important;
+  color: #2454d6 !important;
+  box-shadow: none !important;
+}
+
+.auth-card .segmented-control button.active {
+  border-color: #2454d6 !important;
+  background: #2454d6 !important;
+  color: #ffffff !important;
+}

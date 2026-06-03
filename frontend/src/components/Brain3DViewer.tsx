@@ -33,14 +33,10 @@ const sideBySideOffsets: Record<ViewerTissue, number> = {
   csf: 150,
 }
 
-function effectiveTissueOpacity(overlapping: boolean): number {
-  return overlapping ? 0.5 : 1
-}
-
 const defaultTissueControls: TissueControls = {
-  gm: { visible: true, opacity: 0.58, color: '#f97316' },
-  wm: { visible: true, opacity: 0.46, color: '#e2e8f0' },
-  csf: { visible: true, opacity: 0.36, color: '#38bdf8' },
+  gm: { visible: true, opacity: 1, color: '#f97316' },
+  wm: { visible: true, opacity: 1, color: '#e2e8f0' },
+  csf: { visible: true, opacity: 1, color: '#38bdf8' },
 }
 
 function createDefaultTissueTransforms(): TissueTransforms {
@@ -87,7 +83,7 @@ function ModelLayer({
           return cloned
         }
 
-        const opacity = effectiveTissueOpacity(overlapping)
+        const opacity = control.opacity
 
         cloned.transparent = opacity < 1
         cloned.opacity = opacity
@@ -104,7 +100,7 @@ function ModelLayer({
       object.material = Array.isArray(sourceMaterial) ? clonedMaterials : clonedMaterials[0]
     })
     return clone
-  }, [control.color, doubleSided, gltf.scene, item.preserveMaterials, overlapping])
+  }, [control.color, control.opacity, doubleSided, gltf.scene, item.preserveMaterials])
 
   useEffect(() => {
     return () => {
@@ -278,6 +274,16 @@ export function Brain3DViewer({
     }))
   }
 
+  function handleOverlappingChange(isOverlapping: boolean) {
+    setOverlapping(isOverlapping)
+    const nextOpacity = isOverlapping ? 0.5 : 1
+    setControls((current) => ({
+      gm: { ...current.gm, opacity: nextOpacity },
+      wm: { ...current.wm, opacity: nextOpacity },
+      csf: { ...current.csf, opacity: nextOpacity },
+    }))
+  }
+
   function updateTransform(tissue: ViewerTissue, transform: ViewerTransform) {
     setTransforms((current) => ({ ...current, [tissue]: transform }))
   }
@@ -328,7 +334,7 @@ export function Brain3DViewer({
             Auto rotate
           </label>
           <label className="checkbox-row">
-            <input type="checkbox" checked={overlapping} onChange={(event) => setOverlapping(event.target.checked)} />
+            <input type="checkbox" checked={overlapping} onChange={(event) => handleOverlappingChange(event.target.checked)} />
             Overlapping
           </label>
         </div>
@@ -344,7 +350,7 @@ export function Brain3DViewer({
         {showLayerControls && (
           <div className="stack compact-stack">
             <h3>Tissues</h3>
-            <p className="muted small-note">{overlapping ? 'Layers overlap at 50% opacity.' : 'Layers are placed side by side at 100% opacity.'}</p>
+            <p className="muted small-note">{overlapping ? 'Layers overlap. Use opacity to control how strongly each tissue is visible.' : 'Layers are placed side by side. Use opacity to control each tissue independently.'}</p>
             {(['gm', 'wm', 'csf'] as ViewerTissue[]).map((tissue) => (
               <div className="tissue-control" key={tissue}>
                 <label className="checkbox-row">
@@ -362,6 +368,17 @@ export function Brain3DViewer({
                     type="color"
                     value={controls[tissue].color}
                     onChange={(event) => updateTissue(tissue, { color: event.target.value })}
+                  />
+                </label>
+                <label className="range-label">
+                  Opacity {Math.round(controls[tissue].opacity * 100)}%
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={controls[tissue].opacity}
+                    onChange={(event) => updateTissue(tissue, { opacity: Number(event.target.value) })}
                   />
                 </label>
               </div>
