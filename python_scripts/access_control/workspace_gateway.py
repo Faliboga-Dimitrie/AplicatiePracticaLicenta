@@ -13,6 +13,14 @@ from ..project_core import (
 from ..project_core.ports import WorkspaceGateway
 
 
+def _case(subject_id: str, acquisition_date: date, raw_path: Path | str) -> MRICase:
+    return MRICase(
+        subject_id=subject_id,
+        acquisition_date=acquisition_date.isoformat(),
+        raw_path=Path(raw_path),
+    )
+
+
 class ProjectCaseWorkspaceGateway:
     """
     Adapter from access_control to the project_core filesystem workspace.
@@ -41,22 +49,13 @@ class ProjectCaseWorkspaceGateway:
         if source_raw_path is None:
             raise ValueError("source_raw_path is required to create a CaseWorkspace input file.")
 
-        case = MRICase(
-            subject_id=subject_id,
-            acquisition_date=acquisition_date.isoformat(),
-            raw_path=Path(source_raw_path),
+        return self._provider(create_directories=True).create_workspace(
+            _case(subject_id, acquisition_date, source_raw_path)
         )
-        return self._provider(create_directories=True).create_workspace(case)
 
     def delete_case_workspace(self, *, subject_id: str, acquisition_date: date) -> list[Path]:
-        placeholder_raw = Path("__deleted_case_placeholder__.nii.gz")
-        case = MRICase(
-            subject_id=subject_id,
-            acquisition_date=acquisition_date.isoformat(),
-            raw_path=placeholder_raw,
-        )
         return self._provider().delete_workspace(
-            case,
+            _case(subject_id, acquisition_date, "__deleted_case_placeholder__.nii.gz"),
             include_input=True,
             prune_empty_subject_dirs=True,
         )
@@ -64,21 +63,14 @@ class ProjectCaseWorkspaceGateway:
     def delete_subject_workspaces(self, *, subject_id: str) -> list[Path]:
         return self._provider().delete_subject_workspaces(subject_id)
 
-
     def stage_case_workspace_delete(
         self,
         *,
         subject_id: str,
         acquisition_date: date,
     ) -> list[tuple[Path, Path]]:
-        placeholder_raw = Path("__staged_delete_case_placeholder__.nii.gz")
-        case = MRICase(
-            subject_id=subject_id,
-            acquisition_date=acquisition_date.isoformat(),
-            raw_path=placeholder_raw,
-        )
         return self._provider().stage_workspace_delete(
-            case,
+            _case(subject_id, acquisition_date, "__staged_delete_case_placeholder__.nii.gz"),
             include_input=True,
         )
 
@@ -100,24 +92,21 @@ class ProjectCaseWorkspaceGateway:
         the staged input file, workspace.raw_path would point to a placeholder
         name and raw_uploaded would incorrectly become false after refresh.
         """
-        lookup_case = MRICase(
-            subject_id=subject_id,
-            acquisition_date=acquisition_date.isoformat(),
-            raw_path=Path("__lookup_case_placeholder__.nii.gz"),
-        )
+        lookup_case = _case(subject_id, acquisition_date, "__lookup_case_placeholder__.nii.gz")
         input_dir = build_case_workspace(lookup_case, self.settings).input_mri_dir
 
         if not input_dir.exists() or not input_dir.is_dir():
             return None
 
-        for candidate in input_dir.iterdir():
-            if not candidate.is_file():
-                continue
-            name = candidate.name.lower()
-            if name.endswith(".nii") or name.endswith(".nii.gz"):
-                return candidate
-
-        return None
+        return next(
+            (
+                candidate
+                for candidate in input_dir.iterdir()
+                if candidate.is_file()
+                and candidate.name.lower().endswith((".nii", ".nii.gz"))
+            ),
+            None,
+        )
 
     def get_case_workspace(self, *, subject_id: str, acquisition_date: date) -> CaseWorkspace:
         raw_path = self._find_existing_raw_input(
@@ -125,12 +114,7 @@ class ProjectCaseWorkspaceGateway:
             acquisition_date=acquisition_date,
         ) or Path("__lookup_case_placeholder__.nii.gz")
 
-        case = MRICase(
-            subject_id=subject_id,
-            acquisition_date=acquisition_date.isoformat(),
-            raw_path=raw_path,
-        )
-        return self._provider().get_workspace(case)
+        return self._provider().get_workspace(_case(subject_id, acquisition_date, raw_path))
 
     def rename_case_workspace(
         self,
@@ -141,22 +125,9 @@ class ProjectCaseWorkspaceGateway:
         overwrite: bool = False,
     ) -> list[tuple[Path, Path]]:
         placeholder_raw = Path("__renamed_case_placeholder__.nii.gz")
-
-        old_case = MRICase(
-            subject_id=subject_id,
-            acquisition_date=old_acquisition_date.isoformat(),
-            raw_path=placeholder_raw,
-        )
-
-        new_case = MRICase(
-            subject_id=subject_id,
-            acquisition_date=new_acquisition_date.isoformat(),
-            raw_path=placeholder_raw,
-        )
-
         return self._provider().rename_workspace(
-            old_case,
-            new_case,
+            _case(subject_id, old_acquisition_date, placeholder_raw),
+            _case(subject_id, new_acquisition_date, placeholder_raw),
             overwrite=overwrite,
             prune_empty_subject_dirs=True,
         )

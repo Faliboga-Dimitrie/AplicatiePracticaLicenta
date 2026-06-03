@@ -534,13 +534,12 @@ class MriEvolutionInTime:
         resample_from_to_fn: Any,
         template_path: Path,
     ) -> bytes:
-        missing: list[Path] = []
-        for mri in (baseline, target):
-            missing.extend(mri.missing_pve_paths(tissues=selected_tissues))
-            missing.extend(mri.missing_metric_paths())
-        if missing:
-            missing_str = "\n".join(str(path) for path in missing)
-            raise FileNotFoundError(f"Cannot build PVE visual comparison GLB. Missing files:\n{missing_str}")
+        _require_visual_inputs(
+            (baseline, target),
+            selected_tissues=selected_tissues,
+            error_prefix="Cannot build PVE visual comparison GLB",
+            include_pves=True,
+        )
 
         template_img = _load_resampling_template(template_path, nib_module=nib_module)
         template_target = (template_img.shape[:3], template_img.affine)
@@ -574,11 +573,12 @@ class MriEvolutionInTime:
                 numpy_module=numpy_module,
             )
             diff_data = numpy_module.abs(target_data - baseline_data)
-            baseline_volume = float(baseline_metrics.volumes[tissue])
-            target_volume = float(target_metrics.volumes[tissue])
-            use_target_reference = target_volume > baseline_volume
-            reference_label = "target" if use_target_reference else "baseline"
-            reference_date = target.acquisition_date if use_target_reference else baseline.acquisition_date
+            reference_label, reference_date, use_target_reference = _reference_for_volume_change(
+                baseline_volume=float(baseline_metrics.volumes[tissue]),
+                target_volume=float(target_metrics.volumes[tissue]),
+                baseline_date=baseline.acquisition_date,
+                target_date=target.acquisition_date,
+            )
             reference_data = target_data if use_target_reference else baseline_data
 
             reference_mesh = _pve_data_to_mesh(
@@ -606,34 +606,18 @@ class MriEvolutionInTime:
                 trimesh_module=trimesh_module,
                 numpy_module=numpy_module,
             )
-            geometries: list[Any] = []
-            if unchanged_mesh is not None:
-                geometries.append(unchanged_mesh)
-            if changed_mesh is not None:
-                geometries.append(changed_mesh)
-            if not geometries:
-                continue
-
-            origin = _combined_geometry_center(geometries, numpy_module=numpy_module)
-            for geometry in geometries:
-                _apply_shared_view_transform(geometry, origin=origin, trimesh_module=trimesh_module, numpy_module=numpy_module)
-
-            if unchanged_mesh is not None:
-                _apply_rgba(unchanged_mesh, colors.baseline, trimesh_module=trimesh_module, numpy_module=numpy_module)
-                scene.add_geometry(
-                    unchanged_mesh,
-                    node_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_pve_mesh",
-                    geom_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_pve_mesh",
-                )
-                added_geometry = True
-            if changed_mesh is not None:
-                _apply_rgba(changed_mesh, colors.changed, trimesh_module=trimesh_module, numpy_module=numpy_module)
-                scene.add_geometry(
-                    changed_mesh,
-                    node_name=f"changed_{reference_label}_{reference_date}_{tissue}_pve_mesh",
-                    geom_name=f"changed_{reference_label}_{reference_date}_{tissue}_pve_mesh",
-                )
-                added_geometry = True
+            added_geometry = _add_comparison_layers(
+                scene,
+                unchanged_mesh=unchanged_mesh,
+                changed_mesh=changed_mesh,
+                colors=colors,
+                reference_label=reference_label,
+                reference_date=reference_date,
+                tissue=tissue,
+                method_suffix="pve",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+            ) or added_geometry
 
         if not added_geometry:
             raise ValueError("No PVE comparison mesh could be built.")
@@ -651,13 +635,12 @@ class MriEvolutionInTime:
         numpy_module: Any,
         cKDTree_cls: Any,
     ) -> bytes:
-        missing: list[Path] = []
-        for mri in (baseline, target):
-            missing.extend(mri.missing_visual_paths(tissues=selected_tissues, include_meshes=True))
-            missing.extend(mri.missing_metric_paths())
-        if missing:
-            missing_str = "\n".join(str(path) for path in missing)
-            raise FileNotFoundError(f"Cannot build nearest-distance comparison GLB. Missing files:\n{missing_str}")
+        _require_visual_inputs(
+            (baseline, target),
+            selected_tissues=selected_tissues,
+            error_prefix="Cannot build nearest-distance comparison GLB",
+            include_meshes=True,
+        )
 
         baseline_metrics = self._load_metrics(baseline)
         target_metrics = self._load_metrics(target)
@@ -667,11 +650,12 @@ class MriEvolutionInTime:
         for tissue in selected_tissues:
             baseline_mesh = _load_first_trimesh(baseline.mesh_paths[tissue], trimesh_module=trimesh_module)
             target_mesh = _load_first_trimesh(target.mesh_paths[tissue], trimesh_module=trimesh_module)
-            baseline_volume = float(baseline_metrics.volumes[tissue])
-            target_volume = float(target_metrics.volumes[tissue])
-            use_target_reference = target_volume > baseline_volume
-            reference_label = "target" if use_target_reference else "baseline"
-            reference_date = target.acquisition_date if use_target_reference else baseline.acquisition_date
+            reference_label, reference_date, use_target_reference = _reference_for_volume_change(
+                baseline_volume=float(baseline_metrics.volumes[tissue]),
+                target_volume=float(target_metrics.volumes[tissue]),
+                baseline_date=baseline.acquisition_date,
+                target_date=target.acquisition_date,
+            )
             reference_mesh = target_mesh.copy() if use_target_reference else baseline_mesh.copy()
             comparison_vertices = numpy_module.asarray(
                 baseline_mesh.vertices if use_target_reference else target_mesh.vertices,
@@ -692,44 +676,100 @@ class MriEvolutionInTime:
                 trimesh_module=trimesh_module,
                 numpy_module=numpy_module,
             )
-            geometries: list[Any] = []
-            if unchanged_mesh is not None:
-                geometries.append(unchanged_mesh)
-            if changed_mesh is not None:
-                geometries.append(changed_mesh)
-            if not geometries:
-                continue
-
-            origin = _combined_geometry_center(geometries, numpy_module=numpy_module)
-            for geometry in geometries:
-                _apply_shared_view_transform(
-                    geometry,
-                    origin=origin,
-                    trimesh_module=trimesh_module,
-                    numpy_module=numpy_module,
-                    extra_x_degrees=85.0,
-                )
-
-            if unchanged_mesh is not None:
-                _apply_rgba(unchanged_mesh, colors.baseline, trimesh_module=trimesh_module, numpy_module=numpy_module)
-                scene.add_geometry(
-                    unchanged_mesh,
-                    node_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
-                    geom_name=f"unchanged_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
-                )
-                added_geometry = True
-            if changed_mesh is not None:
-                _apply_rgba(changed_mesh, colors.changed, trimesh_module=trimesh_module, numpy_module=numpy_module)
-                scene.add_geometry(
-                    changed_mesh,
-                    node_name=f"changed_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
-                    geom_name=f"changed_{reference_label}_{reference_date}_{tissue}_nearest_mesh",
-                )
-                added_geometry = True
+            added_geometry = _add_comparison_layers(
+                scene,
+                unchanged_mesh=unchanged_mesh,
+                changed_mesh=changed_mesh,
+                colors=colors,
+                reference_label=reference_label,
+                reference_date=reference_date,
+                tissue=tissue,
+                method_suffix="nearest",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+                extra_x_degrees=85.0,
+            ) or added_geometry
 
         if not added_geometry:
             raise ValueError("No nearest-distance comparison mesh could be built.")
         return _export_scene_to_glb_bytes(scene)
+
+
+def _require_visual_inputs(
+    mris: Iterable[EvolutionMriArtifacts],
+    *,
+    selected_tissues: Sequence[str],
+    error_prefix: str,
+    include_meshes: bool = False,
+    include_pves: bool = False,
+) -> None:
+    missing: list[Path] = []
+    for mri in mris:
+        if include_meshes:
+            missing.extend(mri.missing_visual_paths(tissues=selected_tissues, include_meshes=True))
+        if include_pves:
+            missing.extend(mri.missing_pve_paths(tissues=selected_tissues))
+        missing.extend(mri.missing_metric_paths())
+
+    if missing:
+        missing_str = "\n".join(str(path) for path in missing)
+        raise FileNotFoundError(f"{error_prefix}. Missing files:\n{missing_str}")
+
+
+def _reference_for_volume_change(
+    *,
+    baseline_volume: float,
+    target_volume: float,
+    baseline_date: str,
+    target_date: str,
+) -> tuple[str, str, bool]:
+    use_target_reference = target_volume > baseline_volume
+    if use_target_reference:
+        return "target", target_date, True
+    return "baseline", baseline_date, False
+
+
+def _add_comparison_layers(
+    scene: Any,
+    *,
+    unchanged_mesh: Any | None,
+    changed_mesh: Any | None,
+    colors: _ComparisonColors,
+    reference_label: str,
+    reference_date: str,
+    tissue: str,
+    method_suffix: str,
+    trimesh_module: Any,
+    numpy_module: Any,
+    extra_x_degrees: float = 0.0,
+) -> bool:
+    geometries = [mesh for mesh in (unchanged_mesh, changed_mesh) if mesh is not None]
+    if not geometries:
+        return False
+
+    origin = _combined_geometry_center(geometries, numpy_module=numpy_module)
+    for geometry in geometries:
+        _apply_shared_view_transform(
+            geometry,
+            origin=origin,
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+            extra_x_degrees=extra_x_degrees,
+        )
+
+    added = False
+    for change_label, mesh, color in (
+        ("unchanged", unchanged_mesh, colors.baseline),
+        ("changed", changed_mesh, colors.changed),
+    ):
+        if mesh is None:
+            continue
+        geometry_name = f"{change_label}_{reference_label}_{reference_date}_{tissue}_{method_suffix}_mesh"
+        _apply_rgba(mesh, color, trimesh_module=trimesh_module, numpy_module=numpy_module)
+        scene.add_geometry(mesh, node_name=geometry_name, geom_name=geometry_name)
+        added = True
+
+    return added
 
 
 def evolution_artifacts_from_workspaces(

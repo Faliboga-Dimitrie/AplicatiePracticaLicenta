@@ -47,6 +47,9 @@ class AccessControlRepositories:
     search: Any
 
 
+def _invalid_subject_age(age: int | None | object) -> bool:
+    return age is not UNSET and age is not None and isinstance(age, int) and age < 0
+
 class AccessControlService:
     """
     Authentication, authorization, and metadata service for the MRI application.
@@ -342,7 +345,7 @@ class AccessControlService:
         age: int | None | object = UNSET,
         notes: str | None | object = UNSET,
     ) -> DbResult[bool]:
-        if age is not UNSET and age is not None and isinstance(age, int) and int(age) < 0:
+        if _invalid_subject_age(age):
             return DbResult.fail("Subject age cannot be negative.")
         return self.subjects.update(subject_id, name=name, age=age, notes=notes)
 
@@ -355,7 +358,7 @@ class AccessControlService:
         age: int | None | object = UNSET,
         notes: str | None | object = UNSET,
     ) -> DbResult[bool]:
-        if age is not UNSET and age is not None and isinstance(age, int) and int(age) < 0:
+        if _invalid_subject_age(age):
             return DbResult.fail("Subject age cannot be negative.")
         access = self.access.get(user_id, subject_id)
         if not access.success:
@@ -568,7 +571,7 @@ class AccessControlService:
             moved_paths = []
 
             if self.workspace_gateway is None:
-                    return DbResult.fail("rename_workspace=True requires a workspace_gateway.")
+                return DbResult.fail("rename_workspace=True requires a workspace_gateway.")
 
             moved_paths = self.workspace_gateway.rename_case_workspace(
                 subject_id=subject_id,
@@ -841,12 +844,5 @@ class AccessControlService:
             source_raw_path=source_raw_path,
         )
 
-    def _delete_workspace(self, case: MriCaseRecord) -> None:
-        if self.workspace_gateway is None:
-            raise RuntimeError("delete_workspace=True requires a workspace_gateway.")
-        self.workspace_gateway.delete_case_workspace(
-            subject_id=case.subject_id,
-            acquisition_date=case.acquisition_date,
-        )
 
 __all__ = ["AccessControlRepositories", "AccessControlService"]

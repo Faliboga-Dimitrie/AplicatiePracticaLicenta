@@ -5,13 +5,13 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from ...access_control import UserRecord
 from ...access_control.utils import UNSET
 from ..dependencies import get_case_service, get_current_user
 from ..errors import raise_api_error, unwrap_result
-from ..schemas import CreateMriCaseRequest, MriCaseResponse, UpdateMriCaseRequest
+from ..schemas import MriCaseResponse, UpdateMriCaseRequest
 from ..serialization import mri_case_to_dict
 from ..services import CaseService
 from ..upload_validation import safe_nifti_upload_filename

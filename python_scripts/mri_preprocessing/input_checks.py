@@ -1,4 +1,3 @@
-# input_checks.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -55,12 +54,40 @@ class InputCheckResult:
             OrientationStatus.CAN_REORIENT,
         }
 
+
 def _safe_aff2axcodes(affine) -> tuple[str | None, str | None, str | None] | None:
     try:
-        ax = aff2axcodes(affine)
-        return tuple(ax)  # type: ignore[return-value]
+        return tuple(aff2axcodes(affine))  # type: ignore[return-value]
     except Exception:
         return None
+
+
+def _unloadable_result(
+    *,
+    subject_id: str,
+    input_path: Path,
+    message: str,
+) -> InputCheckResult:
+    return InputCheckResult(
+        subject_id=subject_id,
+        input_path=input_path,
+        status=OrientationStatus.CANNOT_AUTO_REORIENT,
+        image_axcodes=None,
+        template_axcodes=None,
+        affine_source="unknown",
+        qform_code=0,
+        sform_code=0,
+        qform_axcodes=None,
+        sform_axcodes=None,
+        loadable=False,
+        ndim=None,
+        shape=None,
+        already_standard=False,
+        has_usable_orientation_metadata=False,
+        qform_sform_consistent=None,
+        requires_manual_review=True,
+        message=message,
+    )
 
 
 def _determine_affine_source(img: nib.spatialimages.SpatialImage) -> str:
@@ -77,16 +104,10 @@ def _determine_affine_source(img: nib.spatialimages.SpatialImage) -> str:
 
 
 def _looks_like_structural_3d(shape: tuple[int, ...] | None, ndim: int | None) -> bool:
-    if shape is None or ndim is None:
-        return False
-    if ndim < 3:
+    if shape is None or ndim is None or ndim < 3:
         return False
     # We accept 3D and also 4D with singleton time/channel as a pragmatic check.
-    if ndim == 3:
-        return True
-    if ndim == 4 and shape[3] == 1:
-        return True
-    return False
+    return ndim == 3 or (ndim == 4 and shape[3] == 1)
 
 
 def check_input_orientation(case: MRICase, settings: Any) -> InputCheckResult:
@@ -95,69 +116,29 @@ def check_input_orientation(case: MRICase, settings: Any) -> InputCheckResult:
       - is already in the same voxel orientation as the chosen MNI template
       - can be safely passed to fslreorient2std
       - requires manual review / reconversion first
-
-    Expected fields:
-      case.subject_id
-      case.raw_path
-
-      settings.container_mni_path   OR settings.mni_template_path
     """
     input_path = Path(case.raw_path)
     subject_id = str(case.subject_id)
 
     if not input_path.exists():
-        return InputCheckResult(
+        return _unloadable_result(
             subject_id=subject_id,
             input_path=input_path,
-            status=OrientationStatus.CANNOT_AUTO_REORIENT,
-            image_axcodes=None,
-            template_axcodes=None,
-            affine_source="unknown",
-            qform_code=0,
-            sform_code=0,
-            qform_axcodes=None,
-            sform_axcodes=None,
-            loadable=False,
-            ndim=None,
-            shape=None,
-            already_standard=False,
-            has_usable_orientation_metadata=False,
-            qform_sform_consistent=None,
-            requires_manual_review=True,
             message=f"Input file does not exist: {input_path}",
         )
 
     try:
         img = nib.load(str(input_path))
     except Exception as exc:
-        return InputCheckResult(
+        return _unloadable_result(
             subject_id=subject_id,
             input_path=input_path,
-            status=OrientationStatus.CANNOT_AUTO_REORIENT,
-            image_axcodes=None,
-            template_axcodes=None,
-            affine_source="unknown",
-            qform_code=0,
-            sform_code=0,
-            qform_axcodes=None,
-            sform_axcodes=None,
-            loadable=False,
-            ndim=None,
-            shape=None,
-            already_standard=False,
-            has_usable_orientation_metadata=False,
-            qform_sform_consistent=None,
-            requires_manual_review=True,
             message=f"Failed to load NIfTI with nibabel: {exc}",
         )
 
-    # Load template chosen for your pipeline.
-    # Prefer a local host path if present; otherwise fall back to a configured path.
     mni_template_path = getattr(settings, "mni_template_path", None)
     if mni_template_path is None:
-        raise AttributeError(
-            "settings must expose mni_template_path for input_checks.py"
-        )
+        raise AttributeError("settings must expose mni_template_path for input_checks.py")
 
     mni = nib.load(str(mni_template_path))
 
@@ -180,32 +161,33 @@ def check_input_orientation(case: MRICase, settings: Any) -> InputCheckResult:
 
     has_usable_orientation_metadata = (
         image_axcodes is not None
-        and all(a is not None for a in image_axcodes)
-        and ((qform_code != 0) or (sform_code != 0))
+        and all(axis is not None for axis in image_axcodes)
+        and (qform_code != 0 or sform_code != 0)
     )
-
-    qform_sform_consistent: bool | None
-    if qform_code != 0 and sform_code != 0:
-        # Conservative engineering rule: if both are present and imply different
-        # axis-code orientations, treat as review-needed.
-        qform_sform_consistent = (qform_axcodes == sform_axcodes)
-    else:
-        qform_sform_consistent = None
-
+    qform_sform_consistent = (
+        qform_axcodes == sform_axcodes
+        if qform_code != 0 and sform_code != 0
+        else None
+    )
     already_standard = (
         image_axcodes is not None
         and template_axcodes is not None
         and image_axcodes == template_axcodes
     )
 
-    structural_ok = _looks_like_structural_3d(shape, ndim)
-
-    # Decision logic
-    if not structural_ok:
+    def loaded_result(
+        *,
+        status: OrientationStatus,
+        message: str,
+        already_standard_value: bool = already_standard,
+        usable_metadata: bool = has_usable_orientation_metadata,
+        forms_consistent: bool | None = qform_sform_consistent,
+        requires_review: bool,
+    ) -> InputCheckResult:
         return InputCheckResult(
             subject_id=subject_id,
             input_path=input_path,
-            status=OrientationStatus.NEEDS_REVIEW,
+            status=status,
             image_axcodes=image_axcodes,
             template_axcodes=template_axcodes,
             affine_source=affine_source,
@@ -216,54 +198,34 @@ def check_input_orientation(case: MRICase, settings: Any) -> InputCheckResult:
             loadable=True,
             ndim=ndim,
             shape=shape,
-            already_standard=already_standard,
-            has_usable_orientation_metadata=has_usable_orientation_metadata,
-            qform_sform_consistent=qform_sform_consistent,
-            requires_manual_review=True,
+            already_standard=already_standard_value,
+            has_usable_orientation_metadata=usable_metadata,
+            qform_sform_consistent=forms_consistent,
+            requires_manual_review=requires_review,
+            message=message,
+        )
+
+    if not _looks_like_structural_3d(shape, ndim):
+        return loaded_result(
+            status=OrientationStatus.NEEDS_REVIEW,
+            requires_review=True,
             message="Image loaded, but shape/dimensionality does not look like a standard structural 3D T1.",
         )
 
     if image_axcodes is None or template_axcodes is None:
-        return InputCheckResult(
-            subject_id=subject_id,
-            input_path=input_path,
+        return loaded_result(
             status=OrientationStatus.NEEDS_REVIEW,
-            image_axcodes=image_axcodes,
-            template_axcodes=template_axcodes,
-            affine_source=affine_source,
-            qform_code=qform_code,
-            sform_code=sform_code,
-            qform_axcodes=qform_axcodes,
-            sform_axcodes=sform_axcodes,
-            loadable=True,
-            ndim=ndim,
-            shape=shape,
-            already_standard=False,
-            has_usable_orientation_metadata=False,
-            qform_sform_consistent=qform_sform_consistent,
-            requires_manual_review=True,
+            already_standard_value=False,
+            usable_metadata=False,
+            requires_review=True,
             message="Could not derive axis codes from the image affine and/or the MNI template affine.",
         )
 
-    if (qform_code == 0) and (sform_code == 0):
-        return InputCheckResult(
-            subject_id=subject_id,
-            input_path=input_path,
+    if qform_code == 0 and sform_code == 0:
+        return loaded_result(
             status=OrientationStatus.NEEDS_REVIEW,
-            image_axcodes=image_axcodes,
-            template_axcodes=template_axcodes,
-            affine_source=affine_source,
-            qform_code=qform_code,
-            sform_code=sform_code,
-            qform_axcodes=qform_axcodes,
-            sform_axcodes=sform_axcodes,
-            loadable=True,
-            ndim=ndim,
-            shape=shape,
-            already_standard=already_standard,
-            has_usable_orientation_metadata=False,
-            qform_sform_consistent=qform_sform_consistent,
-            requires_manual_review=True,
+            usable_metadata=False,
+            requires_review=True,
             message=(
                 "Both qform_code and sform_code are 0, so orientation metadata is not trustworthy enough "
                 "for automatic reorientation."
@@ -271,90 +233,35 @@ def check_input_orientation(case: MRICase, settings: Any) -> InputCheckResult:
         )
 
     if qform_sform_consistent is False:
-        return InputCheckResult(
-            subject_id=subject_id,
-            input_path=input_path,
+        return loaded_result(
             status=OrientationStatus.NEEDS_REVIEW,
-            image_axcodes=image_axcodes,
-            template_axcodes=template_axcodes,
-            affine_source=affine_source,
-            qform_code=qform_code,
-            sform_code=sform_code,
-            qform_axcodes=qform_axcodes,
-            sform_axcodes=sform_axcodes,
-            loadable=True,
-            ndim=ndim,
-            shape=shape,
-            already_standard=already_standard,
-            has_usable_orientation_metadata=False,
-            qform_sform_consistent=False,
-            requires_manual_review=True,
-            message=(
-                "qform and sform imply different voxel-axis orientations; manual review or reconversion is needed."
-            ),
+            usable_metadata=False,
+            forms_consistent=False,
+            requires_review=True,
+            message="qform and sform imply different voxel-axis orientations; manual review or reconversion is needed.",
         )
 
     if already_standard:
-        return InputCheckResult(
-            subject_id=subject_id,
-            input_path=input_path,
+        return loaded_result(
             status=OrientationStatus.ALREADY_STANDARD,
-            image_axcodes=image_axcodes,
-            template_axcodes=template_axcodes,
-            affine_source=affine_source,
-            qform_code=qform_code,
-            sform_code=sform_code,
-            qform_axcodes=qform_axcodes,
-            sform_axcodes=sform_axcodes,
-            loadable=True,
-            ndim=ndim,
-            shape=shape,
-            already_standard=True,
-            has_usable_orientation_metadata=has_usable_orientation_metadata,
-            qform_sform_consistent=qform_sform_consistent,
-            requires_manual_review=False,
+            already_standard_value=True,
+            requires_review=False,
             message="Image axis codes already match the chosen MNI template orientation.",
         )
 
     if has_usable_orientation_metadata:
-        return InputCheckResult(
-            subject_id=subject_id,
-            input_path=input_path,
+        return loaded_result(
             status=OrientationStatus.CAN_REORIENT,
-            image_axcodes=image_axcodes,
-            template_axcodes=template_axcodes,
-            affine_source=affine_source,
-            qform_code=qform_code,
-            sform_code=sform_code,
-            qform_axcodes=qform_axcodes,
-            sform_axcodes=sform_axcodes,
-            loadable=True,
-            ndim=ndim,
-            shape=shape,
-            already_standard=False,
-            has_usable_orientation_metadata=True,
-            qform_sform_consistent=qform_sform_consistent,
-            requires_manual_review=False,
+            already_standard_value=False,
+            usable_metadata=True,
+            requires_review=False,
             message="Image can be passed to fslreorient2std.",
         )
 
-    return InputCheckResult(
-        subject_id=subject_id,
-        input_path=input_path,
+    return loaded_result(
         status=OrientationStatus.NEEDS_REVIEW,
-        image_axcodes=image_axcodes,
-        template_axcodes=template_axcodes,
-        affine_source=affine_source,
-        qform_code=qform_code,
-        sform_code=sform_code,
-        qform_axcodes=qform_axcodes,
-        sform_axcodes=sform_axcodes,
-        loadable=True,
-        ndim=ndim,
-        shape=shape,
-        already_standard=False,
-        has_usable_orientation_metadata=False,
-        qform_sform_consistent=qform_sform_consistent,
-        requires_manual_review=True,
+        already_standard_value=False,
+        usable_metadata=False,
+        requires_review=True,
         message="Orientation metadata is not strong enough for automatic reorientation.",
     )

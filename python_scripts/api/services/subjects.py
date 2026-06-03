@@ -4,7 +4,6 @@ from ...access_control import (
     AccessControlService,
     DbResult,
     MriCaseRecord,
-    SubjectRecord,
     SubjectSummaryRecord,
     SubjectWithCases,
     UserRecord,

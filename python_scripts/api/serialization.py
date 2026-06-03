@@ -119,15 +119,15 @@ def subject_to_dict(subject: SubjectRecord) -> dict[str, object]:
     }
 
 
-def mri_case_to_dict(case: MriCaseRecord) -> dict[str, object]:
-    acquisition_date = case.acquisition_date
-    if hasattr(acquisition_date, "isoformat"):
-        acquisition_date = acquisition_date.isoformat()
+def _isoformat(value: Any) -> Any:
+    return value.isoformat() if hasattr(value, "isoformat") else value
 
+
+def mri_case_to_dict(case: MriCaseRecord) -> dict[str, object]:
     return {
         "id": case.id,
         "subject_id": case.subject_id,
-        "acquisition_date": acquisition_date,
+        "acquisition_date": _isoformat(case.acquisition_date),
         "notes": case.notes,
         "status": case.status,
         "case_key": getattr(case, "case_key", None),
@@ -137,13 +137,8 @@ def mri_case_to_dict(case: MriCaseRecord) -> dict[str, object]:
 
 
 def subject_summary_to_dict(subject_summary: SubjectSummaryRecord) -> dict[str, object]:
-    subject = subject_summary.subject
-
     return {
-        "id": subject.id,
-        "name": subject.name,
-        "age": subject.age,
-        "notes": subject.notes,
+        **subject_to_dict(subject_summary.subject),
         "case_count": int(subject_summary.case_count or 0),
     }
 
@@ -152,14 +147,10 @@ def subject_with_cases_to_dict(
     *,
     include_cases: bool = True,
 ) -> dict[str, object]:
-    subject = subject_with_cases.subject
     cases = list(subject_with_cases.cases or [])
 
     result: dict[str, object] = {
-        "id": subject.id,
-        "name": subject.name,
-        "age": subject.age,
-        "notes": subject.notes,
+        **subject_to_dict(subject_with_cases.subject),
         "case_count": len(cases),
     }
 
