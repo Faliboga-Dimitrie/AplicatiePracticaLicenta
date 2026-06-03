@@ -1,11 +1,3 @@
-import type { User } from '../types/api'
-
-type HomePageProps = {
-  user: User
-  onOpenWorkspace: () => void
-  onOpenSettings: () => void
-}
-
 const reviewCards = [
   {
     title: 'Manage people and scans',
@@ -22,36 +14,30 @@ const reviewCards = [
 ]
 
 const workflow = [
-  'Create or open a subject',
+  'Create or open a subject from the sidebar',
   'Upload a T1 MRI scan for an acquisition date',
   'Prepare the scan, then create the 3D model and measurements',
   'Review the model, statistics, comparison, or download files',
 ]
 
-export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProps) {
-  const firstName = user.email.split('@')[0]
-
+export function HomePage() {
   return (
     <main className="page stack dashboard-page">
       <section className="dashboard-hero card user-hero-card">
         <div>
           <p className="eyebrow">Dashboard</p>
-          <h1>Welcome back, {firstName}</h1>
+          <h1>Welcome to your MRI workspace</h1>
           <p className="hero-text">
             Continue working with saved MRI scans, create new subject records, and open finished results without
-            needing to follow the technical processing details.
+            needing to follow the technical processing details. Use the sidebar to move between subjects, 3D views,
+            measurements, comparisons and settings.
           </p>
-          <div className="button-row hero-actions">
-            <button type="button" onClick={onOpenWorkspace}>Open subjects</button>
-            <button type="button" className="secondary" onClick={onOpenSettings}>Account settings</button>
-          </div>
         </div>
 
-        <aside className="hero-summary-card">
-          <p className="eyebrow">Signed in as</p>
-          <h2>{user.email}</h2>
+        <aside className="hero-summary-card simple-summary-card">
           <p className="muted">
-            Your scans and results are saved to your account so you can return later and compare acquisitions over time.
+            Your scans and results are saved to your account so you can return later, review completed cases and compare
+            acquisitions over time.
           </p>
         </aside>
       </section>
@@ -62,7 +48,7 @@ export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProp
             <p className="eyebrow">Recommended flow</p>
             <h2>Start from a subject</h2>
             <p className="muted">
-              The app now guides the user by result-oriented steps instead of exposing implementation details.
+              The app guides the user by result-oriented steps instead of exposing implementation details.
             </p>
           </div>
 
@@ -74,8 +60,6 @@ export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProp
               </li>
             ))}
           </ol>
-
-          <button type="button" onClick={onOpenWorkspace}>Go to subjects</button>
         </article>
 
         <article className="card stack">
@@ -83,7 +67,7 @@ export function HomePage({ user, onOpenWorkspace, onOpenSettings }: HomePageProp
             <p className="eyebrow">What you can do</p>
             <h2>Review MRI results</h2>
             <p className="muted">
-              Once a scan is processed, the result pages can also be opened directly from the sidebar.
+              Once a scan is processed, result pages can be opened directly from the sidebar.
             </p>
           </div>
 

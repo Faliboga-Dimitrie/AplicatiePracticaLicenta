@@ -1427,3 +1427,41 @@ input[type='color'] {
     display: grid;
   }
 }
+
+/* Small UX refinements: authentication tabs, dashboard cleanup, collapsed sidebar */
+.segmented-control button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #2454d6;
+  box-shadow: none;
+}
+
+.segmented-control button:not(.active) {
+  border-color: #c9d8ff;
+  background: #ffffff;
+}
+
+.segmented-control button:not(.active):hover {
+  background: #eef2ff;
+}
+
+.segmented-control .active {
+  border-color: #2454d6;
+  background: #2454d6;
+  color: #ffffff;
+}
+
+.simple-summary-card {
+  justify-content: center;
+}
+
+.simple-summary-card .muted {
+  color: #e2e8f0;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.sidebar-collapsed .sidebar-nav button:disabled {
+  border-color: rgba(255, 255, 255, 0.08);
+  opacity: 0.35;
+}
