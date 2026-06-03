@@ -98,6 +98,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const [error, setError] = useState<string | null>(null)
   const [visualOpen, setVisualOpen] = useState(false)
   const [visualObjectUrl, setVisualObjectUrl] = useState<string | null>(null)
+  const [lastVisualSignature, setLastVisualSignature] = useState<string | null>(null)
   const [isLoadingVisual, setIsLoadingVisual] = useState(false)
   const [visualError, setVisualError] = useState<string | null>(null)
   const [comparisonHelpOpen, setComparisonHelpOpen] = useState(false)
@@ -156,6 +157,13 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   useEffect(() => () => clearVisualObjectUrl(), [clearVisualObjectUrl])
 
   const readyDates = useMemo(() => dateEntries.filter((entry) => entry.ready_for_json), [dateEntries])
+  const visualRequestSignature = useMemo(() => {
+    if (!report || !selectedSubjectId) return null
+    const sensitivity = comparisonMethod === 'pve' ? pveThreshold : distanceThresholdMm
+    return [selectedSubjectId, report.start_date, report.end_date, selectedTissue, comparisonMethod, sensitivity].join('|')
+  }, [comparisonMethod, distanceThresholdMm, pveThreshold, report, selectedSubjectId, selectedTissue])
+  const visualNeedsRefresh = Boolean(visualOpen && visualRequestSignature && visualRequestSignature !== lastVisualSignature)
+  const canOpenVisualComparison = Boolean(report) && !isLoadingVisual && (!visualOpen || visualNeedsRefresh)
 
   async function buildReport() {
     if (!selectedSubjectId || !startDate || !endDate) {
@@ -166,10 +174,15 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     setError(null)
     try {
       setReport(await getEvolutionReport(selectedSubjectId, startDate, endDate))
+      setVisualOpen(false)
+      setVisualObjectUrl(null)
+      setLastVisualSignature(null)
+      clearVisualObjectUrl()
     } catch (loadError) {
       setReport(null)
       setVisualOpen(false)
       setVisualObjectUrl(null)
+      setLastVisualSignature(null)
       clearVisualObjectUrl()
       setError(apiMessage(loadError))
     } finally {
@@ -178,7 +191,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   }
 
   const loadVisualComparison = useCallback(async () => {
-    if (!report || !selectedSubjectId) return
+    if (!report || !selectedSubjectId || !visualRequestSignature) return
     setIsLoadingVisual(true)
     setVisualError(null)
     try {
@@ -195,23 +208,21 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
       clearVisualObjectUrl()
       visualObjectUrlRef.current = objectUrl
       setVisualObjectUrl(objectUrl)
+      setLastVisualSignature(visualRequestSignature)
     } catch (loadError) {
       setVisualObjectUrl(null)
+      setLastVisualSignature(null)
       clearVisualObjectUrl()
       setVisualError(apiMessage(loadError))
     } finally {
       setIsLoadingVisual(false)
     }
-  }, [clearVisualObjectUrl, report, selectedTissue, selectedSubjectId, comparisonMethod, pveThreshold, distanceThresholdMm])
-
-  useEffect(() => {
-    if (visualOpen && report) loadVisualComparison()
-  }, [loadVisualComparison, report, visualOpen])
+  }, [clearVisualObjectUrl, report, selectedTissue, selectedSubjectId, comparisonMethod, pveThreshold, distanceThresholdMm, visualRequestSignature])
 
   function handleOpenVisualComparison() {
-    if (!report) return
-    if (visualOpen) loadVisualComparison()
-    else setVisualOpen(true)
+    if (!report || !canOpenVisualComparison) return
+    setVisualOpen(true)
+    void loadVisualComparison()
   }
 
   function handleSubjectChange(value: string) {
@@ -222,6 +233,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     setReport(null)
     setVisualOpen(false)
     setVisualObjectUrl(null)
+    setLastVisualSignature(null)
     clearVisualObjectUrl()
   }
 
@@ -333,8 +345,8 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                     <span className="muted small-note">mm</span>
                   </label>
                 )}
-                <button type="button" className="secondary" onClick={handleOpenVisualComparison} disabled={isLoadingVisual}>
-                  {visualOpen ? 'Reload visual comparison' : 'Open visual comparison'}
+                <button type="button" className="secondary" onClick={handleOpenVisualComparison} disabled={!canOpenVisualComparison}>
+                  {isLoadingVisual ? 'Building...' : visualOpen ? 'Update visual comparison' : 'Open visual comparison'}
                 </button>
                 <button
                   type="button"
@@ -350,7 +362,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} scale={measurementScale} />
             {visualOpen && (
               <p className="muted small-note">
-                The visual comparison updates when the selected tissue or sensitivity changes. Current tissue: {tissueLabel(selectedTissue)}. 3D comparison: {comparisonMethod === 'pve' ? 'tissue probability' : 'surface distance'}.
+                Change the sensitivity, tissue or comparison method, then use Update visual comparison to rebuild the 3D view. Current tissue: {tissueLabel(selectedTissue)}. 3D comparison: {comparisonMethod === 'pve' ? 'tissue probability' : 'surface distance'}.
               </p>
             )}
           </section>
@@ -366,7 +378,6 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                 loadingText="Building visual comparison..."
                 isLoading={isLoadingVisual}
                 error={visualError}
-                onReload={loadVisualComparison}
               />
             </Suspense>
           )}

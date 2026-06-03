@@ -219,9 +219,17 @@ button.secondary,
 
 .segmented-control button {
   flex: 1;
+  border: 1px solid #bfd0f7;
+  background: transparent;
+  color: #2454d6;
+}
+
+.segmented-control button:not(.active):hover {
+  background: #e6edff;
 }
 
 .segmented-control .active {
+  border-color: #2454d6;
   background: #2454d6;
   color: #ffffff;
 }

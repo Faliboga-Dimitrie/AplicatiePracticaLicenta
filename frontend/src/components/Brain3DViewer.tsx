@@ -27,6 +27,16 @@ const tissueTransformOptions: Array<{ value: ViewerTissue; label: string }> = [
   { value: 'csf', label: 'CSF' },
 ]
 
+const sideBySideOffsets: Record<ViewerTissue, number> = {
+  gm: -150,
+  wm: 0,
+  csf: 150,
+}
+
+function effectiveTissueOpacity(overlapping: boolean): number {
+  return overlapping ? 0.5 : 1
+}
+
 const defaultTissueControls: TissueControls = {
   gm: { visible: true, opacity: 0.58, color: '#f97316' },
   wm: { visible: true, opacity: 0.46, color: '#e2e8f0' },
@@ -47,12 +57,14 @@ function ModelLayer({
   transform,
   showMeshes,
   doubleSided,
+  overlapping,
 }: {
   item: BrainViewerItem
   controls: TissueControls
   transform: ViewerTransform
   showMeshes: boolean
   doubleSided: boolean
+  overlapping: boolean
 }) {
   const gltf = useGLTF(item.objectUrl)
   const control = controls[item.tissue]
@@ -75,7 +87,7 @@ function ModelLayer({
           return cloned
         }
 
-        const opacity = control.opacity
+        const opacity = effectiveTissueOpacity(overlapping)
 
         cloned.transparent = opacity < 1
         cloned.opacity = opacity
@@ -92,7 +104,7 @@ function ModelLayer({
       object.material = Array.isArray(sourceMaterial) ? clonedMaterials : clonedMaterials[0]
     })
     return clone
-  }, [control.color, control.opacity, doubleSided, gltf.scene, item.preserveMaterials])
+  }, [control.color, doubleSided, gltf.scene, item.preserveMaterials, overlapping])
 
   useEffect(() => {
     return () => {
@@ -112,7 +124,7 @@ function ModelLayer({
       visible={shouldShow}
       scale={transform.scale}
       rotation={[transform.rotateX, transform.rotateY, transform.rotateZ]}
-      position={[transform.translateX, transform.translateY, transform.translateZ]}
+      position={[transform.translateX + (overlapping ? 0 : sideBySideOffsets[item.tissue]), transform.translateY, transform.translateZ]}
     />
   )
 }
@@ -144,7 +156,7 @@ function AutoRotateGroup({
 }
 
 function MeasurementGrid() {
-  return <gridHelper args={[260, 26, '#1d4ed8', '#1f2937']} position={[0, 0, -70]} />
+  return <gridHelper args={[560, 56, '#1d4ed8', '#1f2937']} position={[0, 0, -70]} />
 }
 
 function SceneReadySignal({
@@ -180,6 +192,7 @@ function BrainGlbScene({
   autoRotate,
   resetSignal,
   backgroundColor,
+  overlapping,
   onSceneReady,
 }: {
   items: BrainViewerItem[]
@@ -190,10 +203,11 @@ function BrainGlbScene({
   autoRotate: boolean
   resetSignal: number
   backgroundColor: string
+  overlapping: boolean
   onSceneReady?: () => void
 }) {
   return (
-    <Canvas camera={{ position: [0, -260, 130], fov: 45 }} dpr={[1, 2]}>
+    <Canvas camera={{ position: [0, -380, 170], fov: 50 }} dpr={[1, 2]}>
       <color attach="background" args={[backgroundColor]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[80, -120, 160]} intensity={2.1} />
@@ -212,6 +226,7 @@ function BrainGlbScene({
                 transform={transforms[item.tissue]}
                 showMeshes={showMeshes}
                 doubleSided={doubleSided}
+                overlapping={overlapping}
               />
             ))}
           </AutoRotateGroup>
@@ -250,6 +265,7 @@ export function Brain3DViewer({
   const [transforms, setTransforms] = useState<TissueTransforms>(() => createDefaultTissueTransforms())
   const [activeTransformTissue, setActiveTransformTissue] = useState<ViewerTissue>('gm')
   const [backgroundColor, setBackgroundColor] = useState('#000000')
+  const [overlapping, setOverlapping] = useState(false)
   const [resetSignal, setResetSignal] = useState(0)
 
   function updateTissue(tissue: ViewerTissue, patch: Partial<TissueControls[ViewerTissue]>) {
@@ -311,6 +327,10 @@ export function Brain3DViewer({
             <input type="checkbox" checked={autoRotate} onChange={(event) => setAutoRotate(event.target.checked)} />
             Auto rotate
           </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={overlapping} onChange={(event) => setOverlapping(event.target.checked)} />
+            Overlapping
+          </label>
         </div>
 
         <div className="stack compact-stack">
@@ -324,6 +344,7 @@ export function Brain3DViewer({
         {showLayerControls && (
           <div className="stack compact-stack">
             <h3>Tissues</h3>
+            <p className="muted small-note">{overlapping ? 'Layers overlap at 50% opacity.' : 'Layers are placed side by side at 100% opacity.'}</p>
             {(['gm', 'wm', 'csf'] as ViewerTissue[]).map((tissue) => (
               <div className="tissue-control" key={tissue}>
                 <label className="checkbox-row">
@@ -341,17 +362,6 @@ export function Brain3DViewer({
                     type="color"
                     value={controls[tissue].color}
                     onChange={(event) => updateTissue(tissue, { color: event.target.value })}
-                  />
-                </label>
-                <label className="range-label">
-                  Opacity {Math.round(controls[tissue].opacity * 100)}%
-                  <input
-                    type="range"
-                    min="0.05"
-                    max="1"
-                    step="0.05"
-                    value={controls[tissue].opacity}
-                    onChange={(event) => updateTissue(tissue, { opacity: Number(event.target.value) })}
                   />
                 </label>
               </div>
@@ -394,6 +404,7 @@ export function Brain3DViewer({
               autoRotate={autoRotate}
               resetSignal={resetSignal}
               backgroundColor={backgroundColor}
+              overlapping={overlapping}
               onSceneReady={onSceneReady}
             />
           ) : (

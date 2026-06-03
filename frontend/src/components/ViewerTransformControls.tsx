@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 export type ViewerTransform = {
   scale: number
   rotateX: number

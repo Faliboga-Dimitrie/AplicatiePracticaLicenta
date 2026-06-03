@@ -6,26 +6,33 @@ import * as THREE from 'three'
 import { createDefaultViewerTransform, ViewerTransformControls } from './ViewerTransformControls'
 import type { ViewerTransform } from './ViewerTransformControls'
 
-type TransformTarget = 'both' | 'unchanged' | 'changed'
+type TransformTarget = 'unchanged' | 'changed'
 type LayerKind = 'unchanged' | 'changed'
 type ComparisonTransforms = Record<TransformTarget, ViewerTransform>
 
 const transformTargetOptions: Array<{ value: TransformTarget; label: string }> = [
-  { value: 'both', label: 'Both layers' },
   { value: 'unchanged', label: 'Unchanged layer' },
   { value: 'changed', label: 'Changed layer' },
 ]
 
+const sideBySideOffsets: Record<LayerKind, number> = {
+  unchanged: -110,
+  changed: 110,
+}
+
+function effectiveComparisonOpacity(overlapping: boolean): number {
+  return overlapping ? 0.5 : 1
+}
+
 function createDefaultComparisonTransforms(): ComparisonTransforms {
   return {
-    both: createDefaultViewerTransform(),
     unchanged: createDefaultViewerTransform(),
     changed: createDefaultViewerTransform(),
   }
 }
 
 function MeasurementGrid() {
-  return <gridHelper args={[260, 26, '#1d4ed8', '#1f2937']} position={[0, 0, -70]} />
+  return <gridHelper args={[520, 52, '#1d4ed8', '#1f2937']} position={[0, 0, -70]} />
 }
 
 function AutoRotateGroup({
@@ -107,22 +114,20 @@ function ComparisonScene({
   objectUrl,
   unchangedColor,
   changedColor,
-  unchangedOpacity,
-  changedOpacity,
   autoRotate,
   resetSignal,
   transforms,
   backgroundColor,
+  overlapping,
 }: {
   objectUrl: string
   unchangedColor: string
   changedColor: string
-  unchangedOpacity: number
-  changedOpacity: number
   autoRotate: boolean
   resetSignal: number
   transforms: ComparisonTransforms
   backgroundColor: string
+  overlapping: boolean
 }) {
   const gltf = useGLTF(objectUrl)
 
@@ -145,11 +150,12 @@ function ComparisonScene({
       }
     })
 
-    applyGroupStyle(unchanged, unchangedColor, unchangedOpacity)
-    applyGroupStyle(changed, changedColor, changedOpacity)
+    const opacity = effectiveComparisonOpacity(overlapping)
+    applyGroupStyle(unchanged, unchangedColor, opacity)
+    applyGroupStyle(changed, changedColor, opacity)
 
     return { unchangedGroup: unchanged, changedGroup: changed }
-  }, [changedColor, changedOpacity, gltf.scene, unchangedColor, unchangedOpacity])
+  }, [changedColor, gltf.scene, overlapping, unchangedColor])
 
   useEffect(() => {
     return () => {
@@ -158,12 +164,21 @@ function ComparisonScene({
     }
   }, [changedGroup, unchangedGroup])
 
-  const bothProps = transformProps(transforms.both)
   const unchangedProps = transformProps(transforms.unchanged)
   const changedProps = transformProps(transforms.changed)
+  const unchangedPosition = [
+    transforms.unchanged.translateX + (overlapping ? 0 : sideBySideOffsets.unchanged),
+    transforms.unchanged.translateY,
+    transforms.unchanged.translateZ,
+  ] as [number, number, number]
+  const changedPosition = [
+    transforms.changed.translateX + (overlapping ? 0 : sideBySideOffsets.changed),
+    transforms.changed.translateY,
+    transforms.changed.translateZ,
+  ] as [number, number, number]
 
   return (
-    <Canvas camera={{ position: [0, -260, 130], fov: 45 }} dpr={[1, 2]}>
+    <Canvas camera={{ position: [0, -360, 170], fov: 50 }} dpr={[1, 2]}>
       <color attach="background" args={[backgroundColor]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[80, -120, 160]} intensity={2.1} />
@@ -172,12 +187,10 @@ function ComparisonScene({
       <axesHelper args={[60]} />
       <Suspense fallback={null}>
         <Center>
-          <group {...bothProps}>
-            <AutoRotateGroup enabled={autoRotate} resetSignal={resetSignal}>
-              <primitive object={unchangedGroup} {...unchangedProps} />
-              <primitive object={changedGroup} {...changedProps} />
-            </AutoRotateGroup>
-          </group>
+          <AutoRotateGroup enabled={autoRotate} resetSignal={resetSignal}>
+            <primitive object={unchangedGroup} {...unchangedProps} position={unchangedPosition} />
+            <primitive object={changedGroup} {...changedProps} position={changedPosition} />
+          </AutoRotateGroup>
         </Center>
       </Suspense>
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
@@ -204,11 +217,10 @@ export function Comparison3DViewer({
 }) {
   const [unchangedColor, setUnchangedColor] = useState('#508cff')
   const [changedColor, setChangedColor] = useState('#ff2d2d')
-  const [unchangedOpacity, setUnchangedOpacity] = useState(0.28)
-  const [changedOpacity, setChangedOpacity] = useState(0.95)
   const [autoRotate, setAutoRotate] = useState(false)
+  const [overlapping, setOverlapping] = useState(false)
   const [transforms, setTransforms] = useState<ComparisonTransforms>(() => createDefaultComparisonTransforms())
-  const [activeTransformTarget, setActiveTransformTarget] = useState<TransformTarget>('both')
+  const [activeTransformTarget, setActiveTransformTarget] = useState<TransformTarget>('unchanged')
   const [backgroundColor, setBackgroundColor] = useState('#000000')
   const [resetSignal, setResetSignal] = useState(0)
 
@@ -237,16 +249,9 @@ export function Comparison3DViewer({
         )}
 
         <div className="stack compact-stack">
-          <label className="inline-field">
-            Unchanged opacity
-            <input type="range" min="0" max="1" step="0.05" value={unchangedOpacity} onChange={(event) => setUnchangedOpacity(Number(event.target.value))} />
-            <span className="muted small-note">{Math.round(unchangedOpacity * 100)}%</span>
-          </label>
-          <label className="inline-field">
-            Changed opacity
-            <input type="range" min="0" max="1" step="0.05" value={changedOpacity} onChange={(event) => setChangedOpacity(Number(event.target.value))} />
-            <span className="muted small-note">{Math.round(changedOpacity * 100)}%</span>
-          </label>
+          <p className="muted small-note">
+            {overlapping ? 'Changed and unchanged layers overlap at 50% opacity.' : 'Changed and unchanged layers are shown side by side at 100% opacity.'}
+          </p>
           <label className="inline-field">
             Unchanged color
             <input type="color" value={unchangedColor} onChange={(event) => setUnchangedColor(event.target.value)} />
@@ -262,6 +267,10 @@ export function Comparison3DViewer({
           <label className="checkbox-row inline-checkbox">
             <input type="checkbox" checked={autoRotate} onChange={(event) => setAutoRotate(event.target.checked)} />
             auto rotate
+          </label>
+          <label className="checkbox-row inline-checkbox">
+            <input type="checkbox" checked={overlapping} onChange={(event) => setOverlapping(event.target.checked)} />
+            Overlapping
           </label>
         </div>
 
@@ -285,12 +294,11 @@ export function Comparison3DViewer({
             objectUrl={objectUrl}
             unchangedColor={unchangedColor}
             changedColor={changedColor}
-            unchangedOpacity={unchangedOpacity}
-            changedOpacity={changedOpacity}
             autoRotate={autoRotate}
             resetSignal={resetSignal}
             transforms={transforms}
             backgroundColor={backgroundColor}
+            overlapping={overlapping}
           />
         )}
         {!isLoading && !error && !objectUrl && <div className="viewer-empty-state"><p className="muted">No comparison loaded yet.</p></div>}
