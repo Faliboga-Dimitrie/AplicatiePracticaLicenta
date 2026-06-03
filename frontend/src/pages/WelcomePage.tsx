@@ -1,11 +1,20 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
-import { extractViewerItemsFromPublicZip, processPublicMri } from '../api/publicApi'
-import { useAuth } from '../auth/useAuth'
+import {
+  downloadPublicProcessingResult,
+  extractViewerItemsFromPublicZip,
+  getPublicProcessingJob,
+  startPublicProcessingJob,
+} from '../api/publicApi'
 import type { BrainViewerItem } from '../components/brainViewerUtils'
+import type { PublicProcessingJob } from '../types/api'
 
 const Brain3DViewer = lazy(() => import('../components/Brain3DViewer').then((module) => ({ default: module.Brain3DViewer })))
+
+type WelcomePageProps = {
+  onOpenAuth: () => void
+}
 
 function downloadBlob(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob)
@@ -18,27 +27,30 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(objectUrl)
 }
 
-export function WelcomePage() {
-  const { login, register, authError, clearAuthError } = useAuth()
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false)
-  const [authLocalError, setAuthLocalError] = useState<string | null>(null)
+function getBaseName(fileName: string): string {
+  return fileName.replace(/\.nii(\.gz)?$/i, '') || 'brain_mri'
+}
 
+function getFriendlyPublicError(error: unknown): string {
+  const message = apiMessage(error)
+  if (/invalid|nii|upload|file/i.test(message)) {
+    return 'Please choose a valid .nii or .nii.gz MRI file and try again.'
+  }
+  return 'We could not process this MRI. Please check the file and try again.'
+}
+
+export function WelcomePage({ onOpenAuth }: WelcomePageProps) {
   const [publicFile, setPublicFile] = useState<File | null>(null)
   const [isPublicProcessing, setIsPublicProcessing] = useState(false)
+  const [publicProgress, setPublicProgress] = useState(0)
   const [publicError, setPublicError] = useState<string | null>(null)
   const [publicStatus, setPublicStatus] = useState<string | null>(null)
+  const [publicJob, setPublicJob] = useState<PublicProcessingJob | null>(null)
   const [publicViewerItems, setPublicViewerItems] = useState<BrainViewerItem[]>([])
-  const [publicViewerTitle, setPublicViewerTitle] = useState<string>('3D preview')
+  const [publicViewerTitle, setPublicViewerTitle] = useState('3D preview')
+  const [isPublicViewerReady, setIsPublicViewerReady] = useState(false)
+  const [publicViewerVersion, setPublicViewerVersion] = useState(0)
   const publicObjectUrlsRef = useRef<string[]>([])
-
-  function clearPublicViewerItems() {
-    publicObjectUrlsRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
-    publicObjectUrlsRef.current = []
-    setPublicViewerItems([])
-  }
 
   useEffect(() => {
     return () => {
@@ -46,22 +58,29 @@ export function WelcomePage() {
     }
   }, [])
 
-  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsSubmittingAuth(true)
-    setAuthLocalError(null)
-    clearAuthError()
+  function replacePublicViewerItems(viewerItems: BrainViewerItem[]) {
+    publicObjectUrlsRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+    publicObjectUrlsRef.current = viewerItems.map((item) => item.objectUrl)
+    setPublicViewerItems(viewerItems)
+    setPublicViewerVersion((current) => current + 1)
+    setIsPublicViewerReady(viewerItems.length === 0)
+  }
 
-    try {
-      if (authMode === 'signup') {
-        await register(email, password)
-      } else {
-        await login(email, password)
+  async function waitForPublicJob(jobId: string): Promise<PublicProcessingJob> {
+    for (;;) {
+      const job = await getPublicProcessingJob(jobId)
+      setPublicJob(job)
+      setPublicProgress(Math.round(job.progress ?? 0))
+      setPublicStatus(job.status === 'completed' ? 'Processing complete. Preparing the result files.' : 'Processing your MRI. Keep this page open until the result is ready.')
+
+      if (job.status === 'completed') {
+        return job
       }
-    } catch (error) {
-      setAuthLocalError(apiMessage(error))
-    } finally {
-      setIsSubmittingAuth(false)
+      if (job.status === 'failed') {
+        throw new Error(job.error || 'The MRI could not be processed.')
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 1000))
     }
   }
 
@@ -73,64 +92,67 @@ export function WelcomePage() {
     }
 
     setIsPublicProcessing(true)
+    setPublicProgress(1)
     setPublicError(null)
-    setPublicStatus('Preparing your MRI scan. This may take a while for larger files.')
-    clearPublicViewerItems()
+    setPublicStatus('Uploading your MRI. Processing will start automatically.')
 
     try {
-      const blob = await processPublicMri(publicFile)
-      const base = publicFile.name.replace(/\.nii(\.gz)?$/i, '') || 'brain_mri'
-      downloadBlob(blob, `${base}_brain_mri_results.zip`)
+      const startedJob = await startPublicProcessingJob(publicFile)
+      setPublicJob(startedJob)
+      setPublicProgress(Math.round(startedJob.progress ?? 2))
+      setPublicStatus('Processing your MRI. Keep this page open until the result is ready.')
 
+      const completedJob = await waitForPublicJob(startedJob.id)
+      const blob = await downloadPublicProcessingResult(completedJob.id)
+      const base = getBaseName(publicFile.name)
       const viewerItems = await extractViewerItemsFromPublicZip(blob)
-      publicObjectUrlsRef.current = viewerItems.map((item) => item.objectUrl)
-      setPublicViewerItems(viewerItems)
+
+      setPublicProgress(100)
       setPublicViewerTitle(`${base} preview`)
-      setPublicStatus('Done. The result download has started and the 3D preview is ready below.')
+      replacePublicViewerItems(viewerItems)
+      setPublicStatus('Processing complete. Your result download has started.')
+      downloadBlob(blob, completedJob.download_filename || `${base}_brain_mri_results.zip`)
     } catch (error) {
-      setPublicError(apiMessage(error))
+      setPublicError(getFriendlyPublicError(error))
       setPublicStatus(null)
     } finally {
       setIsPublicProcessing(false)
     }
   }
 
-  return (
-    <main className="welcome-page">
-      <section className="hero-section">
-        <div className="hero-copy">
-          <p className="eyebrow">Brain MRI Processing</p>
-          <h1>Turn MRI scans into clear 3D brain tissue results.</h1>
-          <p className="hero-text">
-            Upload a NIfTI MRI scan, generate tissue models, and review measurements in a visual workspace designed
-            for users rather than developers.
-          </p>
-          <div className="hero-actions">
-            <a href="#public-upload" className="button-link">Try without an account</a>
-            <a href="#account" className="button-link secondary-link">Sign in</a>
-          </div>
-        </div>
+  const showProgress = isPublicProcessing || publicProgress > 0
+  const showViewerLoader = publicViewerItems.length > 0 && !isPublicViewerReady
 
-        <div className="hero-card result-card">
-          <span className="badge">What you get</span>
-          <ul className="feature-list clean-feature-list">
-            <li>Prepared brain scan</li>
-            <li>3D grey matter, white matter and CSF models</li>
-            <li>Volume and surface measurements</li>
-            <li>Downloadable result files</li>
-            <li>Saved subjects and time comparison after sign-in</li>
-          </ul>
+  return (
+    <main className="welcome-page clean-welcome-page public-home-page">
+      <button type="button" className="top-auth-button" onClick={onOpenAuth}>
+        Login / Sign up
+      </button>
+
+      <section className="welcome-landing-card public-hero-card">
+        <p className="eyebrow">Brain MRI Processing</p>
+        <h1>Turn MRI scans into 3D brain tissue results.</h1>
+        <p className="hero-text">
+          Upload a NIfTI MRI scan and receive a compact result package with 3D GLB models and a JSON measurements file.
+          The public mode is designed for a quick one-time preview: no account is required, and the generated result is downloaded
+          when processing is complete.
+        </p>
+        <div className="public-feature-strip" aria-label="Application capabilities">
+          <span>3D tissue preview</span>
+          <span>Volume and surface measurements</span>
+          <span>Downloadable GLB and JSON results</span>
         </div>
       </section>
 
-      <section className="welcome-grid page">
-        <article className="card public-upload-card" id="public-upload">
-          <p className="eyebrow">Quick processing</p>
-          <h2>Process one MRI scan</h2>
-          <p className="muted">
-            Use this for a one-time result download. Create an account when you want to keep subjects, cases,
-            dates and comparisons organized.
-          </p>
+      <section className="page public-flow-section public-upload-section">
+        <article className="card public-upload-card public-flow-card">
+          <div>
+            <p className="eyebrow">Process an MRI</p>
+            <h2>Choose a scan file</h2>
+            <p className="muted">
+              Use a .nii or .nii.gz file. Keep this page open while the progress bar updates from the processing server.
+            </p>
+          </div>
 
           <form className="form-grid" onSubmit={handlePublicSubmit}>
             <label>
@@ -138,79 +160,69 @@ export function WelcomePage() {
               <input
                 type="file"
                 accept=".nii,.gz,.nii.gz"
-                onChange={(event) => setPublicFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  setPublicFile(event.target.files?.[0] ?? null)
+                  setPublicError(null)
+                  if (!isPublicProcessing) {
+                    setPublicStatus(null)
+                    setPublicProgress(0)
+                    setPublicJob(null)
+                  }
+                }}
+                disabled={isPublicProcessing}
                 required
               />
             </label>
-            {publicStatus && <p className="info-text">{publicStatus}</p>}
+
+            {showProgress && (
+              <div className="public-progress-card" role="status" aria-live="polite">
+                <div className="row-between">
+                  <strong>{publicJob?.status === 'completed' ? 'Processing complete' : 'Processing MRI'}</strong>
+                  <span>{Math.round(publicProgress)}%</span>
+                </div>
+                <div className="progress-wrap" aria-hidden="true">
+                  <div className="progress-bar" style={{ width: `${publicProgress}%` }} />
+                </div>
+                {publicStatus && <p className="muted small-note">{publicStatus}</p>}
+              </div>
+            )}
+
             {publicError && <p className="error-text">{publicError}</p>}
             <button type="submit" disabled={isPublicProcessing}>
-              {isPublicProcessing ? 'Processing scan...' : 'Process scan and download results'}
-            </button>
-          </form>
-        </article>
-
-        <article className="card" id="account">
-          <p className="eyebrow">Saved workspace</p>
-          <h2>{authMode === 'login' ? 'Sign in' : 'Create account'}</h2>
-          <p className="muted">
-            Sign in to save subjects, keep acquisition dates together, and return to results later.
-          </p>
-
-          <div className="segmented-control" role="tablist" aria-label="Authentication mode">
-            <button
-              type="button"
-              className={authMode === 'login' ? 'active' : ''}
-              onClick={() => setAuthMode('login')}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              className={authMode === 'signup' ? 'active' : ''}
-              onClick={() => setAuthMode('signup')}
-            >
-              New account
-            </button>
-          </div>
-
-          <form className="form-grid" onSubmit={handleAuthSubmit}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                required
-              />
-            </label>
-            {(authLocalError || authError) && <p className="error-text">{authLocalError || authError}</p>}
-            <button type="submit" disabled={isSubmittingAuth}>
-              {isSubmittingAuth ? 'Please wait...' : authMode === 'login' ? 'Sign in' : 'Create account'}
+              {isPublicProcessing ? 'Processing...' : publicViewerItems.length > 0 ? 'Process another MRI' : 'Process MRI'}
             </button>
           </form>
         </article>
       </section>
 
+      {showViewerLoader && (
+        <section className="page public-flow-section public-viewer-spacer">
+          <article className="card public-viewer-loading-card">
+            <p className="eyebrow">3D preview</p>
+            <h2>The 3D component is loading</h2>
+            <p className="muted">The preview will appear as soon as the model is fully ready.</p>
+          </article>
+        </section>
+      )}
+
       {publicViewerItems.length > 0 && (
-        <section className="page public-viewer-section">
-          <Suspense fallback={<section className="card"><p className="muted">Loading 3D preview...</p></section>}>
+        <section className={`page public-viewer-section public-viewer-spacer ${isPublicViewerReady ? '' : 'viewer-preload-hidden'}`}>
+          <Suspense
+            fallback={
+              <section className="card public-viewer-loading-card">
+                <p className="eyebrow">3D preview</p>
+                <h2>The 3D component is loading</h2>
+                <p className="muted">The preview will appear as soon as the model is fully ready.</p>
+              </section>
+            }
+          >
             <Brain3DViewer
+              key={publicViewerVersion}
               items={publicViewerItems}
               title={publicViewerTitle}
-              subtitle="Preview the generated tissue models before saving the downloaded result files."
-              loadingText="Loading preview..."
+              subtitle="Preview the generated tissue models before opening the downloaded result files."
+              loadingText="The 3D component is loading..."
+              onSceneReady={() => setIsPublicViewerReady(true)}
             />
           </Suspense>
         </section>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AuthProvider } from './auth/AuthProvider'
 import { useAuth } from './auth/useAuth'
 import { WelcomePage } from './pages/WelcomePage'
+import { LoginPage } from './pages/LoginPage'
 import { HomePage } from './pages/HomePage'
 import { SubjectsPage } from './pages/SubjectsPage'
 import { SubjectCasesPage } from './pages/SubjectCasesPage'
@@ -36,6 +37,7 @@ function AppContent() {
   const [recentCase, setRecentCase] = useState<RecentCase | null>(null)
   const [recentSubjectId, setRecentSubjectId] = useState<string | null>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [guestView, setGuestView] = useState<'welcome' | 'auth'>('welcome')
 
   if (isCheckingSession) {
     return (
@@ -49,7 +51,11 @@ function AppContent() {
   }
 
   if (!isAuthenticated || !user) {
-    return <WelcomePage />
+    return guestView === 'auth' ? (
+      <LoginPage onBackHome={() => setGuestView('welcome')} />
+    ) : (
+      <WelcomePage onOpenAuth={() => setGuestView('auth')} />
+    )
   }
 
   function openCaseDetail(subjectId: string, caseId: number) {
@@ -80,18 +86,21 @@ function AppContent() {
     await logout()
     clearAllTrackedJobs()
     setView({ name: 'home' })
+    setGuestView('welcome')
   }
 
   async function handleLogoutAll() {
     await logoutAll()
     clearAllTrackedJobs()
     setView({ name: 'home' })
+    setGuestView('welcome')
   }
 
   async function handleDeleteAccount() {
     await deleteAccount()
     clearAllTrackedJobs()
     setView({ name: 'home' })
+    setGuestView('welcome')
   }
 
   const currentSection = view.name === 'subjects' || view.name === 'subjectCases' || view.name === 'caseDetail' || view.name === 'caseViewer' || view.name === 'statistics' || view.name === 'timeComparison'

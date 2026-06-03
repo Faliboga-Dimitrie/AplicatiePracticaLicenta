@@ -1,11 +1,32 @@
 import JSZip from 'jszip'
-import { apiPublicDownload } from './client'
+import { apiPublicDownload, apiRequest } from './client'
 import {
   inferViewerModeFromName,
   inferViewerTissueFromName,
   isGlbName,
 } from '../components/brainViewerUtils'
 import type { BrainViewerItem } from '../components/brainViewerUtils'
+import type { PublicProcessingJob } from '../types/api'
+
+export function startPublicProcessingJob(file: File): Promise<PublicProcessingJob> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return apiRequest<PublicProcessingJob>('/public/process-jobs', {
+    method: 'POST',
+    formData,
+    auth: false,
+  })
+}
+
+export function getPublicProcessingJob(jobId: string): Promise<PublicProcessingJob> {
+  return apiRequest<PublicProcessingJob>(`/public/process-jobs/${encodeURIComponent(jobId)}`, {
+    auth: false,
+  })
+}
+
+export function downloadPublicProcessingResult(jobId: string): Promise<Blob> {
+  return apiPublicDownload(`/public/process-jobs/${encodeURIComponent(jobId)}/download`)
+}
 
 export function processPublicMri(file: File): Promise<Blob> {
   const formData = new FormData()

@@ -137,6 +137,24 @@ class JobResponse(BaseModel):
     cancel_requested: bool = False
 
 
+
+
+# -----------------------------------------------------------------------------
+# public processing
+# -----------------------------------------------------------------------------
+
+class PublicProcessingJobResponse(BaseModel):
+    id: str
+    status: str
+    message: str
+    progress: float
+    created_at: datetime
+    finished_at: datetime | None = None
+    filename: str
+    download_filename: str | None = None
+    error: str | None = None
+
+
 # -----------------------------------------------------------------------------
 # artifacts
 # -----------------------------------------------------------------------------

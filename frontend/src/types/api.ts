@@ -126,6 +126,19 @@ export type Artifact = {
   metadata: Record<string, unknown>
 }
 
+
+export type PublicProcessingJob = {
+  id: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | string
+  message: string
+  progress: number
+  created_at: string
+  finished_at: string | null
+  filename: string
+  download_filename: string | null
+  error: string | null
+}
+
 export type CaseArtifacts = {
   case_id: number
   case_key: string

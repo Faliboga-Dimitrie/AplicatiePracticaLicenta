@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Center, Html, OrbitControls, useGLTF } from '@react-three/drei'
+import { Center, Html, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
 import * as THREE from 'three'
 import type { BrainViewerItem, ViewerTissue } from './brainViewerUtils'
 
@@ -179,6 +179,31 @@ function MeasurementGrid({ unit }: { unit: GridUnit }) {
   )
 }
 
+
+function SceneReadySignal({
+  itemCount,
+  onSceneReady,
+}: {
+  itemCount: number
+  onSceneReady?: () => void
+}) {
+  const { active, progress } = useProgress()
+  const hasNotifiedRef = useRef(false)
+
+  useEffect(() => {
+    if (itemCount <= 0 || !onSceneReady || hasNotifiedRef.current) {
+      return
+    }
+
+    if (!active && progress >= 100) {
+      hasNotifiedRef.current = true
+      onSceneReady()
+    }
+  }, [active, itemCount, onSceneReady, progress])
+
+  return null
+}
+
 function BrainGlbScene({
   items,
   controls,
@@ -188,6 +213,7 @@ function BrainGlbScene({
   autoRotate,
   resetSignal,
   gridUnit,
+  onSceneReady,
 }: {
   items: BrainViewerItem[]
   controls: TissueControls
@@ -197,6 +223,7 @@ function BrainGlbScene({
   autoRotate: boolean
   resetSignal: number
   gridUnit: GridUnit
+  onSceneReady?: () => void
 }) {
   return (
     <Canvas camera={{ position: [0, -260, 130], fov: 45 }} dpr={[1, 2]}>
@@ -206,6 +233,7 @@ function BrainGlbScene({
       <directionalLight position={[-120, 80, -80]} intensity={0.9} />
       <MeasurementGrid unit={gridUnit} />
       <axesHelper args={[60]} />
+      <SceneReadySignal itemCount={items.length} onSceneReady={onSceneReady} />
       <Suspense fallback={null}>
         <Center>
           <AutoRotateGroup enabled={autoRotate} resetSignal={resetSignal}>
@@ -240,6 +268,7 @@ export function Brain3DViewer({
   error = null,
   onReload,
   controlMode = 'full',
+  onSceneReady,
 }: {
   items: BrainViewerItem[]
   title: string
@@ -249,6 +278,7 @@ export function Brain3DViewer({
   error?: string | null
   onReload?: () => void
   controlMode?: 'full' | 'comparison'
+  onSceneReady?: () => void
 }) {
   const [controls, setControls] = useState<TissueControls>(defaultTissueControls)
   const [showMeshes, setShowMeshes] = useState(true)
@@ -442,6 +472,7 @@ export function Brain3DViewer({
               autoRotate={autoRotate}
               resetSignal={resetSignal}
               gridUnit={gridUnit}
+              onSceneReady={onSceneReady}
             />
           ) : (
             <div className="viewer-empty-state">
