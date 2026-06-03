@@ -1,7 +1,7 @@
 import type { MriCase } from '../types/api'
 import { getCaseCompletion, getCaseSteps } from '../utils/userFacing'
 
-export function CaseProgress({ mriCase, compact = false }: { mriCase: MriCase; compact?: boolean }) {
+export function CaseProgress({ mriCase, compact = false, showSteps = !compact }: { mriCase: MriCase; compact?: boolean; showSteps?: boolean }) {
   const steps = getCaseSteps(mriCase)
   const completion = getCaseCompletion(mriCase)
 
@@ -14,17 +14,19 @@ export function CaseProgress({ mriCase, compact = false }: { mriCase: MriCase; c
       <div className="progress-wrap" aria-label={`${completion}% complete`}>
         <div className="progress-bar" style={{ width: `${completion}%` }} />
       </div>
-      <ol className="processing-steps">
-        {steps.map((step) => (
-          <li className={step.complete ? 'complete' : ''} key={step.key}>
-            <span aria-hidden="true">{step.complete ? '✓' : '•'}</span>
-            <div>
-              <strong>{step.title}</strong>
-              {!compact && <p>{step.description}</p>}
-            </div>
-          </li>
-        ))}
-      </ol>
+      {showSteps && (
+        <ol className="processing-steps">
+          {steps.map((step) => (
+            <li className={step.complete ? 'complete' : ''} key={step.key}>
+              <span aria-hidden="true">{step.complete ? '✓' : '•'}</span>
+              <div>
+                <strong>{step.title}</strong>
+                {!compact && <p>{step.description}</p>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   )
 }

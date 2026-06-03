@@ -1,9 +1,11 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Center, Html, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
+import { Center, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
 import * as THREE from 'three'
 import type { BrainViewerItem, ViewerTissue } from './brainViewerUtils'
+import { createDefaultViewerTransform, ViewerTransformControls } from './ViewerTransformControls'
+import type { ViewerTransform } from './ViewerTransformControls'
 
 type TissueControls = Record<ViewerTissue, {
   visible: boolean
@@ -11,14 +13,7 @@ type TissueControls = Record<ViewerTissue, {
   color: string
 }>
 
-type ViewerTransform = {
-  scale: number
-  rotateX: number
-  rotateY: number
-  rotateZ: number
-}
-
-type GridUnit = 'mm' | 'cm'
+type TissueTransforms = Record<ViewerTissue, ViewerTransform>
 
 const tissueLabels: Record<ViewerTissue, string> = {
   gm: 'Gray matter',
@@ -26,17 +21,24 @@ const tissueLabels: Record<ViewerTissue, string> = {
   csf: 'CSF',
 }
 
+const tissueTransformOptions: Array<{ value: ViewerTissue; label: string }> = [
+  { value: 'gm', label: 'Gray matter' },
+  { value: 'wm', label: 'White matter' },
+  { value: 'csf', label: 'CSF' },
+]
+
 const defaultTissueControls: TissueControls = {
   gm: { visible: true, opacity: 0.58, color: '#f97316' },
   wm: { visible: true, opacity: 0.46, color: '#e2e8f0' },
   csf: { visible: true, opacity: 0.36, color: '#38bdf8' },
 }
 
-const defaultTransform: ViewerTransform = {
-  scale: 1,
-  rotateX: 0,
-  rotateY: 0,
-  rotateZ: 0,
+function createDefaultTissueTransforms(): TissueTransforms {
+  return {
+    gm: createDefaultViewerTransform(),
+    wm: createDefaultViewerTransform(),
+    csf: createDefaultViewerTransform(),
+  }
 }
 
 function ModelLayer({
@@ -84,7 +86,6 @@ function ModelLayer({
           materialWithColor.color.set(control.color)
         }
 
-
         return cloned
       })
 
@@ -111,6 +112,7 @@ function ModelLayer({
       visible={shouldShow}
       scale={transform.scale}
       rotation={[transform.rotateX, transform.rotateY, transform.rotateZ]}
+      position={[transform.translateX, transform.translateY, transform.translateZ]}
     />
   )
 }
@@ -141,44 +143,9 @@ function AutoRotateGroup({
   return <group ref={groupRef}>{children}</group>
 }
 
-function formatGridLabel(valueMm: number, unit: GridUnit): string {
-  if (unit === 'cm') {
-    return `${Number((valueMm / 10).toFixed(1))} cm`
-  }
-  return `${Math.round(valueMm)} mm`
+function MeasurementGrid() {
+  return <gridHelper args={[260, 26, '#1d4ed8', '#1f2937']} position={[0, 0, -70]} />
 }
-
-function MeasurementGrid({ unit }: { unit: GridUnit }) {
-  const sizeMm = 260
-  const stepMm = unit === 'cm' ? 10 : 20
-  const divisions = sizeMm / stepMm
-  const half = sizeMm / 2
-  const z = -70
-  const values: number[] = []
-
-  for (let value = -half; value <= half + 0.1; value += stepMm) {
-    if (Math.abs(value) > 0.1 && Math.abs(value) % (unit === 'cm' ? 50 : 40) < 0.1) {
-      values.push(value)
-    }
-  }
-
-  return (
-    <group>
-      <gridHelper args={[sizeMm, divisions, '#1d4ed8', '#1f2937']} position={[0, 0, z]} />
-      {values.map((value) => (
-        <group key={value}>
-          <Html position={[value, -half - 10, z]} center wrapperClass="grid-label-wrap">
-            <span className="grid-label">{formatGridLabel(value, unit)}</span>
-          </Html>
-          <Html position={[-half - 16, value, z]} center wrapperClass="grid-label-wrap">
-            <span className="grid-label">{formatGridLabel(value, unit)}</span>
-          </Html>
-        </group>
-      ))}
-    </group>
-  )
-}
-
 
 function SceneReadySignal({
   itemCount,
@@ -207,31 +174,31 @@ function SceneReadySignal({
 function BrainGlbScene({
   items,
   controls,
-  transform,
+  transforms,
   showMeshes,
   doubleSided,
   autoRotate,
   resetSignal,
-  gridUnit,
+  backgroundColor,
   onSceneReady,
 }: {
   items: BrainViewerItem[]
   controls: TissueControls
-  transform: ViewerTransform
+  transforms: TissueTransforms
   showMeshes: boolean
   doubleSided: boolean
   autoRotate: boolean
   resetSignal: number
-  gridUnit: GridUnit
+  backgroundColor: string
   onSceneReady?: () => void
 }) {
   return (
     <Canvas camera={{ position: [0, -260, 130], fov: 45 }} dpr={[1, 2]}>
-      <color attach="background" args={['#08111f']} />
+      <color attach="background" args={[backgroundColor]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[80, -120, 160]} intensity={2.1} />
       <directionalLight position={[-120, 80, -80]} intensity={0.9} />
-      <MeasurementGrid unit={gridUnit} />
+      <MeasurementGrid />
       <axesHelper args={[60]} />
       <SceneReadySignal itemCount={items.length} onSceneReady={onSceneReady} />
       <Suspense fallback={null}>
@@ -242,7 +209,7 @@ function BrainGlbScene({
                 key={item.id}
                 item={item}
                 controls={controls}
-                transform={transform}
+                transform={transforms[item.tissue]}
                 showMeshes={showMeshes}
                 doubleSided={doubleSided}
               />
@@ -253,10 +220,6 @@ function BrainGlbScene({
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
     </Canvas>
   )
-}
-
-function formatRadians(value: number): string {
-  return `${Math.round((value * 180) / Math.PI)}°`
 }
 
 export function Brain3DViewer({
@@ -284,8 +247,9 @@ export function Brain3DViewer({
   const [showMeshes, setShowMeshes] = useState(true)
   const [doubleSided, setDoubleSided] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
-  const [transform, setTransform] = useState<ViewerTransform>(defaultTransform)
-  const [gridUnit, setGridUnit] = useState<GridUnit>('mm')
+  const [transforms, setTransforms] = useState<TissueTransforms>(() => createDefaultTissueTransforms())
+  const [activeTransformTissue, setActiveTransformTissue] = useState<ViewerTissue>('gm')
+  const [backgroundColor, setBackgroundColor] = useState('#000000')
   const [resetSignal, setResetSignal] = useState(0)
 
   function updateTissue(tissue: ViewerTissue, patch: Partial<TissueControls[ViewerTissue]>) {
@@ -298,8 +262,12 @@ export function Brain3DViewer({
     }))
   }
 
-  function resetTransform() {
-    setTransform(defaultTransform)
+  function updateTransform(tissue: ViewerTissue, transform: ViewerTransform) {
+    setTransforms((current) => ({ ...current, [tissue]: transform }))
+  }
+
+  function resetActiveTransform() {
+    setTransforms((current) => ({ ...current, [activeTransformTissue]: createDefaultViewerTransform() }))
     setResetSignal((current) => current + 1)
   }
 
@@ -345,6 +313,14 @@ export function Brain3DViewer({
           </label>
         </div>
 
+        <div className="stack compact-stack">
+          <h3>Scene background</h3>
+          <label className="inline-field color-inline-field">
+            Background
+            <input type="color" value={backgroundColor} onChange={(event) => setBackgroundColor(event.target.value)} />
+          </label>
+        </div>
+
         {showLayerControls && (
           <div className="stack compact-stack">
             <h3>Tissues</h3>
@@ -383,74 +359,20 @@ export function Brain3DViewer({
           </div>
         )}
 
-        <div className="stack compact-stack">
-          <h3>Grid scale</h3>
-          <label>
-            Unit
-            <select value={gridUnit} onChange={(event) => setGridUnit(event.target.value as GridUnit)}>
-              <option value="mm">millimetres</option>
-              <option value="cm">centimetres</option>
-            </select>
-          </label>
-          <p className="muted small-note">
-            Use the grid as an approximate measurement reference for the model.
-          </p>
-        </div>
-
-        <div className="stack compact-stack">
-          <div className="row-between">
-            <h3>Model position</h3>
-            <button type="button" className="secondary mini-button" onClick={resetTransform}>Reset</button>
-          </div>
-          <label className="range-label">
-            Scale {transform.scale.toFixed(2)}×
-            <input
-              type="range"
-              min="0.1"
-              max="3"
-              step="0.05"
-              value={transform.scale}
-              onChange={(event) => setTransform({ ...transform, scale: Number(event.target.value) })}
-            />
-          </label>
-          <label className="range-label">
-            Rotate X {formatRadians(transform.rotateX)}
-            <input
-              type="range"
-              min={-Math.PI}
-              max={Math.PI}
-              step="0.05"
-              value={transform.rotateX}
-              onChange={(event) => setTransform({ ...transform, rotateX: Number(event.target.value) })}
-            />
-          </label>
-          <label className="range-label">
-            Rotate Y {formatRadians(transform.rotateY)}
-            <input
-              type="range"
-              min={-Math.PI}
-              max={Math.PI}
-              step="0.05"
-              value={transform.rotateY}
-              onChange={(event) => setTransform({ ...transform, rotateY: Number(event.target.value) })}
-            />
-          </label>
-          <label className="range-label">
-            Rotate Z {formatRadians(transform.rotateZ)}
-            <input
-              type="range"
-              min={-Math.PI}
-              max={Math.PI}
-              step="0.05"
-              value={transform.rotateZ}
-              onChange={(event) => setTransform({ ...transform, rotateZ: Number(event.target.value) })}
-            />
-          </label>
-        </div>
+        <ViewerTransformControls
+          title="Model position"
+          targetLabel="Move tissue"
+          activeTarget={activeTransformTissue}
+          targetOptions={tissueTransformOptions}
+          transform={transforms[activeTransformTissue]}
+          onActiveTargetChange={(target) => setActiveTransformTissue(target as ViewerTissue)}
+          onTransformChange={(transform) => updateTransform(activeTransformTissue, transform)}
+          onReset={resetActiveTransform}
+        />
 
         <div className="viewer-help-card">
           <strong>Orbit controls</strong>
-          <p>Drag to rotate, scroll to zoom, right-drag to pan. Use the controls to inspect the model from any direction.</p>
+          <p>Drag to rotate, scroll to zoom, right-drag to pan. Use model position to align each tissue layer independently.</p>
         </div>
       </aside>
 
@@ -459,19 +381,19 @@ export function Brain3DViewer({
           <span className="badge">{visibleCount}/{items.length} layers visible</span>
           <span className="muted small-note">Display changes affect only this preview.</span>
         </div>
-        {error && <p className="error-text">{error}</p>}
-        {isLoading && <p className="muted">{loadingText}</p>}
-        <div className="viewer-canvas-wrap">
+        {error && <p className="error-text viewer-message-pad">{error}</p>}
+        {isLoading && <p className="muted viewer-message-pad">{loadingText}</p>}
+        <div className="viewer-canvas-wrap" style={{ backgroundColor }}>
           {items.length > 0 ? (
             <BrainGlbScene
               items={items}
               controls={controls}
-              transform={transform}
+              transforms={transforms}
               showMeshes={showMeshes}
               doubleSided={doubleSided}
               autoRotate={autoRotate}
               resetSignal={resetSignal}
-              gridUnit={gridUnit}
+              backgroundColor={backgroundColor}
               onSceneReady={onSceneReady}
             />
           ) : (

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { createEvolutionVisualComparisonObjectUrl, getEvolutionReport, listEvolutionDates } from '../api/metricsApi'
+import { Modal } from '../components/Modal'
 import type { EvolutionComparisonMethod } from '../api/metricsApi'
 import { listSubjects } from '../api/subjectsApi'
 import type { AuthorizedSubject, EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
@@ -99,6 +100,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const [visualObjectUrl, setVisualObjectUrl] = useState<string | null>(null)
   const [isLoadingVisual, setIsLoadingVisual] = useState(false)
   const [visualError, setVisualError] = useState<string | null>(null)
+  const [comparisonHelpOpen, setComparisonHelpOpen] = useState(false)
   const visualObjectUrlRef = useRef<string | null>(null)
 
   const clearVisualObjectUrl = useCallback(() => {
@@ -241,6 +243,8 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
         <h2>Choose subject</h2>
         <label>
           Subject
+          {isLoadingSubjects && <span className="muted small-note">Loading subjects...</span>}
+          {!isLoadingSubjects && subjects.length > 0 && <span className="muted small-note">Subjects loaded. Choose one to continue.</span>}
           <select value={selectedSubjectId} disabled={isLoadingSubjects} onChange={(event) => handleSubjectChange(event.target.value)}>
             <option value="">Choose subject</option>
             {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.id} · {subject.case_count} cases</option>)}
@@ -332,6 +336,15 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                 <button type="button" className="secondary" onClick={handleOpenVisualComparison} disabled={isLoadingVisual}>
                   {visualOpen ? 'Reload visual comparison' : 'Open visual comparison'}
                 </button>
+                <button
+                  type="button"
+                  className="help-icon-button"
+                  onClick={() => setComparisonHelpOpen(true)}
+                  aria-label="Explain visual comparison methods"
+                  title="Explain visual comparison methods"
+                >
+                  ?
+                </button>
               </div>
             </div>
             <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} scale={measurementScale} />
@@ -387,6 +400,32 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             </div>
           </section>
         </>
+      )}
+
+      {comparisonHelpOpen && (
+        <Modal title="How visual comparison works" eyebrow="Comparison help" onClose={() => setComparisonHelpOpen(false)}>
+          <div className="stack comparison-help-content">
+            <p>
+              Visual comparison highlights the selected tissue between the baseline scan and the target scan.
+              Unchanged areas use the baseline color, while detected changes use the change color.
+            </p>
+            <article>
+              <h3>Tissue probability</h3>
+              <p className="muted">
+                This method compares the FAST tissue-probability maps after they are aligned to the same template space.
+                Sensitivity is the minimum probability difference needed for a point to be marked as changed.
+                Lower values show subtler changes; higher values keep only stronger changes.
+              </p>
+            </article>
+            <article>
+              <h3>Surface distance</h3>
+              <p className="muted">
+                This method compares the distance between the generated tissue surfaces. Sensitivity is measured in millimetres.
+                A lower distance marks smaller shape differences as changed; a higher distance shows only larger surface shifts.
+              </p>
+            </article>
+          </div>
+        </Modal>
       )}
     </main>
   )

@@ -15,6 +15,11 @@ CASE_BUSY_STATUSES = {
 }
 
 
+def _is_future_date(value: str | date) -> bool:
+    normalized = value if isinstance(value, date) else date.fromisoformat(str(value))
+    return normalized > date.today()
+
+
 class CaseService:
     """
     Web-facing MRI case service.
@@ -92,6 +97,9 @@ class CaseService:
         status: str | None = "registered",
         source_raw_path: Path | None = None,
     ) -> DbResult[MriCaseRecord]:
+        if _is_future_date(acquisition_date):
+            return DbResult.fail("The acquisition date cannot be in the future.")
+
         if source_raw_path is None:
             return DbResult.fail("source_raw_path is required for this server-side create flow. Use POST /cases/upload for browser uploads.")
 
@@ -129,6 +137,9 @@ class CaseService:
             return DbResult.fail(current.error or "Could not load MRI case before update.")
         if current.data is None:
             return DbResult.ok(None)
+
+        if new_acquisition_date is not UNSET and _is_future_date(new_acquisition_date):
+            return DbResult.fail("The acquisition date cannot be in the future.")
 
         result = self.access.update_mri_case_by_subject_date(
             current.data.subject_id,

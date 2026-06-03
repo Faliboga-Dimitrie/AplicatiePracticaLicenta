@@ -4,6 +4,12 @@ import { apiMessage } from '../api/client'
 import { uploadCase } from '../api/casesApi'
 import type { MriCase } from '../types/api'
 
+function todayIsoDate(): string {
+  const now = new Date()
+  const localMidnightSafe = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+  return localMidnightSafe.toISOString().slice(0, 10)
+}
+
 type UploadCaseFormProps = {
   subjectId: string
   onCreated: (createdCase: MriCase) => void
@@ -22,6 +28,11 @@ export function UploadCaseForm({ subjectId, onCreated }: UploadCaseFormProps) {
 
     if (!file) {
       setError('Choose a .nii or .nii.gz MRI file first.')
+      return
+    }
+
+    if (acquisitionDate > todayIsoDate()) {
+      setError('The acquisition date cannot be in the future.')
       return
     }
 
@@ -58,6 +69,7 @@ export function UploadCaseForm({ subjectId, onCreated }: UploadCaseFormProps) {
         <input
           type="date"
           value={acquisitionDate}
+          max={todayIsoDate()}
           onChange={(event) => setAcquisitionDate(event.target.value)}
           required
         />

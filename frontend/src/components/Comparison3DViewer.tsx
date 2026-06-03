@@ -1,66 +1,42 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Center, Html, OrbitControls, useGLTF } from '@react-three/drei'
+import { Center, OrbitControls, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
+import { createDefaultViewerTransform, ViewerTransformControls } from './ViewerTransformControls'
+import type { ViewerTransform } from './ViewerTransformControls'
 
-type ViewerTransform = {
-  scale: number
-  rotateX: number
-  rotateY: number
-  rotateZ: number
-}
-
-type GridUnit = 'mm' | 'cm'
-type TransformTarget = 'unchanged' | 'changed' | 'both'
+type TransformTarget = 'both' | 'unchanged' | 'changed'
 type LayerKind = 'unchanged' | 'changed'
+type ComparisonTransforms = Record<TransformTarget, ViewerTransform>
 
-const defaultTransform: ViewerTransform = {
-  scale: 1,
-  rotateX: 0,
-  rotateY: 0,
-  rotateZ: 0,
-}
+const transformTargetOptions: Array<{ value: TransformTarget; label: string }> = [
+  { value: 'both', label: 'Both layers' },
+  { value: 'unchanged', label: 'Unchanged layer' },
+  { value: 'changed', label: 'Changed layer' },
+]
 
-function formatGridLabel(valueMm: number, unit: GridUnit): string {
-  if (unit === 'cm') {
-    return `${Number((valueMm / 10).toFixed(1))} cm`
+function createDefaultComparisonTransforms(): ComparisonTransforms {
+  return {
+    both: createDefaultViewerTransform(),
+    unchanged: createDefaultViewerTransform(),
+    changed: createDefaultViewerTransform(),
   }
-  return `${Math.round(valueMm)} mm`
 }
 
-function MeasurementGrid({ unit }: { unit: GridUnit }) {
-  const sizeMm = 260
-  const stepMm = unit === 'cm' ? 10 : 20
-  const divisions = sizeMm / stepMm
-  const half = sizeMm / 2
-  const z = -70
-  const values: number[] = []
-
-  for (let value = -half; value <= half + 0.1; value += stepMm) {
-    if (Math.abs(value) > 0.1 && Math.abs(value) % (unit === 'cm' ? 50 : 40) < 0.1) {
-      values.push(value)
-    }
-  }
-
-  return (
-    <group>
-      <gridHelper args={[sizeMm, divisions, '#1d4ed8', '#1f2937']} position={[0, 0, z]} />
-      {values.map((value) => (
-        <group key={value}>
-          <Html position={[value, -half - 10, z]} center wrapperClass="grid-label-wrap">
-            <span className="grid-label">{formatGridLabel(value, unit)}</span>
-          </Html>
-          <Html position={[-half - 16, value, z]} center wrapperClass="grid-label-wrap">
-            <span className="grid-label">{formatGridLabel(value, unit)}</span>
-          </Html>
-        </group>
-      ))}
-    </group>
-  )
+function MeasurementGrid() {
+  return <gridHelper args={[260, 26, '#1d4ed8', '#1f2937']} position={[0, 0, -70]} />
 }
 
-function AutoRotateGroup({ enabled, resetSignal, children }: { enabled: boolean; resetSignal: number; children: ReactNode }) {
+function AutoRotateGroup({
+  enabled,
+  resetSignal,
+  children,
+}: {
+  enabled: boolean
+  resetSignal: number
+  children: ReactNode
+}) {
   const groupRef = useRef<THREE.Group>(null)
 
   useEffect(() => {
@@ -119,6 +95,14 @@ function disposeStyledMaterials(group: THREE.Group) {
   })
 }
 
+function transformProps(transform: ViewerTransform) {
+  return {
+    scale: transform.scale,
+    rotation: [transform.rotateX, transform.rotateY, transform.rotateZ] as [number, number, number],
+    position: [transform.translateX, transform.translateY, transform.translateZ] as [number, number, number],
+  }
+}
+
 function ComparisonScene({
   objectUrl,
   unchangedColor,
@@ -127,9 +111,8 @@ function ComparisonScene({
   changedOpacity,
   autoRotate,
   resetSignal,
-  gridUnit,
-  transform,
-  transformTarget,
+  transforms,
+  backgroundColor,
 }: {
   objectUrl: string
   unchangedColor: string
@@ -138,9 +121,8 @@ function ComparisonScene({
   changedOpacity: number
   autoRotate: boolean
   resetSignal: number
-  gridUnit: GridUnit
-  transform: ViewerTransform
-  transformTarget: TransformTarget
+  transforms: ComparisonTransforms
+  backgroundColor: string
 }) {
   const gltf = useGLTF(objectUrl)
 
@@ -176,38 +158,31 @@ function ComparisonScene({
     }
   }, [changedGroup, unchangedGroup])
 
-  const unchangedRotation: [number, number, number] = transformTarget === 'changed'
-    ? [0, 0, 0]
-    : [transform.rotateX, transform.rotateY, transform.rotateZ]
-  const changedRotation: [number, number, number] = transformTarget === 'unchanged'
-    ? [0, 0, 0]
-    : [transform.rotateX, transform.rotateY, transform.rotateZ]
-  const unchangedScale = transformTarget === 'changed' ? 1 : transform.scale
-  const changedScale = transformTarget === 'unchanged' ? 1 : transform.scale
+  const bothProps = transformProps(transforms.both)
+  const unchangedProps = transformProps(transforms.unchanged)
+  const changedProps = transformProps(transforms.changed)
 
   return (
     <Canvas camera={{ position: [0, -260, 130], fov: 45 }} dpr={[1, 2]}>
-      <color attach="background" args={['#08111f']} />
+      <color attach="background" args={[backgroundColor]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[80, -120, 160]} intensity={2.1} />
       <directionalLight position={[-120, 80, -80]} intensity={0.9} />
-      <MeasurementGrid unit={gridUnit} />
+      <MeasurementGrid />
       <axesHelper args={[60]} />
       <Suspense fallback={null}>
         <Center>
-          <AutoRotateGroup enabled={autoRotate} resetSignal={resetSignal}>
-            <primitive object={unchangedGroup} scale={unchangedScale} rotation={unchangedRotation} />
-            <primitive object={changedGroup} scale={changedScale} rotation={changedRotation} />
-          </AutoRotateGroup>
+          <group {...bothProps}>
+            <AutoRotateGroup enabled={autoRotate} resetSignal={resetSignal}>
+              <primitive object={unchangedGroup} {...unchangedProps} />
+              <primitive object={changedGroup} {...changedProps} />
+            </AutoRotateGroup>
+          </group>
         </Center>
       </Suspense>
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
     </Canvas>
   )
-}
-
-function formatRadians(value: number): string {
-  return `${Math.round((value * 180) / Math.PI)}°`
 }
 
 export function Comparison3DViewer({
@@ -232,13 +207,17 @@ export function Comparison3DViewer({
   const [unchangedOpacity, setUnchangedOpacity] = useState(0.28)
   const [changedOpacity, setChangedOpacity] = useState(0.95)
   const [autoRotate, setAutoRotate] = useState(false)
-  const [transform, setTransform] = useState<ViewerTransform>(defaultTransform)
-  const [transformTarget, setTransformTarget] = useState<TransformTarget>('both')
-  const [gridUnit, setGridUnit] = useState<GridUnit>('mm')
+  const [transforms, setTransforms] = useState<ComparisonTransforms>(() => createDefaultComparisonTransforms())
+  const [activeTransformTarget, setActiveTransformTarget] = useState<TransformTarget>('both')
+  const [backgroundColor, setBackgroundColor] = useState('#000000')
   const [resetSignal, setResetSignal] = useState(0)
 
-  function resetTransform() {
-    setTransform(defaultTransform)
+  function updateTransform(target: TransformTarget, transform: ViewerTransform) {
+    setTransforms((current) => ({ ...current, [target]: transform }))
+  }
+
+  function resetActiveTransform() {
+    setTransforms((current) => ({ ...current, [activeTransformTarget]: createDefaultViewerTransform() }))
     setResetSignal((current) => current + 1)
   }
 
@@ -276,54 +255,29 @@ export function Comparison3DViewer({
             Changed color
             <input type="color" value={changedColor} onChange={(event) => setChangedColor(event.target.value)} />
           </label>
+          <label className="inline-field color-inline-field">
+            Background
+            <input type="color" value={backgroundColor} onChange={(event) => setBackgroundColor(event.target.value)} />
+          </label>
           <label className="checkbox-row inline-checkbox">
             <input type="checkbox" checked={autoRotate} onChange={(event) => setAutoRotate(event.target.checked)} />
             auto rotate
           </label>
-          <label className="inline-field">
-            Grid scale
-            <select value={gridUnit} onChange={(event) => setGridUnit(event.target.value as GridUnit)}>
-              <option value="mm">millimetres</option>
-              <option value="cm">centimetres</option>
-            </select>
-          </label>
         </div>
 
-        <div className="stack compact-stack">
-          <h3>Model transform</h3>
-          <label className="inline-field">
-            Apply to
-            <select value={transformTarget} onChange={(event) => setTransformTarget(event.target.value as TransformTarget)}>
-              <option value="both">both layers</option>
-              <option value="unchanged">unchanged layer</option>
-              <option value="changed">changed layer</option>
-            </select>
-          </label>
-          <label className="inline-field">
-            Scale
-            <input type="range" min="0.3" max="2.5" step="0.05" value={transform.scale} onChange={(event) => setTransform((current) => ({ ...current, scale: Number(event.target.value) }))} />
-            <span className="muted small-note">{transform.scale.toFixed(2)}×</span>
-          </label>
-          <label className="inline-field">
-            Rotate X
-            <input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={transform.rotateX} onChange={(event) => setTransform((current) => ({ ...current, rotateX: Number(event.target.value) }))} />
-            <span className="muted small-note">{formatRadians(transform.rotateX)}</span>
-          </label>
-          <label className="inline-field">
-            Rotate Y
-            <input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={transform.rotateY} onChange={(event) => setTransform((current) => ({ ...current, rotateY: Number(event.target.value) }))} />
-            <span className="muted small-note">{formatRadians(transform.rotateY)}</span>
-          </label>
-          <label className="inline-field">
-            Rotate Z
-            <input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={transform.rotateZ} onChange={(event) => setTransform((current) => ({ ...current, rotateZ: Number(event.target.value) }))} />
-            <span className="muted small-note">{formatRadians(transform.rotateZ)}</span>
-          </label>
-          <button type="button" className="secondary" onClick={resetTransform}>Reset transform</button>
-        </div>
+        <ViewerTransformControls
+          title="Model position"
+          targetLabel="Move layer"
+          activeTarget={activeTransformTarget}
+          targetOptions={transformTargetOptions}
+          transform={transforms[activeTransformTarget]}
+          onActiveTargetChange={(target) => setActiveTransformTarget(target as TransformTarget)}
+          onTransformChange={(transform) => updateTransform(activeTransformTarget, transform)}
+          onReset={resetActiveTransform}
+        />
       </aside>
 
-      <div className="viewer-stage card">
+      <div className="viewer-stage card" style={{ backgroundColor }}>
         {isLoading && <div className="viewer-overlay"><p>{loadingText}</p></div>}
         {!isLoading && error && <div className="viewer-empty-state"><p className="error-text">{error}</p></div>}
         {!isLoading && !error && objectUrl && (
@@ -335,9 +289,8 @@ export function Comparison3DViewer({
             changedOpacity={changedOpacity}
             autoRotate={autoRotate}
             resetSignal={resetSignal}
-            gridUnit={gridUnit}
-            transform={transform}
-            transformTarget={transformTarget}
+            transforms={transforms}
+            backgroundColor={backgroundColor}
           />
         )}
         {!isLoading && !error && !objectUrl && <div className="viewer-empty-state"><p className="muted">No comparison loaded yet.</p></div>}

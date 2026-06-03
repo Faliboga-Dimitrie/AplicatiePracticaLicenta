@@ -136,6 +136,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
   const hasMetrics = Boolean(metrics)
   const isChangingCase = hasMetrics && isLoadingMetrics
   const initialStatsStillLoading = openedFromCase && !hasMetrics && (isLoadingMetrics || isLoadingSubjects || isLoadingCases)
+  const firstMetricsLoadInProgress = !initialStatsStillLoading && !hasMetrics && selectedCaseId !== ''
 
   const maxVolume = useMemo(() => {
     if (!metrics) return 0
@@ -216,7 +217,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
       )}
 
       {isChangingCase && <section className="card loading-card"><p className="muted">Loading for new case...</p></section>}
-      {!hasMetrics && selectedCaseId !== '' && !isLoadingMetrics && <section className="card loading-card"><p className="muted">Loading statistics...</p></section>}
+      {firstMetricsLoadInProgress && <section className="card loading-card"><p className="muted">Loading statistics...</p></section>}
 
       {metrics && (
         <>

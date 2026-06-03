@@ -9,6 +9,12 @@ import { UploadCaseForm } from '../components/UploadCaseForm'
 import type { MriCase } from '../types/api'
 import { formatCaseName, formatDateLabel, getCaseStageLabel } from '../utils/userFacing'
 
+function todayIsoDate(): string {
+  const now = new Date()
+  const localMidnightSafe = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+  return localMidnightSafe.toISOString().slice(0, 10)
+}
+
 type SubjectCasesPageProps = {
   subjectId: string
   onBack: () => void
@@ -76,6 +82,11 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
   async function handleUpdateCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!editingCase) return
+
+    if (editingCase.acquisitionDate > todayIsoDate()) {
+      setError('The acquisition date cannot be in the future.')
+      return
+    }
 
     setIsUpdating(true)
     setError(null)
@@ -203,13 +214,14 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
       </section>
 
       {editingCase && (
-        <Modal title={formatDateLabel(editingCase.acquisitionDate)} eyebrow="Edit scan" onClose={() => setEditingCase(null)}>
+        <Modal title={formatDateLabel(editingCase.acquisitionDate)} eyebrow="Edit scan" onClose={() => setEditingCase(null)} hideCloseButton>
           <form className="form-grid" onSubmit={handleUpdateCase}>
             <label>
               Acquisition date
               <input
                 type="date"
                 value={editingCase.acquisitionDate}
+                max={todayIsoDate()}
                 onChange={(event) => setEditingCase({ ...editingCase, acquisitionDate: event.target.value })}
                 required
               />
@@ -240,7 +252,7 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
         <Modal
           title="Delete scan?"
           eyebrow="Confirm deletion"
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => setDeleteTarget(null)} hideCloseButton
           footer={(
             <>
               <button type="button" className="danger-button" onClick={handleDeleteCase} disabled={deletingCaseId === deleteTarget.id}>

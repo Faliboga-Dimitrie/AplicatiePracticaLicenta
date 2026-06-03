@@ -852,7 +852,7 @@ select {
 .viewer-canvas-wrap {
   position: relative;
   min-height: 520px;
-  background: #08111f;
+  background: #000000;
 }
 
 .viewer-canvas-wrap canvas {
@@ -945,23 +945,6 @@ input[type='color'] {
 
 .public-viewer-section {
   padding-top: 0;
-}
-
-.grid-label-wrap {
-  pointer-events: none;
-}
-
-.grid-label {
-  display: inline-flex;
-  padding: 0.12rem 0.35rem;
-  border: 1px solid rgba(191, 219, 254, 0.38);
-  border-radius: 999px;
-  background: rgba(8, 17, 31, 0.72);
-  color: #bfdbfe;
-  font-size: 0.68rem;
-  font-weight: 800;
-  white-space: nowrap;
-  transform: translateY(0.2rem);
 }
 
 @media (max-width: 980px) {
@@ -1520,4 +1503,92 @@ input[type='color'] {
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+.outline-action {
+  border: 1px solid #2454d6;
+  background: #ffffff;
+  color: #2454d6;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.outline-action:hover:not(:disabled) {
+  background: #2454d6;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.help-icon-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid #2454d6;
+  background: #ffffff;
+  color: #2454d6;
+  font-weight: 900;
+}
+
+.help-icon-button:hover:not(:disabled) {
+  background: #2454d6;
+  color: #ffffff;
+}
+
+.comparison-help-content article {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 1rem;
+}
+
+.transform-control-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.transform-field {
+  display: grid;
+  gap: 0.35rem;
+  color: #475569;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.transform-field span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.transform-field small {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.transform-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 78px;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.transform-input-row input[type='range'] {
+  width: 100%;
+}
+
+.transform-input-row input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  padding: 0.45rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.color-inline-field input[type='color'] {
+  width: 56px;
+  height: 36px;
+}
+
+.viewer-message-pad {
+  padding: 0.85rem 1rem 0;
 }

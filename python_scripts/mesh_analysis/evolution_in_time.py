@@ -702,7 +702,13 @@ class MriEvolutionInTime:
 
             origin = _combined_geometry_center(geometries, numpy_module=numpy_module)
             for geometry in geometries:
-                _apply_shared_view_transform(geometry, origin=origin, trimesh_module=trimesh_module, numpy_module=numpy_module)
+                _apply_shared_view_transform(
+                    geometry,
+                    origin=origin,
+                    trimesh_module=trimesh_module,
+                    numpy_module=numpy_module,
+                    extra_x_degrees=85.0,
+                )
 
             if unchanged_mesh is not None:
                 _apply_rgba(unchanged_mesh, colors.baseline, trimesh_module=trimesh_module, numpy_module=numpy_module)
@@ -924,9 +930,10 @@ def _apply_shared_view_transform(
     origin: Any,
     trimesh_module: Any,
     numpy_module: Any,
+    extra_x_degrees: float = 0.0,
 ) -> None:
     transform = trimesh_module.transformations.rotation_matrix(
-        angle=numpy_module.deg2rad(-90.0),
+        angle=numpy_module.deg2rad(-90.0 + extra_x_degrees),
         direction=[1, 0, 0],
         point=origin,
     )

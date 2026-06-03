@@ -163,9 +163,9 @@ function AppContent() {
             className={view.name === 'statistics' ? 'active' : ''}
             onClick={() => recentCase ? openStatistics(recentCase.subjectId, recentCase.caseId) : setView({ name: 'statistics' })}
             disabled={isSidebarCollapsed}
-            title={recentCase ? 'Open statistics for latest case' : 'Choose a subject and completed scan'}
+            title={recentCase ? 'Open measurements for latest case' : 'Choose a subject and completed scan'}
           >
-            <span>Statistics</span>
+            <span>Measurements</span>
           </button>
           <button
             type="button"

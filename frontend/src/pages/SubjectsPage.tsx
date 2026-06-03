@@ -231,7 +231,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
       </section>
 
       {editingSubject && (
-        <Modal title={editingSubject.id} eyebrow="Edit subject" onClose={() => setEditingSubject(null)}>
+        <Modal title={editingSubject.id} eyebrow="Edit subject" onClose={() => setEditingSubject(null)} hideCloseButton>
           <form className="form-grid" onSubmit={handleUpdateSubject}>
             <label>
               Display name
@@ -273,7 +273,7 @@ export function SubjectsPage({ onSelectSubject }: SubjectsPageProps) {
         <Modal
           title="Delete subject?"
           eyebrow="Confirm deletion"
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => setDeleteTarget(null)} hideCloseButton
           footer={(
             <>
               <button type="button" className="danger-button" onClick={handleDeleteSubject} disabled={deletingSubjectId === deleteTarget.id}>

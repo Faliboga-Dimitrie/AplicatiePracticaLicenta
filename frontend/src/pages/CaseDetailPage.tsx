@@ -20,6 +20,12 @@ type CaseDetailPageProps = {
   onOpenTimeComparison: () => void
 }
 
+function todayIsoDate(): string {
+  const now = new Date()
+  const localMidnightSafe = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+  return localMidnightSafe.toISOString().slice(0, 10)
+}
+
 type CaseEditorState = {
   acquisitionDate: string
   notes: string
@@ -113,6 +119,11 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
   async function handleUpdateCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!caseDraft) return
+
+    if (caseDraft.acquisitionDate > todayIsoDate()) {
+      setError('The acquisition date cannot be in the future.')
+      return
+    }
 
     setIsUpdatingCase(true)
     setError(null)
@@ -246,13 +257,13 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
           <p className="muted small-note">The checklist above will update as the scan moves toward finished results.</p>
         </div>
         <div className="button-row">
-          <button type="button" onClick={onOpenViewer} disabled={!mriCase.capabilities.can_view_meshes}>
+          <button type="button" className="outline-action" onClick={onOpenViewer} disabled={!mriCase.capabilities.can_view_meshes}>
             3D view
           </button>
-          <button type="button" className="secondary" onClick={onOpenStatistics} disabled={!mriCase.capabilities.can_view_metrics}>
+          <button type="button" className="outline-action" onClick={onOpenStatistics} disabled={!mriCase.capabilities.can_view_metrics}>
             Measurements
           </button>
-          <button type="button" className="secondary" onClick={onOpenTimeComparison} disabled={!mriCase.capabilities.can_view_metrics}>
+          <button type="button" className="outline-action" onClick={onOpenTimeComparison} disabled={!mriCase.capabilities.can_view_metrics}>
             Compare dates
           </button>
         </div>
@@ -280,13 +291,14 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
       </section>
 
       {caseDraft && (
-        <Modal title="Date and notes" eyebrow="Edit scan" onClose={() => setCaseDraft(null)}>
+        <Modal title="Date and notes" eyebrow="Edit scan" onClose={() => setCaseDraft(null)} hideCloseButton>
           <form className="form-grid" onSubmit={handleUpdateCase}>
             <label>
               Acquisition date
               <input
                 type="date"
                 value={caseDraft.acquisitionDate}
+                max={todayIsoDate()}
                 onChange={(event) => setCaseDraft({ ...caseDraft, acquisitionDate: event.target.value })}
                 required
               />

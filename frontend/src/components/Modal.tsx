@@ -6,9 +6,10 @@ type ModalProps = {
   children: ReactNode
   footer?: ReactNode
   onClose: () => void
+  hideCloseButton?: boolean
 }
 
-export function Modal({ title, eyebrow, children, footer, onClose }: ModalProps) {
+export function Modal({ title, eyebrow, children, footer, onClose, hideCloseButton = false }: ModalProps) {
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -17,9 +18,11 @@ export function Modal({ title, eyebrow, children, footer, onClose }: ModalProps)
             {eyebrow && <p className="eyebrow">{eyebrow}</p>}
             <h2 id="modal-title">{title}</h2>
           </div>
-          <button type="button" className="secondary mini-button" onClick={onClose} aria-label="Close dialog">
-            Close
-          </button>
+          {!hideCloseButton && (
+            <button type="button" className="secondary mini-button" onClick={onClose} aria-label="Close dialog">
+              Close
+            </button>
+          )}
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="button-row modal-footer">{footer}</div>}

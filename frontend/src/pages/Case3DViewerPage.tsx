@@ -176,6 +176,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
   const hasVisibleViewer = Boolean(activeCase)
   const isChangingCase = hasVisibleViewer && (isLoadingViewer || isPreparingScene)
   const initialCaseStillLoading = openedFromCase && !hasVisibleViewer && (isLoadingViewer || isPreparingScene || isLoadingSubjects || isLoadingCases)
+  const firstViewerLoadInProgress = !initialCaseStillLoading && !hasVisibleViewer && selectedCaseId !== ''
 
   function handleSubjectChange(nextSubjectId: string) {
     setSelectedSubjectId(nextSubjectId)
@@ -235,7 +236,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
       )}
 
       {isChangingCase && <section className="card loading-card"><p className="muted">Loading for new case...</p></section>}
-      {!hasVisibleViewer && selectedCaseId !== '' && !isLoadingViewer && !isPreparingScene && <section className="card loading-card"><p className="muted">Loading 3D visualization...</p></section>}
+      {firstViewerLoadInProgress && <section className="card loading-card"><p className="muted">Loading 3D visualization...</p></section>}
 
       {hasVisibleViewer && (
         <Suspense fallback={<section className="card"><p className="muted">Loading 3D view...</p></section>}>
