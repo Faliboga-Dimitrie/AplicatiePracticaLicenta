@@ -2,7 +2,6 @@ import type { ApiErrorPayload, LoginResponse } from '../types/api'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const ACCESS_TOKEN_KEY = 'mri_access_token'
-const ACCESS_TOKEN_EXPIRY_KEY = 'mri_access_token_expires_at'
 
 class ApiError extends Error {
   status: number
@@ -22,14 +21,12 @@ export function getStoredAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY)
 }
 
-export function storeAccessToken(accessToken: string, expiresAt: string): void {
+export function storeAccessToken(accessToken: string): void {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-  localStorage.setItem(ACCESS_TOKEN_EXPIRY_KEY, expiresAt)
 }
 
 export function clearAccessToken(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
-  localStorage.removeItem(ACCESS_TOKEN_EXPIRY_KEY)
 }
 
 type ApiRequestOptions = {
@@ -97,7 +94,7 @@ async function refreshAccessToken(): Promise<LoginResponse> {
   }
 
   const session = await parseResponse<LoginResponse>(response)
-  storeAccessToken(session.access_token, session.expires_at)
+  storeAccessToken(session.access_token)
   return session
 }
 

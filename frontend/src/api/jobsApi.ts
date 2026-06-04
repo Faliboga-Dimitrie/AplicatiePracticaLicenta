@@ -11,19 +11,6 @@ export function cancelJob(jobId: string): Promise<Job> {
   })
 }
 
-export function startPreprocessingJob(caseId: number): Promise<Job> {
-  return apiRequest<Job>(`/processing/cases/${caseId}/preprocessing-jobs`, {
-    method: 'POST',
-  })
-}
-
-export function startMeshAnalysisJob(caseId: number): Promise<Job> {
-  return apiRequest<Job>(`/processing/cases/${caseId}/mesh-analysis-jobs`, {
-    method: 'POST',
-  })
-}
-
-
 export function startProcessingJob(caseId: number): Promise<Job> {
   return apiRequest<Job>(`/processing/cases/${caseId}/processing-jobs`, {
     method: 'POST',

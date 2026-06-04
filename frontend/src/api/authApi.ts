@@ -1,37 +1,33 @@
 import { apiRequest, clearAccessToken, storeAccessToken } from './client'
 import type { CurrentUserResponse, LoginResponse } from '../types/api'
 
-export async function register(email: string, password: string): Promise<LoginResponse> {
-  const session = await apiRequest<LoginResponse>('/auth/register', {
-    method: 'POST',
-    body: { email, password },
-    auth: false,
-  })
-  storeAccessToken(session.access_token, session.expires_at)
+function storeSession(session: LoginResponse): LoginResponse {
+  storeAccessToken(session.access_token)
   return session
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  const session = await apiRequest<LoginResponse>('/auth/login', {
+function requestSession(path: string, body?: { email: string; password: string }): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>(path, {
     method: 'POST',
-    body: { email, password },
+    body,
     auth: false,
-  })
-  storeAccessToken(session.access_token, session.expires_at)
-  return session
+  }).then(storeSession)
+}
+
+export function register(email: string, password: string): Promise<LoginResponse> {
+  return requestSession('/auth/register', { email, password })
+}
+
+export function login(email: string, password: string): Promise<LoginResponse> {
+  return requestSession('/auth/login', { email, password })
 }
 
 export async function getCurrentUser(): Promise<CurrentUserResponse> {
   return apiRequest<CurrentUserResponse>('/auth/me')
 }
 
-export async function refreshSession(): Promise<LoginResponse> {
-  const session = await apiRequest<LoginResponse>('/auth/refresh', {
-    method: 'POST',
-    auth: false,
-  })
-  storeAccessToken(session.access_token, session.expires_at)
-  return session
+export function refreshSession(): Promise<LoginResponse> {
+  return requestSession('/auth/refresh')
 }
 
 export async function logout(): Promise<void> {
@@ -54,7 +50,6 @@ export async function logoutAll(): Promise<void> {
     clearAccessToken()
   }
 }
-
 
 export async function deleteAccount(): Promise<{ deleted: boolean; deleted_subject_ids: string[]; kept_subject_ids: string[] }> {
   try {

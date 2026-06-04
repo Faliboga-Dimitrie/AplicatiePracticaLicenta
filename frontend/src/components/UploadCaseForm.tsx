@@ -3,12 +3,7 @@ import type { FormEvent } from 'react'
 import { apiMessage } from '../api/client'
 import { uploadCase } from '../api/casesApi'
 import type { MriCase } from '../types/api'
-
-function todayIsoDate(): string {
-  const now = new Date()
-  const localMidnightSafe = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
-  return localMidnightSafe.toISOString().slice(0, 10)
-}
+import { todayIsoDate } from '../utils/dates'
 
 type UploadCaseFormProps = {
   subjectId: string

@@ -9,22 +9,12 @@ import {
 } from '../api/publicApi'
 import type { BrainViewerItem } from '../components/brainViewerUtils'
 import type { PublicProcessingJob } from '../types/api'
+import { downloadBlob } from '../utils/downloads'
 
 const Brain3DViewer = lazy(() => import('../components/Brain3DViewer').then((module) => ({ default: module.Brain3DViewer })))
 
 type WelcomePageProps = {
   onOpenAuth: () => void
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const objectUrl = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = objectUrl
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(objectUrl)
 }
 
 function getBaseName(fileName: string): string {

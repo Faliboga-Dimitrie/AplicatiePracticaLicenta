@@ -3,6 +3,8 @@ import { apiMessage } from '../api/client'
 import { getCaseMetrics } from '../api/metricsApi'
 import { listSubjectCases, listSubjects } from '../api/subjectsApi'
 import type { AuthorizedSubject, CaseMetricsResponse, MriCase, TissueKey } from '../types/api'
+import { cubicMmToMl, formatNumber, metricUnit, percentage, scaleMetricValue } from '../utils/measurements'
+import type { MeasurementScale } from '../utils/measurements'
 
 type StatisticsPageProps = {
   caseId?: number
@@ -11,47 +13,11 @@ type StatisticsPageProps = {
   onOpenViewer?: (subjectId?: string, caseId?: number) => void
 }
 
-type MeasurementScale = 'mm' | 'cm'
-
 const TISSUES: Array<{ key: TissueKey; label: string; volumeKey: string; surfaceKey: string }> = [
   { key: 'csf', label: 'CSF', volumeKey: 'csf_mm3', surfaceKey: 'csf_mm2' },
   { key: 'gm', label: 'Gray matter', volumeKey: 'gm_mm3', surfaceKey: 'gm_mm2' },
   { key: 'wm', label: 'White matter', volumeKey: 'wm_mm3', surfaceKey: 'wm_mm2' },
 ]
-
-function formatNumber(value: number | null | undefined, fractionDigits = 2): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return '—'
-  }
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: fractionDigits }).format(value)
-}
-
-function volumeValue(valueMm3: number | undefined, scale: MeasurementScale): number | null {
-  if (valueMm3 === undefined) return null
-  return scale === 'cm' ? valueMm3 / 1000 : valueMm3
-}
-
-function surfaceValue(valueMm2: number | undefined, scale: MeasurementScale): number | null {
-  if (valueMm2 === undefined) return null
-  return scale === 'cm' ? valueMm2 / 100 : valueMm2
-}
-
-function volumeUnit(scale: MeasurementScale): string {
-  return scale === 'cm' ? 'cm³' : 'mm³'
-}
-
-function surfaceUnit(scale: MeasurementScale): string {
-  return scale === 'cm' ? 'cm²' : 'mm²'
-}
-
-function cubicMmToMl(value: number | undefined): number | null {
-  return value === undefined ? null : value / 1000
-}
-
-function percentage(value: number | undefined, total: number | undefined): string {
-  if (!value || !total) return '—'
-  return `${formatNumber((value / total) * 100, 1)}%`
-}
 
 export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: StatisticsPageProps) {
   const openedFromCase = Boolean(caseId && subjectId)
@@ -224,12 +190,12 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
           <section className="metric-grid">
             <article className="metric-card">
               <span>Total volume</span>
-              <strong>{formatNumber(volumeValue(metrics.totals.volume_mm3, measurementScale))} {volumeUnit(measurementScale)}</strong>
+              <strong>{formatNumber(scaleMetricValue(metrics.totals.volume_mm3, 'volume', measurementScale))} {metricUnit('volume', measurementScale)}</strong>
               <p className="muted">{formatNumber(metrics.totals.volume_mm3 / 1000)} ml</p>
             </article>
             <article className="metric-card">
               <span>Total surface area</span>
-              <strong>{formatNumber(surfaceValue(metrics.totals.surface_mm2, measurementScale))} {surfaceUnit(measurementScale)}</strong>
+              <strong>{formatNumber(scaleMetricValue(metrics.totals.surface_mm2, 'surface', measurementScale))} {metricUnit('surface', measurementScale)}</strong>
             </article>
             <article className="metric-card">
               <span>Largest volume</span>
@@ -250,7 +216,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
                   const width = maxVolume > 0 ? Math.max(4, (value / maxVolume) * 100) : 0
                   return (
                     <div className="metric-bar-row" key={tissue.key}>
-                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(volumeValue(value, measurementScale))} {volumeUnit(measurementScale)}</strong></div>
+                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(scaleMetricValue(value, 'volume', measurementScale))} {metricUnit('volume', measurementScale)}</strong></div>
                       <div className="metric-track"><span style={{ width: `${width}%` }} /></div>
                       <small>{formatNumber(cubicMmToMl(value))} ml · {percentage(value, metrics.totals.volume_mm3)}</small>
                     </div>
@@ -267,7 +233,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
                   const width = maxSurface > 0 ? Math.max(4, (value / maxSurface) * 100) : 0
                   return (
                     <div className="metric-bar-row" key={tissue.key}>
-                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(surfaceValue(value, measurementScale))} {surfaceUnit(measurementScale)}</strong></div>
+                      <div className="row-between"><span>{tissue.label}</span><strong>{formatNumber(scaleMetricValue(value, 'surface', measurementScale))} {metricUnit('surface', measurementScale)}</strong></div>
                       <div className="metric-track surface-track"><span style={{ width: `${width}%` }} /></div>
                     </div>
                   )
@@ -281,7 +247,7 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
-                  <tr><th>Tissue</th><th>Volume ({volumeUnit(measurementScale)})</th><th>Volume (ml)</th><th>Volume share</th><th>Surface area ({surfaceUnit(measurementScale)})</th></tr>
+                  <tr><th>Tissue</th><th>Volume ({metricUnit('volume', measurementScale)})</th><th>Volume (ml)</th><th>Volume share</th><th>Surface area ({metricUnit('surface', measurementScale)})</th></tr>
                 </thead>
                 <tbody>
                   {TISSUES.map((tissue) => {
@@ -290,10 +256,10 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
                     return (
                       <tr key={tissue.key}>
                         <td>{tissue.label}</td>
-                        <td>{formatNumber(volumeValue(volume, measurementScale))}</td>
+                        <td>{formatNumber(scaleMetricValue(volume, 'volume', measurementScale))}</td>
                         <td>{formatNumber(cubicMmToMl(volume))}</td>
                         <td>{percentage(volume, metrics.totals.volume_mm3)}</td>
-                        <td>{formatNumber(surfaceValue(surface, measurementScale))}</td>
+                        <td>{formatNumber(scaleMetricValue(surface, 'surface', measurementScale))}</td>
                       </tr>
                     )
                   })}

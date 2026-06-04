@@ -28,14 +28,6 @@ export function downloadPublicProcessingResult(jobId: string): Promise<Blob> {
   return apiPublicDownload(`/public/process-jobs/${encodeURIComponent(jobId)}/download`)
 }
 
-export function processPublicMri(file: File): Promise<Blob> {
-  const formData = new FormData()
-  formData.append('file', file)
-  return apiPublicDownload('/public/process', {
-    method: 'POST',
-    formData,
-  })
-}
 
 export async function extractViewerItemsFromPublicZip(zipBlob: Blob): Promise<BrainViewerItem[]> {
   const zip = await JSZip.loadAsync(zipBlob)

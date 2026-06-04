@@ -5,6 +5,8 @@ import { Modal } from '../components/Modal'
 import type { EvolutionComparisonMethod } from '../api/metricsApi'
 import { listSubjects } from '../api/subjectsApi'
 import type { AuthorizedSubject, EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
+import { formatNumber, metricUnit as measurementUnit, scaleMetricValue } from '../utils/measurements'
+import type { MeasurementScale, MetricDimension } from '../utils/measurements'
 
 const Comparison3DViewer = lazy(() => import('../components/Comparison3DViewer').then((module) => ({ default: module.Comparison3DViewer })))
 
@@ -14,7 +16,6 @@ type TimeComparisonPageProps = {
 }
 
 type MetricGroup = 'volumes_mm3' | 'surfaces_mm2'
-type MeasurementScale = 'mm' | 'cm'
 
 const TISSUES: Array<{ key: TissueKey; label: string }> = [
   { key: 'csf', label: 'CSF' },
@@ -22,23 +23,16 @@ const TISSUES: Array<{ key: TissueKey; label: string }> = [
   { key: 'wm', label: 'White matter' },
 ]
 
-function formatNumber(value: number | null | undefined, fractionDigits = 2): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return '—'
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: fractionDigits }).format(value)
-}
-
 function metricLabel(group: MetricGroup): string {
   return group === 'volumes_mm3' ? 'Volume' : 'Surface area'
 }
 
-function convertMetricValue(value: number, group: MetricGroup, scale: MeasurementScale): number {
-  if (scale === 'mm') return value
-  return group === 'volumes_mm3' ? value / 1000 : value / 100
+function metricDimension(group: MetricGroup): MetricDimension {
+  return group === 'volumes_mm3' ? 'volume' : 'surface'
 }
 
 function metricUnit(group: MetricGroup, scale: MeasurementScale): string {
-  if (group === 'volumes_mm3') return scale === 'cm' ? 'cm³' : 'mm³'
-  return scale === 'cm' ? 'cm²' : 'mm²'
+  return measurementUnit(metricDimension(group), scale)
 }
 
 function tissueLabel(tissue: TissueKey): string {
@@ -46,7 +40,7 @@ function tissueLabel(tissue: TissueKey): string {
 }
 
 function ComparisonLineChart({ report, metricGroup, tissue, scale }: { report: EvolutionReport; metricGroup: MetricGroup; tissue: TissueKey; scale: MeasurementScale }) {
-  const values = report.points.map((point) => convertMetricValue(point[metricGroup][tissue].value, metricGroup, scale))
+  const values = report.points.map((point) => scaleMetricValue(point[metricGroup][tissue].value, metricDimension(metricGroup), scale) ?? 0)
   const min = Math.min(...values)
   const max = Math.max(...values)
   const range = max - min || 1
@@ -111,6 +105,13 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     }
   }, [])
 
+  const resetVisualComparison = useCallback(() => {
+    setVisualOpen(false)
+    setVisualObjectUrl(null)
+    setLastVisualSignature(null)
+    clearVisualObjectUrl()
+  }, [clearVisualObjectUrl])
+
   useEffect(() => {
     let cancelled = false
     async function loadSubjects() {
@@ -174,16 +175,10 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     setError(null)
     try {
       setReport(await getEvolutionReport(selectedSubjectId, startDate, endDate))
-      setVisualOpen(false)
-      setVisualObjectUrl(null)
-      setLastVisualSignature(null)
-      clearVisualObjectUrl()
+      resetVisualComparison()
     } catch (loadError) {
       setReport(null)
-      setVisualOpen(false)
-      setVisualObjectUrl(null)
-      setLastVisualSignature(null)
-      clearVisualObjectUrl()
+      resetVisualComparison()
       setError(apiMessage(loadError))
     } finally {
       setIsLoadingReport(false)
@@ -231,10 +226,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     setStartDate('')
     setEndDate('')
     setReport(null)
-    setVisualOpen(false)
-    setVisualObjectUrl(null)
-    setLastVisualSignature(null)
-    clearVisualObjectUrl()
+    resetVisualComparison()
   }
 
   return (
@@ -385,9 +377,9 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                     return (
                       <tr key={point.acquisition_date}>
                         <td>{point.acquisition_date}{point.is_baseline ? ' · baseline' : ''}</td>
-                        <td>{formatNumber(convertMetricValue(metric.value, metricGroup, measurementScale))}</td>
-                        <td>{formatNumber(convertMetricValue(metric.absolute_change_from_baseline, metricGroup, measurementScale))} ({formatNumber(metric.change_from_baseline_percent, 2)}%)</td>
-                        <td>{metric.previous_value === null ? '—' : `${formatNumber(convertMetricValue(metric.absolute_change_from_previous ?? 0, metricGroup, measurementScale))} (${formatNumber(metric.change_from_previous_percent, 2)}%)`}</td>
+                        <td>{formatNumber(scaleMetricValue(metric.value, metricDimension(metricGroup), measurementScale))}</td>
+                        <td>{formatNumber(scaleMetricValue(metric.absolute_change_from_baseline, metricDimension(metricGroup), measurementScale))} ({formatNumber(metric.change_from_baseline_percent, 2)}%)</td>
+                        <td>{metric.previous_value === null ? '—' : `${formatNumber(scaleMetricValue(metric.absolute_change_from_previous ?? 0, metricDimension(metricGroup), measurementScale))} (${formatNumber(metric.change_from_previous_percent, 2)}%)`}</td>
                       </tr>
                     )
                   })}

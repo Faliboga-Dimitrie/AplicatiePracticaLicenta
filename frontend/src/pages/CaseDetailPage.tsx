@@ -11,6 +11,7 @@ import { Modal } from '../components/Modal'
 import { useJobActivity } from '../jobs/useJobActivity'
 import type { CaseArtifacts, Job, MriCase } from '../types/api'
 import { formatCaseName, formatDateLabel, getCaseStageLabel, getNextCaseAction } from '../utils/userFacing'
+import { todayIsoDate } from '../utils/dates'
 
 type CaseDetailPageProps = {
   caseId: number
@@ -18,12 +19,6 @@ type CaseDetailPageProps = {
   onOpenViewer: () => void
   onOpenStatistics: () => void
   onOpenTimeComparison: () => void
-}
-
-function todayIsoDate(): string {
-  const now = new Date()
-  const localMidnightSafe = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
-  return localMidnightSafe.toISOString().slice(0, 10)
 }
 
 type CaseEditorState = {

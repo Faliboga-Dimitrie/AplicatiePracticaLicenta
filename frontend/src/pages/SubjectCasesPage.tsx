@@ -8,12 +8,7 @@ import { Modal } from '../components/Modal'
 import { UploadCaseForm } from '../components/UploadCaseForm'
 import type { MriCase } from '../types/api'
 import { formatCaseName, formatDateLabel, getCaseStageLabel } from '../utils/userFacing'
-
-function todayIsoDate(): string {
-  const now = new Date()
-  const localMidnightSafe = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
-  return localMidnightSafe.toISOString().slice(0, 10)
-}
+import { todayIsoDate } from '../utils/dates'
 
 type SubjectCasesPageProps = {
   subjectId: string

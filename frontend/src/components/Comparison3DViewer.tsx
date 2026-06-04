@@ -110,7 +110,6 @@ function transformProps(transform: ViewerTransform) {
   return {
     scale: transform.scale,
     rotation: [transform.rotateX, transform.rotateY, transform.rotateZ] as [number, number, number],
-    position: [transform.translateX, transform.translateY, transform.translateZ] as [number, number, number],
   }
 }
 
