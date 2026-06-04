@@ -89,40 +89,6 @@ class ArtifactService:
         except Exception as exc:
             return DbResult.fail(str(exc))
 
-    def list_viewer_for_case(
-        self,
-        user: UserRecord,
-        case_id: int,
-    ) -> DbResult[CaseArtifactBundle]:
-        """Return only artifacts needed by the interactive 3D viewer.
-
-        Since the normal artifact endpoint now publishes only final files, this
-        endpoint simply filters the same manifest to GLB meshes plus JSON metrics.
-        It is kept as a dedicated route so the frontend can stay explicit about
-        what it needs to load the viewer.
-        """
-        bundle_result = self.list_for_case(user, case_id)
-        if not bundle_result.success:
-            return DbResult.fail(bundle_result.error or "Could not load case artifacts.")
-        if bundle_result.data is None:
-            return DbResult.ok(None)
-
-        viewer_artifacts = tuple(
-            artifact
-            for artifact in bundle_result.data.artifacts
-            if self._is_public_artifact_name(artifact.ref.name)
-        )
-
-        return DbResult.ok(
-            CaseArtifactBundle(
-                case_db_id=bundle_result.data.case_db_id,
-                subject_id=bundle_result.data.subject_id,
-                acquisition_date=bundle_result.data.acquisition_date,
-                case_key=bundle_result.data.case_key,
-                artifacts=viewer_artifacts,
-            )
-        )
-
     def get_file_for_case(
         self,
         user: UserRecord,

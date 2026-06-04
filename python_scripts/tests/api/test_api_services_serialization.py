@@ -259,7 +259,7 @@ def test_subject_artifact_and_job_serializers_are_frontend_safe():
     assert job_payload["result"]["date"] == "2026-06-02"
 
 
-def test_artifact_service_lists_only_existing_artifacts_and_filters_viewer_files(workspace):
+def test_artifact_service_lists_only_existing_public_artifacts(workspace):
     # Arrange
     workspace.ensure_directories()
     workspace.mesh_path_for("csf").write_bytes(b"glb")
@@ -277,7 +277,6 @@ def test_artifact_service_lists_only_existing_artifacts_and_filters_viewer_files
 
     # Act
     bundle = service.list_for_case(user, 5)
-    viewer = service.list_viewer_for_case(user, 5)
     file_result = service.get_file_for_case(user, 5, "metrics.json")
     missing = service.get_file_for_case(user, 5, "unknown.txt")
     public = service.public_bundle_dict(bundle.data)
@@ -291,7 +290,6 @@ def test_artifact_service_lists_only_existing_artifacts_and_filters_viewer_files
     assert "notes.txt" not in names
     assert "old_pve_0.nii.gz" not in names
     assert all(a.ref.name.lower().endswith((".glb", ".json")) for a in bundle.data.artifacts)
-    assert all(a.ref.kind in {ArtifactKind.MESH, ArtifactKind.METRICS} for a in viewer.data.artifacts)
     assert file_result.data.ref.name == "metrics.json"
     assert missing.data is None
     assert public["artifacts"][0]["url"].startswith("/cases/5/artifacts/")

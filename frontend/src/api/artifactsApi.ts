@@ -6,10 +6,6 @@ export function listArtifacts(caseId: number): Promise<CaseArtifacts> {
   return apiRequest<CaseArtifacts>(`/cases/${caseId}/artifacts`)
 }
 
-export function listViewerArtifacts(caseId: number): Promise<CaseArtifacts> {
-  return apiRequest<CaseArtifacts>(`/cases/${caseId}/viewer-artifacts`)
-}
-
 export async function downloadArtifact(artifact: Artifact): Promise<void> {
   const blob = await apiDownload(artifact.url)
   downloadBlob(blob, artifact.name)

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
-import { createArtifactObjectUrl, listViewerArtifacts } from '../api/artifactsApi'
+import { createArtifactObjectUrl, listArtifacts } from '../api/artifactsApi'
 import { getCase } from '../api/casesApi'
 import { listSubjectCases, listSubjects } from '../api/subjectsApi'
 import { inferViewerModeFromName, inferViewerTissueFromName, isGlbName } from '../components/brainViewerUtils'
@@ -129,7 +129,7 @@ export function Case3DViewerPage({ caseId, subjectId, onBack }: Case3DViewerPage
     try {
       const [loadedCase, artifactBundle] = await Promise.all([
         getCase(Number(selectedCaseId)),
-        listViewerArtifacts(Number(selectedCaseId)),
+        listArtifacts(Number(selectedCaseId)),
       ])
 
       const glbArtifacts = artifactBundle.artifacts.filter((artifact) => isGlbName(artifact.name, artifact.mime_type))

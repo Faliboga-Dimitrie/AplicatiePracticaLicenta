@@ -171,9 +171,6 @@ class FakeArtifactRouterService:
     def list_for_case(self, user, case_id):
         return DbResult.ok(self.bundle)
 
-    def list_viewer_for_case(self, user, case_id):
-        return DbResult.ok(self.bundle)
-
     def get_file_for_case(self, user, case_id, artifact_name):
         return DbResult.ok(self.artifact if artifact_name == "metrics.json" else None)
 
@@ -370,13 +367,12 @@ def test_artifact_router_lists_metrics_and_returns_file_response(tmp_path):
 
     # Act
     listed = artifact_router.list_case_artifacts(5, USER, service)
-    viewer = artifact_router.list_case_viewer_artifacts(5, USER, service)
     metrics = artifact_router.get_case_metrics(5, USER, stats)
     file_response = artifact_router.get_case_artifact(5, "metrics.json", USER, service)
 
     # Assert
+    assert listed["case_id"] == 5
     assert listed["artifacts"][0]["name"] == "metrics.json"
-    assert viewer["case_id"] == 5
     assert metrics == {"case_id": 5}
     assert file_response.path == path
 
