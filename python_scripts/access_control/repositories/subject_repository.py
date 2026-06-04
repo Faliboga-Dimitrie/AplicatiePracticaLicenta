@@ -5,6 +5,7 @@ from typing import Any
 from ..database import MySqlDatabase
 from ..models import SubjectRecord
 from ..results import DbResult
+from ..sql_loader import load_sql
 from ..utils import UNSET, subject_from_row
 
 
@@ -22,7 +23,7 @@ class SubjectRepository:
     ) -> DbResult[SubjectRecord]:
         try:
             self.db.execute_lastrowid(
-                "INSERT INTO subject (id, name, age, notes) VALUES (%s, %s, %s, %s)",
+                load_sql("subject/create.sql"),
                 (subject_id, name, age, notes),
             )
             return DbResult.ok(SubjectRecord(id=subject_id, name=name, age=age, notes=notes))
@@ -32,7 +33,7 @@ class SubjectRepository:
     def get(self, subject_id: str) -> DbResult[SubjectRecord]:
         try:
             row = self.db.fetch_one(
-                "SELECT id, name, age, notes FROM subject WHERE id = %s",
+                load_sql("subject/get.sql"),
                 (subject_id,),
             )
             return DbResult.ok(subject_from_row(row) if row else None)
@@ -51,23 +52,21 @@ class SubjectRepository:
         params: list[Any] = []
 
         if name is not UNSET:
-            updates.append("name = %s")
+            updates.append(load_sql("subject/fragments/set_name.sql"))
             params.append(name)
         if age is not UNSET:
-            updates.append("age = %s")
+            updates.append(load_sql("subject/fragments/set_age.sql"))
             params.append(age)
         if notes is not UNSET:
-            updates.append("notes = %s")
+            updates.append(load_sql("subject/fragments/set_notes.sql"))
             params.append(notes)
 
         if not updates:
             return DbResult.ok(False)
 
         params.append(subject_id)
-        return self.db.execute_bool(
-            f"UPDATE subject SET {', '.join(updates)} WHERE id = %s",
-            tuple(params),
-        )
+        statement = load_sql("subject/update.sql").format(assignments=", ".join(updates))
+        return self.db.execute_bool(statement, tuple(params))
 
     def delete(self, subject_id: str) -> DbResult[bool]:
-        return self.db.execute_bool("DELETE FROM subject WHERE id = %s", (subject_id,))
+        return self.db.execute_bool(load_sql("subject/delete.sql"), (subject_id,))

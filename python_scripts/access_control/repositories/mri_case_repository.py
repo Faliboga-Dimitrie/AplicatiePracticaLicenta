@@ -6,6 +6,7 @@ from typing import Any
 from ..database import MySqlDatabase
 from ..models import MriCaseRecord
 from ..results import DbResult
+from ..sql_loader import load_sql
 from ..utils import UNSET, mri_case_from_row, normalize_date
 
 
@@ -25,10 +26,7 @@ class MriCaseRepository:
             acq_date = normalize_date(acquisition_date)
 
             case_id = self.db.execute_lastrowid(
-                """
-                INSERT INTO mri_case (subject_id, acquisition_date, notes, status)
-                VALUES (%s, %s, %s, %s)
-                """,
+                load_sql("mri_case/create.sql"),
                 (subject_id, acq_date, notes, status),
             )
 
@@ -57,11 +55,7 @@ class MriCaseRepository:
         """
         try:
             row = self.db.fetch_one(
-                """
-                SELECT id, subject_id, acquisition_date, notes, status
-                FROM mri_case
-                WHERE id = %s
-                """,
+                load_sql("mri_case/get.sql"),
                 (case_id,),
             )
             return DbResult.ok(mri_case_from_row(row) if row else None)
@@ -76,10 +70,9 @@ class MriCaseRepository:
         from API routes.
         """
         return self.db.execute_bool(
-            "DELETE FROM mri_case WHERE id = %s",
+            load_sql("mri_case/delete.sql"),
             (case_id,),
         )
-
 
     # ------------------------------------------------------------------
     # Public/application-style access
@@ -94,11 +87,7 @@ class MriCaseRepository:
 
         try:
             row = self.db.fetch_one(
-                """
-                SELECT id, subject_id, acquisition_date, notes, status
-                FROM mri_case
-                WHERE subject_id = %s AND acquisition_date = %s
-                """,
+                load_sql("mri_case/get_by_subject_date.sql"),
                 (subject_id, acq_date),
             )
             return DbResult.ok(mri_case_from_row(row) if row else None)
@@ -120,30 +109,23 @@ class MriCaseRepository:
         params: list[Any] = []
 
         if new_acquisition_date is not UNSET:
-            updates.append("acquisition_date = %s")
+            updates.append(load_sql("mri_case/fragments/set_acquisition_date.sql"))
             params.append(normalize_date(new_acquisition_date))
 
         if notes is not UNSET:
-            updates.append("notes = %s")
+            updates.append(load_sql("mri_case/fragments/set_notes.sql"))
             params.append(notes)
 
         if status is not UNSET:
-            updates.append("status = %s")
+            updates.append(load_sql("mri_case/fragments/set_status.sql"))
             params.append(status)
 
         if not updates:
             return DbResult.ok(False)
 
         params.extend([subject_id, current_acq_date])
-
-        return self.db.execute_bool(
-            f"""
-            UPDATE mri_case
-            SET {', '.join(updates)}
-            WHERE subject_id = %s AND acquisition_date = %s
-            """,
-            tuple(params),
-        )
+        statement = load_sql("mri_case/update_by_subject_date.sql").format(assignments=", ".join(updates))
+        return self.db.execute_bool(statement, tuple(params))
 
     def delete_by_subject_date(
         self,
@@ -153,10 +135,7 @@ class MriCaseRepository:
         acq_date = normalize_date(acquisition_date)
 
         return self.db.execute_bool(
-            """
-            DELETE FROM mri_case
-            WHERE subject_id = %s AND acquisition_date = %s
-            """,
+            load_sql("mri_case/delete_by_subject_date.sql"),
             (subject_id, acq_date),
         )
 
@@ -167,12 +146,7 @@ class MriCaseRepository:
     def list_for_subject(self, subject_id: str) -> DbResult[list[MriCaseRecord]]:
         try:
             rows = self.db.fetch_all(
-                """
-                SELECT id, subject_id, acquisition_date, notes, status
-                FROM mri_case
-                WHERE subject_id = %s
-                ORDER BY acquisition_date ASC
-                """,
+                load_sql("mri_case/list_for_subject.sql"),
                 (subject_id,),
             )
             return DbResult.ok([mri_case_from_row(row) for row in rows])

@@ -1,0 +1,7 @@
+SELECT
+    id, user_id, refresh_token_hash, created_at, expires_at,
+    revoked_at, last_used_at
+FROM auth_session
+WHERE refresh_token_hash = %s
+  AND revoked_at IS NULL
+  AND expires_at > UTC_TIMESTAMP()

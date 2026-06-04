@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS subject (
+    id VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(255) NULL,
+    age INT NULL,
+    notes TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

@@ -5,6 +5,7 @@ from typing import Any
 
 from ..database import MySqlDatabase
 from ..results import DbResult
+from ..sql_loader import load_sql
 from ..utils import normalize_date
 
 
@@ -22,50 +23,30 @@ class SubjectSearchRepository:
     ) -> DbResult[list[dict[str, Any]]]:
         try:
             params: list[Any] = [user_id]
-            where = ["sa.user_id = %s"]
+            where = [load_sql("subject_search/fragments/filter_user_id.sql")]
 
             if subject_id is not None:
-                where.append("s.id = %s")
+                where.append(load_sql("subject_search/fragments/filter_subject_id.sql"))
                 params.append(subject_id)
 
             if acquisition_date is not None:
-                where.append("c.acquisition_date = %s")
+                where.append(load_sql("subject_search/fragments/filter_acquisition_date.sql"))
                 params.append(normalize_date(acquisition_date))
 
             if include_cases:
-                case_columns = """
-                    c.id AS case_id,
-                    c.subject_id AS case_subject_id,
-                    c.acquisition_date AS case_acquisition_date,
-                    c.notes AS case_notes,
-                    c.status AS case_status
-                """
-                order = "ORDER BY s.id, c.acquisition_date"
+                case_columns = load_sql("subject_search/fragments/case_columns_with_cases.sql")
+                order_clause = load_sql("subject_search/fragments/order_with_cases.sql")
             else:
-                case_columns = """
-                    NULL AS case_id,
-                    NULL AS case_subject_id,
-                    NULL AS case_acquisition_date,
-                    NULL AS case_notes,
-                    NULL AS case_status
-                """
-                order = "ORDER BY s.id"
+                case_columns = load_sql("subject_search/fragments/case_columns_without_cases.sql")
+                order_clause = load_sql("subject_search/fragments/order_without_cases.sql")
 
-            sql = f"""
-                SELECT
-                    s.id AS subject_id,
-                    s.name AS subject_name,
-                    s.age AS subject_age,
-                    s.notes AS subject_notes,
-                    {case_columns}
-                FROM subject_access sa
-                JOIN subject s ON s.id = sa.subject_id
-                LEFT JOIN mri_case c ON c.subject_id = s.id
-                WHERE {' AND '.join(where)}
-                {order}
-            """
+            statement = load_sql("subject_search/search_subject_rows_for_user.sql").format(
+                case_columns=case_columns,
+                where_clause=" AND ".join(where),
+                order_clause=order_clause,
+            )
 
-            return DbResult.ok(self.db.fetch_all(sql, tuple(params)))
+            return DbResult.ok(self.db.fetch_all(statement, tuple(params)))
         except Exception as exc:
             return DbResult.fail(str(exc))
 
@@ -78,25 +59,11 @@ class SubjectSearchRepository:
         by SQL instead of loading every case row.
         """
         try:
-            sql = """
-                SELECT
-                    s.id AS subject_id,
-                    s.name AS subject_name,
-                    s.age AS subject_age,
-                    s.notes AS subject_notes,
-                    COUNT(c.id) AS case_count
-                FROM subject_access sa
-                JOIN subject s ON s.id = sa.subject_id
-                LEFT JOIN mri_case c ON c.subject_id = s.id
-                WHERE sa.user_id = %s
-                GROUP BY
-                    s.id,
-                    s.name,
-                    s.age,
-                    s.notes
-                ORDER BY s.id
-            """
-
-            return DbResult.ok(self.db.fetch_all(sql, (user_id,)))
+            return DbResult.ok(
+                self.db.fetch_all(
+                    load_sql("subject_search/list_subject_summaries_for_user.sql"),
+                    (user_id,),
+                )
+            )
         except Exception as exc:
             return DbResult.fail(str(exc))
