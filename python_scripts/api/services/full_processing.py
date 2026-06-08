@@ -239,10 +239,6 @@ class FullProcessingService:
         ensure_main_directories(self.settings)
         if not self.settings.mni_template_path.exists():
             raise FileNotFoundError(f"MNI template not found: {self.settings.mni_template_path}")
-        if not self.settings.reorient_script.exists():
-            raise FileNotFoundError(f"Reorientation script not found: {self.settings.reorient_script}")
-        if not self.settings.fast_script.exists():
-            raise FileNotFoundError(f"FAST script not found: {self.settings.fast_script}")
 
     def _result_to_dict(
         self,

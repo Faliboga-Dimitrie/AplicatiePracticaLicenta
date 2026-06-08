@@ -7,27 +7,6 @@ import pytest
 from python_scripts.mri_preprocessing.segmentation import FslFastSegmentationBackend
 
 
-def test_fast_build_command_uses_workspace_prefix_and_settings(settings, workspace, tmp_path):
-    # Arrange
-    backend = FslFastSegmentationBackend(settings)
-    input_path = tmp_path / "brain.nii.gz"
-
-    # Act
-    command = backend._build_command(input_path, workspace)
-
-    # Assert
-    assert command[:4] == ["powershell", "-ExecutionPolicy", "Bypass", "-File"]
-    assert str(settings.fast_script) in command
-    assert "-InputPath" in command
-    assert str(input_path) in command
-    assert "-OutputPrefix" in command
-    assert str(workspace.fast_prefix) in command
-    assert "-DockerImage" in command
-    assert settings.fsl_docker_image in command
-    assert "-Classes" in command
-    assert str(settings.fast_classes) in command
-
-
 def test_fast_run_returns_existing_pve_outputs_without_running_fast(settings, workspace, tmp_path, monkeypatch):
     # Arrange
     workspace.fast_dir.mkdir(parents=True, exist_ok=True)

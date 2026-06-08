@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import nibabel as nib
@@ -9,13 +8,12 @@ from ..project_core.config import Settings
 from ..project_core.domain import MRICase
 from ..project_core.ports import SegmentationResult
 from ..project_core.workspace import CaseWorkspace
+from .docker_fsl import FslDockerRunner
 from .input_checks import OrientationStatus, check_input_orientation
-
 
 class FslFastSegmentationBackend:
     """
-    SegmentationBackend implementation using FSL FAST through the existing
-    PowerShell/Docker wrapper.
+    SegmentationBackend implementation using FSL FAST through Docker.
 
     The backend produces FAST PVE outputs in the provided CaseWorkspace and
     returns typed paths to the generated probability-volume-estimation files.
@@ -23,6 +21,8 @@ class FslFastSegmentationBackend:
 
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.docker = FslDockerRunner(settings.fsl_docker_image)
+        self.image_type = 1 # 1=T1, 2=T2, 3=PD; default=T1 acording to FAST docs
 
     def run(self, input_path: Path, workspace: CaseWorkspace) -> SegmentationResult:
         input_path = Path(input_path)
@@ -116,37 +116,19 @@ class FslFastSegmentationBackend:
             )
 
     def _build_command(self, input_path: Path, workspace: CaseWorkspace) -> list[str]:
-        return [
-            "powershell",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(self.settings.fast_script),
-            "-InputPath",
-            str(input_path),
-            "-OutputPrefix",
-            str(workspace.fast_prefix),
-            "-DockerImage",
-            str(self.settings.fsl_docker_image),
-            "-Classes",
-            str(self.settings.fast_classes),
-            "-ImageType",
-            "1",  # T1 pipeline
-            "-ContainerInputDir",
-            str(self.settings.container_input_dir),
-            "-ContainerOutputDir",
-            str(self.settings.container_output_dir),
-        ]
+        return self.docker.build_fast_command(
+            input_path=input_path,
+            output_prefix=workspace.fast_prefix,
+            classes=self.settings.fast_classes,
+            image_type=self.image_type,
+            container_input_dir=str(self.settings.container_input_dir),
+            container_output_dir=str(self.settings.container_output_dir),
+        )
 
     def _run_fast(self, input_path: Path, workspace: CaseWorkspace) -> None:
         cmd = self._build_command(input_path, workspace)
 
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = self.docker.run(cmd)
 
         if proc.returncode != 0:
             raise RuntimeError(

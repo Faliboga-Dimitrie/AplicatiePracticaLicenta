@@ -79,8 +79,6 @@ def settings(tmp_path):
         hd_bet_dir=processed / "hd_bet",
         fast_dir=processed / "fast",
         mesh_dir=processed / "meshes",
-        reorient_script=tmp_path / "docker_reorient.ps1",
-        fast_script=tmp_path / "docker_fast.ps1",
         mni_template_path=tmp_path / "mni_template" / "MNI152_T1_1mm.nii.gz",
         fsl_docker_image="brainlife/fsl:test",
         container_input_dir="/data/in",

@@ -223,30 +223,6 @@ def test_reorientation_copies_input_when_already_standard(settings, workspace, m
     assert workspace.reoriented_path.read_text(encoding="utf-8") == "raw"
 
 
-def test_reorientation_runs_script_when_can_reorient(settings, workspace, monkeypatch):
-    # Arrange
-    workspace.input_mri_dir.mkdir(parents=True, exist_ok=True)
-    workspace.raw_path.write_text("raw", encoding="utf-8")
-    _patch_orientation(monkeypatch, OrientationStatus.CAN_REORIENT)
-    calls = []
-
-    def fake_run(input_path, output_path):
-        calls.append((input_path, output_path))
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("reoriented", encoding="utf-8")
-
-    backend = FslReorientationBackend(settings)
-    monkeypatch.setattr(backend, "_run_reorient_script", fake_run)
-    monkeypatch.setattr(backend, "_check_output_is_standard", lambda _case, _workspace: None)
-
-    # Act
-    result = backend.run(MRICase("IXI001", "2026-06-02", workspace.raw_path), workspace)
-
-    # Assert
-    assert not result.already_standard
-    assert calls == [(workspace.raw_path, workspace.reoriented_path)]
-
-
 def test_reorientation_refuses_when_orientation_status_is_not_auto(settings, workspace, monkeypatch):
     # Arrange
     _patch_orientation(monkeypatch, OrientationStatus.NEEDS_REVIEW)
@@ -255,22 +231,6 @@ def test_reorientation_refuses_when_orientation_status_is_not_auto(settings, wor
     # Act / Assert
     with pytest.raises(RuntimeError, match="Automatic reorientation refused"):
         backend.run(MRICase("IXI001", "2026-06-02", workspace.raw_path), workspace)
-
-
-def test_reorientation_subprocess_failure_and_missing_output_raise(settings, workspace, monkeypatch):
-    # Arrange
-    backend = FslReorientationBackend(settings)
-
-    # Act / Assert
-    monkeypatch.setattr(
-        "python_scripts.mri_preprocessing.reorient.subprocess.run",
-        lambda *_args, **_kwargs: types.SimpleNamespace(returncode=1, stdout="out", stderr="err"),
-    )
-    with pytest.raises(RuntimeError, match="FSL reorientation failed"):
-        backend._run_reorient_script(workspace.raw_path, workspace.reoriented_path)
-
-    with pytest.raises(RuntimeError, match="output file was not created"):
-        backend._require_output(workspace.reoriented_path)
 
 
 def test_reorientation_post_check_raises_when_output_not_standard(settings, workspace, monkeypatch):

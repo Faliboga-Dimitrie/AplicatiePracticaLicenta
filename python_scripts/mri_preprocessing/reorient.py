@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
 
 from ..project_core.config import Settings
 from ..project_core.domain import MRICase
 from ..project_core.ports import ReorientationResult
 from ..project_core.workspace import CaseWorkspace
+from .docker_fsl import FslDockerRunner
 from .input_checks import OrientationStatus, check_input_orientation
 
 
 class FslReorientationBackend:
     """
-    ReorientationBackend implementation using the existing PowerShell/Docker/FSL
-    wrapper around fslreorient2std.
+    ReorientationBackend implementation using FSL fslreorient2std through
+    Docker.
 
     The backend is responsible only for producing the reoriented image inside the
     provided CaseWorkspace. It does not decide how final artifacts are stored or
@@ -23,6 +23,7 @@ class FslReorientationBackend:
 
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.docker = FslDockerRunner(settings.fsl_docker_image)
 
     def run(self, case: MRICase, workspace: CaseWorkspace) -> ReorientationResult:
         output_path = workspace.reoriented_path
@@ -46,7 +47,7 @@ class FslReorientationBackend:
             )
 
         if orientation.status == OrientationStatus.CAN_REORIENT:
-            self._run_reorient_script(
+            self._run_reorient(
                 input_path=workspace.raw_path,
                 output_path=output_path,
             )
@@ -85,30 +86,16 @@ class FslReorientationBackend:
         shutil.copy2(input_path, output_path)
 
     def _build_command(self, input_path: Path, output_path: Path) -> list[str]:
-        return [
-            "powershell",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(self.settings.reorient_script),
-            "-InputPath",
-            str(input_path),
-            "-OutputPath",
-            str(output_path),
-            "-DockerImage",
-            str(self.settings.fsl_docker_image),
-        ]
+        return self.docker.build_reorient_command(
+            input_path=input_path,
+            output_path=output_path,
+        )
 
-    def _run_reorient_script(self, input_path: Path, output_path: Path) -> None:
+    def _run_reorient(self, input_path: Path, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = self._build_command(input_path, output_path)
 
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = self.docker.run(cmd)
 
         if proc.returncode != 0:
             raise RuntimeError(
@@ -121,7 +108,7 @@ class FslReorientationBackend:
     def _require_output(self, output_path: Path) -> None:
         if not output_path.exists():
             raise RuntimeError(
-                "Reorientation script completed, but output file was not created: "
+                "Reorientation completed, but output file was not created: "
                 f"{output_path}"
             )
 
