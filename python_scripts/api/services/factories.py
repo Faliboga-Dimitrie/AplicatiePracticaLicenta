@@ -36,7 +36,6 @@ def _build_mesh_pipeline_factory(settings_obj: Settings):
             ),
             surface_estimator=TrimeshSurfaceEstimator(),
             mesh_exporter=GlbMeshExporter(),
-            log_timings=False,
         )
 
     return pipeline_factory

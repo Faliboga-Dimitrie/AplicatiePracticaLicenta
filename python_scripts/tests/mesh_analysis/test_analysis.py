@@ -80,7 +80,6 @@ def test_mesh_analysis_pipeline_uses_injected_strategies_and_writes_metrics(sett
         mesh_extractor=FakeMeshExtractor(),
         surface_estimator=FakeSurfaceEstimator(),
         mesh_exporter=FakeMeshExporter(),
-        log_timings=False,
     )
 
     # Act
@@ -141,7 +140,6 @@ def test_mesh_analysis_pipeline_loads_existing_complete_outputs_when_skip_existi
         mesh_extractor=ShouldNotRun(),
         surface_estimator=ShouldNotRun(),
         mesh_exporter=ShouldNotRun(),
-        log_timings=False,
     )
 
     # Act
@@ -158,7 +156,7 @@ def test_mesh_analysis_pipeline_requires_all_fast_pve_outputs(settings, workspac
     # Arrange
     workspace.fast_dir.mkdir(parents=True, exist_ok=True)
     next(iter(workspace.fast_pve_paths.values())).write_text("only one pve", encoding="utf-8")
-    pipeline = MeshAnalysisPipeline(workspace=workspace, settings=settings, log_timings=False)
+    pipeline = MeshAnalysisPipeline(workspace=workspace, settings=settings)
 
     # Act / Assert
     with pytest.raises(FileNotFoundError, match="FAST PVE outputs"):

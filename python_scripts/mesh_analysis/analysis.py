@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 from typing import Mapping
 
@@ -44,7 +43,6 @@ class MeshAnalysisPipeline:
         mesh_extractor: MeshExtractorPort[MeshAnalysisMeshes] | None = None,
         surface_estimator: SurfaceEstimatorPort[MeshAnalysisMeshes] | None = None,
         mesh_exporter: MeshExporterPort[MeshAnalysisMeshes] | None = None,
-        log_timings: bool = True,
     ):
         self.workspace = workspace
         self.settings = settings
@@ -52,7 +50,6 @@ class MeshAnalysisPipeline:
         self.mesh_extractor = mesh_extractor or MarchingCubesMeshExtractor()
         self.surface_estimator = surface_estimator or TrimeshSurfaceEstimator()
         self.mesh_exporter = mesh_exporter or GlbMeshExporter()
-        self.log_timings = log_timings
 
     def run(self) -> MeshAnalysisResult:
         self._validate_inputs()
@@ -62,19 +59,10 @@ class MeshAnalysisPipeline:
             return existing
 
         pve_paths = self.workspace.fast_pve_paths
-
-        t0 = time.perf_counter()
         volumes = self.volume_estimator.compute(pve_paths)
-        t1 = time.perf_counter()
-
         meshes = self.mesh_extractor.extract_all(pve_paths)
-        t2 = time.perf_counter()
-
         surfaces = self.surface_estimator.compute(meshes)
-        t3 = time.perf_counter()
-
         export_result = self.mesh_exporter.export(meshes, self.workspace)
-        t4 = time.perf_counter()
 
         result = MeshAnalysisResult(
             subject_id=self.workspace.subject_id,
@@ -84,12 +72,6 @@ class MeshAnalysisPipeline:
         )
 
         self._write_metrics_json(result, export_result)
-
-        if self.log_timings:
-            print(f"volume computation: {t1 - t0:.3f}s")
-            print(f"mesh build: {t2 - t1:.3f}s")
-            print(f"surface area computation: {t3 - t2:.3f}s")
-            print(f"mesh export: {t4 - t3:.3f}s")
 
         return result
 

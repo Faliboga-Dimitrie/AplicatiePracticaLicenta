@@ -246,7 +246,6 @@ class PublicProcessingService:
             mesh_extractor=MarchingCubesMeshExtractor(),
             surface_estimator=TrimeshSurfaceEstimator(),
             mesh_exporter=GlbMeshExporter(),
-            log_timings=False,
         )
         result = pipeline.run()
 
