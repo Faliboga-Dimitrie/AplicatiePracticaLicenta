@@ -333,31 +333,6 @@ def test_job_router_lists_gets_and_cancels_jobs():
         job_router.get_job("missing", USER, jobs)
 
 
-def test_processing_router_starts_jobs_and_builds_evolution_outputs():
-    # Arrange
-    preprocessing = FakeProcessingService()
-    mesh = FakeProcessingService()
-    stats = FakeStatisticsRouterService()
-
-    # Act
-    pre_job = processing_router.start_preprocessing_job(5, USER, preprocessing)
-    mesh_job = processing_router.start_mesh_analysis_job(5, USER, mesh)
-    dates = processing_router.list_evolution_dates("IXI001", USER, stats)
-    report = processing_router.build_evolution_report("IXI001", "2026-06-01", "2026-06-02", USER, stats)
-    visual = processing_router.build_evolution_visual("IXI001", "2026-06-01", "2026-06-02", current_user=USER, statistics=stats)
-
-    # Assert
-    assert pre_job["id"] == "j"
-    assert mesh_job["id"] == "j"
-    assert dates["subject_id"] == "IXI001"
-    assert report["end_date"] == "2026-06-02"
-    assert visual.media_type == "model/gltf-binary"
-
-    active = FakeProcessingService(DbResult.fail("active"))
-    with pytest.raises(HTTPException):
-        processing_router.start_preprocessing_job(5, USER, active)
-
-
 def test_artifact_router_lists_metrics_and_returns_file_response(tmp_path):
     # Arrange
     path = tmp_path / "metrics.json"

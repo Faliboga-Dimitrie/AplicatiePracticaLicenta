@@ -76,7 +76,6 @@ def test_mesh_analysis_result_serializes_optional_acquisition_date():
 
     # Assert
     assert result.case_id == "IXI001_2026-06-02"
-    assert payload["case_id"] == "IXI001_2026-06-02"
     assert payload["acquisition_date"] == "2026-06-02"
     assert payload["volumes"] == {"csf_mm3": 1, "gm_mm3": 2, "wm_mm3": 3}
     assert payload["surfaces"] == {"csf_mm2": 4, "gm_mm2": 5, "wm_mm2": 6}

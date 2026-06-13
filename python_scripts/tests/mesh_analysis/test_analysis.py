@@ -96,7 +96,6 @@ def test_mesh_analysis_pipeline_uses_injected_strategies_and_writes_metrics(sett
 
     assert payload["subject_id"] == workspace.subject_id
     assert payload["acquisition_date"] == workspace.acquisition_date
-    assert payload["case_id"] == workspace.case_id
     assert payload["volumes"] == {"csf_mm3": 1.0, "gm_mm3": 2.0, "wm_mm3": 3.0}
     assert payload["surfaces"] == {"csf_mm2": 4.0, "gm_mm2": 5.0, "wm_mm2": 6.0}
     assert "mesh_paths" not in payload

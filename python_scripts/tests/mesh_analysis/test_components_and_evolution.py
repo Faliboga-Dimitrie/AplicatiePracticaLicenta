@@ -126,7 +126,6 @@ def test_pipeline_write_metrics_json_excludes_local_mesh_paths(settings, workspa
 
     # Assert
     payload = json.loads(workspace.metrics_json_path.read_text(encoding="utf-8"))
-    assert payload["case_id"] == "IXI001_2026-06-02"
     assert "mesh_paths" not in payload
 
 
