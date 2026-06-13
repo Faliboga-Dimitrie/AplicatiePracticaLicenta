@@ -71,12 +71,11 @@ class FullProcessingService:
         if case_result.data is None:
             return DbResult.ok(None)
 
-        for job_type in (self.JOB_TYPE, "preprocessing", "mesh_analysis"):
-            active = self.jobs.active_for_case_type(case_id=case_id, job_type=job_type)
-            if not active.success:
-                return DbResult.fail(active.error or "Could not check active processing jobs.")
-            if active.data is not None:
-                return DbResult.fail(self.ACTIVE_JOB_MESSAGE)
+        active = self.jobs.active_for_case_type(case_id=case_id, job_type=self.JOB_TYPE)
+        if not active.success:
+            return DbResult.fail(active.error or "Could not check active processing jobs.")
+        if active.data is not None:
+            return DbResult.fail(self.ACTIVE_JOB_MESSAGE)
 
         case = case_result.data
         workspace = case.workspace

@@ -39,7 +39,7 @@ def get_job(
     Poll one job status.
 
     This is the endpoint React will call every few seconds after starting a
-    preprocessing or mesh-analysis job.
+    processing job.
     """
     result = jobs.get_for_user(current_user, job_id)
     if not result.success:
@@ -58,8 +58,8 @@ def cancel_job(
     """
     Soft-cancel a job.
 
-    This only marks cancellation as requested. A running preprocessing/mesh
-    service must periodically check job.cancel_requested for true cancellation.
+    This only marks cancellation as requested. A running processing service must
+    periodically check job.cancel_requested for true cancellation.
     """
     result = jobs.cancel_for_user(current_user, job_id)
     if not result.success:

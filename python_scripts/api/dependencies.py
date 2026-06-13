@@ -16,8 +16,6 @@ from .services import (
     CaseService,
     JobService,
     FullProcessingService,
-    MeshAnalysisService,
-    PreprocessingService,
     PublicProcessingService,
     StatisticsService,
     SubjectService,
@@ -25,8 +23,6 @@ from .services import (
     build_default_artifact_service,
     build_default_full_processing_service,
     build_default_job_service,
-    build_default_mesh_analysis_service,
-    build_default_preprocessing_service,
     build_default_statistics_service,
     build_default_token_service,
 )
@@ -75,22 +71,10 @@ def get_subject_service(
     return SubjectService(access)
 
 
-
 def get_case_service(
     access: AccessControlService = Depends(get_access_service),
 ) -> CaseService:
     return CaseService(access)
-
-
-def get_preprocessing_service(
-    cases: CaseService = Depends(get_case_service),
-    jobs: JobService = Depends(get_job_service),
-) -> PreprocessingService:
-    return build_default_preprocessing_service(
-        cases=cases,
-        jobs=jobs,
-        settings_obj=settings,
-    )
 
 
 def get_full_processing_service(
@@ -102,18 +86,6 @@ def get_full_processing_service(
         jobs=jobs,
         settings_obj=settings,
     )
-
-
-def get_mesh_analysis_service(
-    cases: CaseService = Depends(get_case_service),
-    jobs: JobService = Depends(get_job_service),
-) -> MeshAnalysisService:
-    return build_default_mesh_analysis_service(
-        cases=cases,
-        jobs=jobs,
-        settings_obj=settings,
-    )
-
 
 
 @lru_cache

@@ -10,8 +10,6 @@ from .auth import TokenService
 from .cases import CaseService
 from .jobs import JobService
 from .full_processing import FullProcessingService
-from .mesh_analysis import MeshAnalysisService
-from .preprocessing import PreprocessingService
 from .public_processing import PublicProcessingService
 from .statistics import StatisticsService
 
@@ -39,57 +37,6 @@ def _build_mesh_pipeline_factory(settings_obj: Settings):
         )
 
     return pipeline_factory
-
-
-def build_default_preprocessing_service(
-    *,
-    cases: CaseService,
-    jobs: JobService,
-    settings_obj: Settings = project_settings,
-) -> PreprocessingService:
-    # Local imports keep lightweight API modules importable even before the
-    # scientific stack is touched. The concrete backends are only needed when
-    # FastAPI builds the preprocessing dependency.
-    from ...mri_preprocessing.reorient import FslReorientationBackend
-    from ...mri_preprocessing.segmentation import FslFastSegmentationBackend
-    from ...mri_preprocessing.skull_strip import HdBetSkullStripBackend
-
-    return PreprocessingService(
-        cases=cases,
-        jobs=jobs,
-        workspace_provider=FileSystemWorkspaceProvider(settings_obj),
-        reorientation_backend=FslReorientationBackend(settings_obj),
-        skull_strip_backend=HdBetSkullStripBackend(settings_obj),
-        segmentation_backend=FslFastSegmentationBackend(settings_obj),
-        settings_obj=settings_obj,
-    )
-
-
-def build_default_mesh_analysis_service(
-    *,
-    cases: CaseService,
-    jobs: JobService,
-    settings_obj: Settings = project_settings,
-) -> MeshAnalysisService:
-    pipeline_factory = _build_mesh_pipeline_factory(settings_obj)
-
-    workspace_provider = FileSystemWorkspaceProvider(
-        settings_obj,
-        create_directories=False,
-    )
-
-    return MeshAnalysisService(
-        cases=cases,
-        jobs=jobs,
-        workspace_provider=workspace_provider,
-        pipeline_factory=pipeline_factory,
-        artifacts=ArtifactService(
-            cases=cases,
-            workspace_provider=workspace_provider,
-        ),
-        settings_obj=settings_obj,
-    )
-
 
 
 def build_default_full_processing_service(
@@ -144,7 +91,6 @@ def build_default_artifact_service(
     )
 
 
-
 def build_default_statistics_service(
     *,
     cases: CaseService,
@@ -182,8 +128,6 @@ __all__ = [
     "build_default_artifact_service",
     "build_default_full_processing_service",
     "build_default_job_service",
-    "build_default_mesh_analysis_service",
-    "build_default_preprocessing_service",
     "build_default_statistics_service",
     "build_default_public_processing_service",
     "build_default_token_service",

@@ -82,14 +82,14 @@ class JobService:
     """
     In-memory background job service for React-friendly long tasks.
 
-    The service is intentionally generic. It does not know what preprocessing or
-    mesh analysis means. Domain services will create jobs like this:
+    The service is intentionally generic. It does not know what MRI processing
+    means. Domain services create jobs by passing a type, case id and handler:
 
         jobs.start(
             user=user,
-            job_type="preprocessing",
+            job_type="full_processing",
             case_id=case.id,
-            handler=lambda ctx: preprocessing_runner.run(case, ctx),
+            handler=lambda ctx: processing_runner.run(case, ctx),
         )
 
     React receives the returned job id immediately and polls GET /jobs/{job_id}.

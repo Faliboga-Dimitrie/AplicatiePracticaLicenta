@@ -8,9 +8,7 @@ from ...access_control.utils import UNSET
 
 CASE_BUSY_STATUSES = {
     "processing_queued",
-    "preprocessing_queued",
     "preprocessing",
-    "mesh_queued",
     "mesh_analysis",
 }
 
