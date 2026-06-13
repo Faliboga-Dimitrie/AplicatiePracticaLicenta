@@ -7,7 +7,6 @@ from typing import Mapping
 from ..project_core import (
     CaseWorkspace,
     MeshAnalysisResult,
-    MeshExportResult,
     MeshExporter as MeshExporterPort,
     MeshExtractor as MeshExtractorPort,
     Settings,
@@ -62,7 +61,7 @@ class MeshAnalysisPipeline:
         volumes = self.volume_estimator.compute(pve_paths)
         meshes = self.mesh_extractor.extract_all(pve_paths)
         surfaces = self.surface_estimator.compute(meshes)
-        export_result = self.mesh_exporter.export(meshes, self.workspace)
+        self.mesh_exporter.export(meshes, self.workspace)
 
         result = MeshAnalysisResult(
             subject_id=self.workspace.subject_id,
@@ -71,7 +70,7 @@ class MeshAnalysisPipeline:
             acquisition_date=self.workspace.acquisition_date,
         )
 
-        self._write_metrics_json(result, export_result)
+        self._write_metrics_json(result)
 
         return result
 
@@ -137,18 +136,12 @@ class MeshAnalysisPipeline:
     def _write_metrics_json(
         self,
         result: MeshAnalysisResult,
-        export_result: MeshExportResult,
     ) -> None:
         payload = result.to_dict()
-        payload["mesh_paths"] = _stringify_paths(export_result.mesh_paths)
 
         self.workspace.metrics_json_path.parent.mkdir(parents=True, exist_ok=True)
         with self.workspace.metrics_json_path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
-
-
-def _stringify_paths(paths: Mapping[str, Path]) -> dict[str, str]:
-    return {name: str(path) for name, path in paths.items()}
 
 
 __all__ = ["MeshAnalysisPipeline"]

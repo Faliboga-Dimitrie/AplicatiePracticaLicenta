@@ -7,7 +7,7 @@ import pytest
 
 from python_scripts.mesh_analysis.analysis import MeshAnalysisPipeline
 from python_scripts.mesh_analysis.volume_estimators import PveSumVolumeEstimator
-from python_scripts.project_core import MeshExportResult, TissueSurfaces, TissueVolumes
+from python_scripts.project_core import TissueSurfaces, TissueVolumes
 
 
 class FakeImage:
@@ -71,7 +71,6 @@ def test_mesh_analysis_pipeline_uses_injected_strategies_and_writes_metrics(sett
             export_workspace.mesh_dir.mkdir(parents=True, exist_ok=True)
             for path in export_workspace.mesh_paths.values():
                 path.write_text("mesh", encoding="utf-8")
-            return MeshExportResult(mesh_paths=export_workspace.mesh_paths)
 
     pipeline = MeshAnalysisPipeline(
         workspace=workspace,
@@ -100,7 +99,7 @@ def test_mesh_analysis_pipeline_uses_injected_strategies_and_writes_metrics(sett
     assert payload["case_id"] == workspace.case_id
     assert payload["volumes"] == {"csf_mm3": 1.0, "gm_mm3": 2.0, "wm_mm3": 3.0}
     assert payload["surfaces"] == {"csf_mm2": 4.0, "gm_mm2": 5.0, "wm_mm2": 6.0}
-    assert set(payload["mesh_paths"]) == {"csf", "gm", "wm"}
+    assert "mesh_paths" not in payload
 
 
 def test_mesh_analysis_pipeline_loads_existing_complete_outputs_when_skip_existing(settings, workspace):

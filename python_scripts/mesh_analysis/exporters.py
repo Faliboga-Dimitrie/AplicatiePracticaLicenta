@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Mapping
 
 import numpy as np
 import trimesh
 import trimesh.visual.material
 
-from ..project_core import CaseWorkspace, MeshExportResult
+from ..project_core import CaseWorkspace
 from .models import MeshAnalysisMeshes, TissueMeshes
 
 
@@ -50,20 +49,15 @@ class GlbMeshExporter:
         self,
         meshes: MeshAnalysisMeshes,
         workspace: CaseWorkspace,
-    ) -> MeshExportResult:
-
+    ) -> None:
         solid_meshes = meshes.solid
-        mesh_paths = self._export_solid_meshes(solid_meshes, workspace)
-
-        return MeshExportResult(mesh_paths=mesh_paths)
+        self._export_solid_meshes(solid_meshes, workspace)
 
     def _export_solid_meshes(
         self,
         meshes: TissueMeshes,
         workspace: CaseWorkspace,
-    ) -> dict[str, Path]:
-        exported: dict[str, Path] = {}
-
+    ) -> None:
         for tissue, mesh in meshes.as_dict().items():
             out_path = workspace.mesh_paths[tissue]
             export_mesh = mesh.copy()
@@ -75,9 +69,6 @@ class GlbMeshExporter:
             )
 
             export_mesh.export(str(out_path), file_type="glb")
-            exported[tissue] = out_path
-
-        return exported
 
 
     def _apply_view_transform(self, mesh: trimesh.Trimesh) -> None:

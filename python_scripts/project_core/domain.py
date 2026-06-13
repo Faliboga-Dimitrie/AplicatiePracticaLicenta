@@ -259,7 +259,6 @@ class MeshAnalysisResult:
         }
         if self.acquisition_date is not None:
             payload["acquisition_date"] = self.acquisition_date
-            payload["case_id"] = self.case_id
         return payload
 
 

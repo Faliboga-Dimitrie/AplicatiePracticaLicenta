@@ -47,17 +47,6 @@ class SegmentationResult:
     pve_paths: Mapping[str, Path]
 
 
-@dataclass(frozen=True)
-class MeshExportResult:
-    """
-    Result produced by a mesh exporter.
-
-    mesh_paths contains the final exported solid mesh files.
-    """
-
-    mesh_paths: Mapping[str, Path]
-
-
 # The concrete mesh representation is intentionally not defined in project_core.
 MeshCollectionT_co = TypeVar("MeshCollectionT_co", covariant=True)
 MeshCollectionT_contra = TypeVar("MeshCollectionT_contra", contravariant=True)
@@ -154,7 +143,7 @@ class MeshExporter(Protocol, Generic[MeshCollectionT_contra]):
         self,
         meshes: MeshCollectionT_contra,
         workspace: CaseWorkspace,
-    ) -> MeshExportResult:
+    ) -> None:
         ...
 
 
@@ -216,7 +205,6 @@ __all__ = [
     "ReorientationResult",
     "SkullStripResult",
     "SegmentationResult",
-    "MeshExportResult",
     "WorkspaceProvider",
     "ReorientationBackend",
     "SkullStripBackend",

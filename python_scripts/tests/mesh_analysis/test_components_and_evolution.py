@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import trimesh
 
-from python_scripts.mesh_analysis.analysis import MeshAnalysisPipeline, _stringify_paths
+from python_scripts.mesh_analysis.analysis import MeshAnalysisPipeline
 from python_scripts.mesh_analysis.evolution_in_time import (
     EvolutionMriArtifacts,
     MriEvolutionInTime,
@@ -35,7 +35,7 @@ from python_scripts.mesh_analysis.mesh_extractors import MarchingCubesConfig, Ma
 from python_scripts.mesh_analysis.models import MeshAnalysisMeshes, TissueMeshes
 from python_scripts.mesh_analysis.surface_estimators import TrimeshSurfaceEstimator
 from python_scripts.mesh_analysis.volume_estimators import PveSumVolumeEstimator
-from python_scripts.project_core import MeshAnalysisResult, MeshExportResult, TissueSurfaces, TissueVolumes
+from python_scripts.project_core import MeshAnalysisResult, TissueSurfaces, TissueVolumes
 
 
 class FakeImage:
@@ -116,20 +116,18 @@ def test_pipeline_loads_old_typo_acquisition_date_for_backward_compatibility(set
     assert result.volumes.gm_mm3 == 2
 
 
-def test_pipeline_write_metrics_json_includes_mesh_paths(settings, workspace):
+def test_pipeline_write_metrics_json_excludes_local_mesh_paths(settings, workspace):
     # Arrange
     pipeline = MeshAnalysisPipeline(workspace, settings)
     result = MeshAnalysisResult("IXI001", TissueVolumes(1, 2, 3), TissueSurfaces(4, 5, 6), "2026-06-02")
-    export_result = MeshExportResult(mesh_paths={"gm": workspace.mesh_paths["gm"]})
 
     # Act
-    pipeline._write_metrics_json(result, export_result)
+    pipeline._write_metrics_json(result)
 
     # Assert
     payload = json.loads(workspace.metrics_json_path.read_text(encoding="utf-8"))
     assert payload["case_id"] == "IXI001_2026-06-02"
-    assert payload["mesh_paths"] == {"gm": str(workspace.mesh_paths["gm"])}
-    assert _stringify_paths({"x": workspace.metrics_json_path}) == {"x": str(workspace.metrics_json_path)}
+    assert "mesh_paths" not in payload
 
 
 def test_volume_estimator_compute_loads_all_tissues(monkeypatch, tmp_path):
@@ -208,8 +206,8 @@ def test_glb_exporter_writes_each_mesh_and_applies_material(workspace):
     result = exporter.export(meshes, workspace)
 
     # Assert
-    assert set(result.mesh_paths) == {"csf", "gm", "wm"}
-    assert all(path.exists() for path in result.mesh_paths.values())
+    assert result is None
+    assert all(path.exists() for path in workspace.mesh_paths.values())
 
 
 def test_glb_exporter_applies_scale_transform_when_configured():
