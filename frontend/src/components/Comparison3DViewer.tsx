@@ -8,13 +8,15 @@ import type { ViewerTransform } from './ViewerTransformControls'
 
 type TransformTarget = 'unchanged' | 'changed'
 type LayerKind = 'unchanged' | 'changed'
+type ComparisonVariant = 'changedUnchanged' | 'beforeAfter'
+type ComparisonLayerLabels = Record<LayerKind, string>
 type ComparisonTransforms = Record<TransformTarget, ViewerTransform>
 type ComparisonLayerControls = Record<LayerKind, { opacity: number }>
 
-const transformTargetOptions: Array<{ value: TransformTarget; label: string }> = [
-  { value: 'unchanged', label: 'Unchanged layer' },
-  { value: 'changed', label: 'Changed layer' },
-]
+const defaultLayerLabels: ComparisonLayerLabels = {
+  unchanged: 'Unchanged layer',
+  changed: 'Changed layer',
+}
 
 const sideBySideOffsets: Record<LayerKind, number> = {
   unchanged: -110,
@@ -65,8 +67,15 @@ function AutoRotateGroup({
   return <group ref={groupRef}>{children}</group>
 }
 
-function classifyLayer(name: string): LayerKind | null {
+function classifyLayer(name: string, variant: ComparisonVariant): LayerKind | null {
   const lower = name.toLowerCase()
+
+  if (variant === 'beforeAfter') {
+    if (lower.includes('before') || lower.includes('baseline')) return 'unchanged'
+    if (lower.includes('after') || lower.includes('target')) return 'changed'
+    return null
+  }
+
   if (lower.includes('unchanged')) return 'unchanged'
   if (lower.includes('changed')) return 'changed'
   return null
@@ -123,6 +132,7 @@ function ComparisonScene({
   layerControls,
   backgroundColor,
   overlapping,
+  variant,
 }: {
   objectUrl: string
   unchangedColor: string
@@ -133,6 +143,7 @@ function ComparisonScene({
   layerControls: ComparisonLayerControls
   backgroundColor: string
   overlapping: boolean
+  variant: ComparisonVariant
 }) {
   const gltf = useGLTF(objectUrl)
 
@@ -144,7 +155,7 @@ function ComparisonScene({
     gltf.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.LineSegments)) return
 
-      const layer = classifyLayer(object.name)
+      const layer = classifyLayer(object.name, variant)
       if (!layer) return
 
       const clone = object.clone()
@@ -159,7 +170,7 @@ function ComparisonScene({
     applyGroupStyle(changed, changedColor, layerControls.changed.opacity)
 
     return { unchangedGroup: unchanged, changedGroup: changed }
-  }, [changedColor, gltf.scene, layerControls.changed.opacity, layerControls.unchanged.opacity, unchangedColor])
+  }, [changedColor, gltf.scene, layerControls.changed.opacity, layerControls.unchanged.opacity, unchangedColor, variant])
 
   useEffect(() => {
     return () => {
@@ -210,6 +221,8 @@ export function Comparison3DViewer({
   isLoading = false,
   error = null,
   onReload,
+  variant = 'changedUnchanged',
+  layerLabels = defaultLayerLabels,
 }: {
   objectUrl: string | null
   title: string
@@ -218,6 +231,8 @@ export function Comparison3DViewer({
   isLoading?: boolean
   error?: string | null
   onReload?: () => void
+  variant?: ComparisonVariant
+  layerLabels?: ComparisonLayerLabels
 }) {
   const [unchangedColor, setUnchangedColor] = useState('#508cff')
   const [changedColor, setChangedColor] = useState('#ff2d2d')
@@ -228,6 +243,10 @@ export function Comparison3DViewer({
   const [activeTransformTarget, setActiveTransformTarget] = useState<TransformTarget>('unchanged')
   const [backgroundColor, setBackgroundColor] = useState('#000000')
   const [resetSignal, setResetSignal] = useState(0)
+  const transformTargetOptions = useMemo<Array<{ value: TransformTarget; label: string }>>(() => [
+    { value: 'unchanged', label: layerLabels.unchanged },
+    { value: 'changed', label: layerLabels.changed },
+  ], [layerLabels])
 
   function updateTransform(target: TransformTarget, transform: ViewerTransform) {
     setTransforms((current) => ({ ...current, [target]: transform }))
@@ -271,18 +290,18 @@ export function Comparison3DViewer({
 
         <div className="stack compact-stack">
           <p className="muted small-note">
-            {overlapping ? 'Changed and unchanged layers overlap. Use opacity to control layer strength.' : 'Changed and unchanged layers are side by side. Use opacity to control each layer independently.'}
+            {overlapping ? `${layerLabels.unchanged} and ${layerLabels.changed} overlap. Use opacity to control layer strength.` : `${layerLabels.unchanged} and ${layerLabels.changed} are side by side. Use opacity to control each layer independently.`}
           </p>
           <label className="inline-field">
-            Unchanged color
+            {layerLabels.unchanged} color
             <input type="color" value={unchangedColor} onChange={(event) => setUnchangedColor(event.target.value)} />
           </label>
           <label className="inline-field">
-            Changed color
+            {layerLabels.changed} color
             <input type="color" value={changedColor} onChange={(event) => setChangedColor(event.target.value)} />
           </label>
           <label className="range-label">
-            Unchanged opacity {Math.round(layerControls.unchanged.opacity * 100)}%
+            {layerLabels.unchanged} opacity {Math.round(layerControls.unchanged.opacity * 100)}%
             <input
               type="range"
               min="0"
@@ -293,7 +312,7 @@ export function Comparison3DViewer({
             />
           </label>
           <label className="range-label">
-            Changed opacity {Math.round(layerControls.changed.opacity * 100)}%
+            {layerLabels.changed} opacity {Math.round(layerControls.changed.opacity * 100)}%
             <input
               type="range"
               min="0"
@@ -343,6 +362,7 @@ export function Comparison3DViewer({
             layerControls={layerControls}
             backgroundColor={backgroundColor}
             overlapping={overlapping}
+            variant={variant}
           />
         )}
         {!isLoading && !error && !objectUrl && <div className="viewer-empty-state"><p className="muted">No comparison loaded yet.</p></div>}

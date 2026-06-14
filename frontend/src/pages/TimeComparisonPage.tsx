@@ -92,25 +92,35 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const [error, setError] = useState<string | null>(null)
   const [visualOpen, setVisualOpen] = useState(false)
   const [visualObjectUrl, setVisualObjectUrl] = useState<string | null>(null)
+  const [changedRegionObjectUrl, setChangedRegionObjectUrl] = useState<string | null>(null)
   const [lastVisualSignature, setLastVisualSignature] = useState<string | null>(null)
   const [isLoadingVisual, setIsLoadingVisual] = useState(false)
   const [visualError, setVisualError] = useState<string | null>(null)
+  const [changedRegionError, setChangedRegionError] = useState<string | null>(null)
   const [comparisonHelpOpen, setComparisonHelpOpen] = useState(false)
   const visualObjectUrlRef = useRef<string | null>(null)
+  const changedRegionObjectUrlRef = useRef<string | null>(null)
 
-  const clearVisualObjectUrl = useCallback(() => {
+  const clearVisualObjectUrls = useCallback(() => {
     if (visualObjectUrlRef.current) {
       URL.revokeObjectURL(visualObjectUrlRef.current)
       visualObjectUrlRef.current = null
+    }
+    if (changedRegionObjectUrlRef.current) {
+      URL.revokeObjectURL(changedRegionObjectUrlRef.current)
+      changedRegionObjectUrlRef.current = null
     }
   }, [])
 
   const resetVisualComparison = useCallback(() => {
     setVisualOpen(false)
     setVisualObjectUrl(null)
+    setChangedRegionObjectUrl(null)
     setLastVisualSignature(null)
-    clearVisualObjectUrl()
-  }, [clearVisualObjectUrl])
+    setVisualError(null)
+    setChangedRegionError(null)
+    clearVisualObjectUrls()
+  }, [clearVisualObjectUrls])
 
   useEffect(() => {
     let cancelled = false
@@ -155,7 +165,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     loadDates()
   }, [loadDates])
 
-  useEffect(() => () => clearVisualObjectUrl(), [clearVisualObjectUrl])
+  useEffect(() => () => clearVisualObjectUrls(), [clearVisualObjectUrls])
 
   const readyDates = useMemo(() => dateEntries.filter((entry) => entry.ready_for_json), [dateEntries])
   const visualRequestSignature = useMemo(() => {
@@ -189,30 +199,55 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     if (!report || !selectedSubjectId || !visualRequestSignature) return
     setIsLoadingVisual(true)
     setVisualError(null)
+    setChangedRegionError(null)
+
+    let comparisonUrl: string | null = null
+    let changedRegionUrl: string | null = null
+    let comparisonLoadError: string | null = null
+    let changedRegionLoadError: string | null = null
+
     try {
-      const objectUrl = await createEvolutionVisualComparisonObjectUrl({
+      comparisonUrl = await createEvolutionVisualComparisonObjectUrl({
         subjectId: selectedSubjectId,
         startDate: report.start_date,
         endDate: report.end_date,
         targetDate: report.end_date,
         tissue: selectedTissue,
         comparisonMethod,
+        visualMode: 'changed_unchanged',
         pveThreshold,
         distanceThresholdMm,
       })
-      clearVisualObjectUrl()
-      visualObjectUrlRef.current = objectUrl
-      setVisualObjectUrl(objectUrl)
-      setLastVisualSignature(visualRequestSignature)
     } catch (loadError) {
-      setVisualObjectUrl(null)
-      setLastVisualSignature(null)
-      clearVisualObjectUrl()
-      setVisualError(apiMessage(loadError))
-    } finally {
-      setIsLoadingVisual(false)
+      comparisonLoadError = apiMessage(loadError)
     }
-  }, [clearVisualObjectUrl, report, selectedTissue, selectedSubjectId, comparisonMethod, pveThreshold, distanceThresholdMm, visualRequestSignature])
+
+    try {
+      changedRegionUrl = await createEvolutionVisualComparisonObjectUrl({
+        subjectId: selectedSubjectId,
+        startDate: report.start_date,
+        endDate: report.end_date,
+        targetDate: report.end_date,
+        tissue: selectedTissue,
+        comparisonMethod,
+        visualMode: 'changed_region_before_after',
+        pveThreshold,
+        distanceThresholdMm,
+      })
+    } catch (loadError) {
+      changedRegionLoadError = apiMessage(loadError)
+    }
+
+    clearVisualObjectUrls()
+    visualObjectUrlRef.current = comparisonUrl
+    changedRegionObjectUrlRef.current = changedRegionUrl
+    setVisualObjectUrl(comparisonUrl)
+    setChangedRegionObjectUrl(changedRegionUrl)
+    setVisualError(comparisonLoadError)
+    setChangedRegionError(changedRegionLoadError)
+    setLastVisualSignature(comparisonUrl || changedRegionUrl ? visualRequestSignature : null)
+    setIsLoadingVisual(false)
+  }, [clearVisualObjectUrls, report, selectedTissue, selectedSubjectId, comparisonMethod, pveThreshold, distanceThresholdMm, visualRequestSignature])
 
   function handleOpenVisualComparison() {
     if (!report || !canOpenVisualComparison) return
@@ -395,11 +430,24 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                 objectUrl={visualObjectUrl}
                 title="Visual comparison"
                 subtitle={comparisonMethod === 'pve'
-                  ? `Shows areas of tissue-probability change for ${tissueLabel(selectedTissue)}. Sensitivity: ${pveThreshold}.`
-                  : `Shows areas where the ${tissueLabel(selectedTissue)} surface changed by more than ${distanceThresholdMm} mm.`}
+                  ? `Shows unchanged versus changed ${tissueLabel(selectedTissue)} areas using tissue-probability differences. Sensitivity: ${pveThreshold}.`
+                  : `Shows unchanged versus changed ${tissueLabel(selectedTissue)} surface areas using a ${distanceThresholdMm} mm distance threshold.`}
                 loadingText="Building visual comparison..."
                 isLoading={isLoadingVisual}
                 error={visualError}
+              />
+
+              <Comparison3DViewer
+                objectUrl={changedRegionObjectUrl}
+                title="Changed region before / after"
+                subtitle={comparisonMethod === 'pve'
+                  ? `Shows only the detected changed ${tissueLabel(selectedTissue)} region, once from ${report.baseline_date} and once from ${report.end_date}.`
+                  : `Shows only the ${tissueLabel(selectedTissue)} surface parts that moved more than ${distanceThresholdMm} mm, before and after.`}
+                loadingText="Building changed-region before/after view..."
+                isLoading={isLoadingVisual}
+                error={changedRegionError}
+                variant="beforeAfter"
+                layerLabels={{ unchanged: 'Before region', changed: 'After region' }}
               />
             </Suspense>
           )}
@@ -412,6 +460,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <p>
               Visual comparison highlights the selected tissue between the baseline scan and the target scan.
               Unchanged areas use the baseline color, while detected changes use the change color.
+              The changed-region before/after view then uses the same detected-change mask to show only that region in the baseline scan and in the target scan.
             </p>
             <article>
               <h3>Tissue probability</h3>

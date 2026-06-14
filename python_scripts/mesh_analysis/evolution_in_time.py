@@ -31,9 +31,13 @@ from .evolution_models import (
 from .evolution_visuals import (
     _ComparisonColors,
     _add_comparison_layers,
+    _add_before_after_layers,
     _apply_rgba,
     _apply_shared_view_transform,
     _build_nearest_distance_visual_glb,
+    _build_changed_region_before_after_glb,
+    _build_pve_changed_region_before_after_glb,
+    _build_nearest_distance_changed_region_before_after_glb,
     _build_pve_difference_visual_glb,
     _combined_geometry_center,
     _export_scene_to_glb_bytes,
@@ -44,6 +48,7 @@ from .evolution_visuals import (
     _load_pve_image,
     _load_resampling_template,
     _pve_data_to_mesh,
+    _pve_data_to_mesh_or_none,
     _reference_for_volume_change,
     _require_visual_inputs,
     _resample_pve_data_to_template,
@@ -173,19 +178,17 @@ class MriEvolutionInTime:
         changed_color: str = "#ff2d2d",
         marching_cubes_step_size: int = 1,
         template_path: Path | str | None = None,
+        visual_mode: str = "changed_unchanged",
     ) -> bytes:
         """
         Return an in-memory GLB comparing baseline and target acquisitions.
 
-        The exported GLB contains one reference surface split into two mesh
-        layers:
-        * unchanged_<reference>_<tissue>_mesh
-        * changed_<reference>_<tissue>_mesh
-
-        The reference is normally the baseline mesh. If the tissue volume
-        increased, the target mesh is used instead so growth can be shown on the
-        larger object. The frontend can recolor and change opacity for each layer
-        without rebuilding the GLB.
+        By default, the exported GLB contains one reference surface split into
+        unchanged and changed layers. When visual_mode is
+        "changed_region_before_after", the exported GLB contains only the
+        detected changed region, once from the baseline acquisition and once from
+        the target acquisition. The frontend can recolor and change opacity for
+        each layer without rebuilding the GLB.
         """
         selected = self._selected_mris()
         target = self._get_target_visual_mri(selected, target_date)
@@ -200,6 +203,7 @@ class MriEvolutionInTime:
             changed_color=changed_color,
             marching_cubes_step_size=marching_cubes_step_size,
             template_path=template_path,
+            visual_mode=visual_mode,
         )
 
     # ------------------------------------------------------------------

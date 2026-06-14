@@ -81,10 +81,11 @@ def build_evolution_visual(
     baseline_color: str = "#508cff",
     changed_color: str = "#ff2d2d",
     marching_cubes_step_size: int = 1,
+    visual_mode: str = "changed_unchanged",
     current_user: UserRecord = Depends(get_current_user),
     statistics: StatisticsService = Depends(get_statistics_service),
 ):
-    """Return an in-memory GLB comparing baseline and target PVE maps."""
+    """Return an in-memory GLB for one time-comparison visualization."""
     result = statistics.evolution_visual_for_subject(
         current_user,
         subject_id,
@@ -98,6 +99,7 @@ def build_evolution_visual(
         baseline_color=baseline_color,
         changed_color=changed_color,
         marching_cubes_step_size=marching_cubes_step_size,
+        visual_mode=visual_mode,
     )
     glb_bytes = unwrap_result(
         result,

@@ -39,6 +39,7 @@ def build_visual_comparison_glb(
     changed_color: str = "#ff2d2d",
     marching_cubes_step_size: int = 1,
     template_path: Path | str | None = None,
+    visual_mode: str = "changed_unchanged",
 ) -> bytes:
     """
     Return an in-memory GLB comparing baseline and target acquisitions.
@@ -64,6 +65,16 @@ def build_visual_comparison_glb(
     if method not in {"pve", "nearest_distance"}:
         raise ValueError("comparison_method must be either 'pve' or 'nearest_distance'.")
 
+    mode = visual_mode.strip().lower().replace("-", "_")
+    if mode in {"comparison", "default"}:
+        mode = "changed_unchanged"
+    if mode in {"before_after", "changed_region"}:
+        mode = "changed_region_before_after"
+    if mode not in {"changed_unchanged", "changed_region_before_after"}:
+        raise ValueError(
+            "visual_mode must be either 'changed_unchanged' or 'changed_region_before_after'."
+        )
+
     pve_threshold = float(pve_threshold)
     if not (0.0 <= pve_threshold <= 1.0):
         raise ValueError("pve_threshold must be between 0.0 and 1.0.")
@@ -82,6 +93,26 @@ def build_visual_comparison_glb(
         baseline_color=baseline_color,
         changed_color=changed_color,
     )
+
+    if mode == "changed_region_before_after":
+        return _build_changed_region_before_after_glb(
+            baseline=baseline,
+            target=target,
+            selected_tissues=selected_tissues,
+            comparison_method=method,
+            pve_threshold=pve_threshold,
+            distance_threshold_mm=distance_threshold_mm,
+            colors=colors,
+            marching_cubes_step_size=marching_cubes_step_size,
+            nib_module=nib,
+            trimesh_module=trimesh,
+            numpy_module=np,
+            apply_affine_fn=apply_affine,
+            marching_cubes_fn=marching_cubes,
+            resample_from_to_fn=resample_from_to,
+            cKDTree_cls=cKDTree,
+            template_path=Path(template_path) if template_path is not None else settings.mni_template_path,
+        )
 
     if method == "nearest_distance":
         return _build_nearest_distance_visual_glb(
@@ -289,6 +320,295 @@ def _build_nearest_distance_visual_glb(
     if not added_geometry:
         raise ValueError("No nearest-distance comparison mesh could be built.")
     return _export_scene_to_glb_bytes(scene)
+
+
+def _build_changed_region_before_after_glb(
+    *,
+    baseline: EvolutionMriArtifacts,
+    target: EvolutionMriArtifacts,
+    selected_tissues: Sequence[str],
+    comparison_method: str,
+    pve_threshold: float,
+    distance_threshold_mm: float,
+    colors: _ComparisonColors,
+    marching_cubes_step_size: int,
+    nib_module: Any,
+    trimesh_module: Any,
+    numpy_module: Any,
+    apply_affine_fn: Any,
+    marching_cubes_fn: Any,
+    resample_from_to_fn: Any,
+    cKDTree_cls: Any,
+    template_path: Path,
+) -> bytes:
+    if comparison_method == "nearest_distance":
+        return _build_nearest_distance_changed_region_before_after_glb(
+            baseline=baseline,
+            target=target,
+            selected_tissues=selected_tissues,
+            distance_threshold_mm=distance_threshold_mm,
+            colors=colors,
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+            cKDTree_cls=cKDTree_cls,
+        )
+
+    return _build_pve_changed_region_before_after_glb(
+        baseline=baseline,
+        target=target,
+        selected_tissues=selected_tissues,
+        pve_threshold=pve_threshold,
+        colors=colors,
+        marching_cubes_step_size=marching_cubes_step_size,
+        nib_module=nib_module,
+        trimesh_module=trimesh_module,
+        numpy_module=numpy_module,
+        apply_affine_fn=apply_affine_fn,
+        marching_cubes_fn=marching_cubes_fn,
+        resample_from_to_fn=resample_from_to_fn,
+        template_path=template_path,
+    )
+
+
+def _build_pve_changed_region_before_after_glb(
+    *,
+    baseline: EvolutionMriArtifacts,
+    target: EvolutionMriArtifacts,
+    selected_tissues: Sequence[str],
+    pve_threshold: float,
+    colors: _ComparisonColors,
+    marching_cubes_step_size: int,
+    nib_module: Any,
+    trimesh_module: Any,
+    numpy_module: Any,
+    apply_affine_fn: Any,
+    marching_cubes_fn: Any,
+    resample_from_to_fn: Any,
+    template_path: Path,
+) -> bytes:
+    _require_visual_inputs(
+        (baseline, target),
+        selected_tissues=selected_tissues,
+        error_prefix="Cannot build changed-region before/after GLB",
+        include_pves=True,
+    )
+
+    template_img = _load_resampling_template(template_path, nib_module=nib_module)
+    template_target = (template_img.shape[:3], template_img.affine)
+    scene = trimesh_module.Scene()
+    added_geometry = False
+
+    for tissue in selected_tissues:
+        baseline_img, _baseline_original_data = _load_pve_image(
+            baseline.pve_paths[tissue],
+            nib_module=nib_module,
+            numpy_module=numpy_module,
+        )
+        target_img, _target_original_data = _load_pve_image(
+            target.pve_paths[tissue],
+            nib_module=nib_module,
+            numpy_module=numpy_module,
+        )
+        baseline_data = _resample_pve_data_to_template(
+            baseline_img,
+            target=template_target,
+            resample_from_to_fn=resample_from_to_fn,
+            numpy_module=numpy_module,
+        )
+        target_data = _resample_pve_data_to_template(
+            target_img,
+            target=template_target,
+            resample_from_to_fn=resample_from_to_fn,
+            numpy_module=numpy_module,
+        )
+        changed_volume_mask = numpy_module.abs(target_data - baseline_data) >= pve_threshold
+        if not bool(numpy_module.any(changed_volume_mask)):
+            continue
+
+        baseline_changed_data = numpy_module.where(changed_volume_mask, baseline_data, 0.0)
+        target_changed_data = numpy_module.where(changed_volume_mask, target_data, 0.0)
+
+        before_mesh = _pve_data_to_mesh_or_none(
+            data=baseline_changed_data,
+            affine=template_img.affine,
+            level=0.5,
+            step_size=marching_cubes_step_size,
+            tissue_name=f"before {tissue} changed region",
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+            apply_affine_fn=apply_affine_fn,
+            marching_cubes_fn=marching_cubes_fn,
+        )
+        after_mesh = _pve_data_to_mesh_or_none(
+            data=target_changed_data,
+            affine=template_img.affine,
+            level=0.5,
+            step_size=marching_cubes_step_size,
+            tissue_name=f"after {tissue} changed region",
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+            apply_affine_fn=apply_affine_fn,
+            marching_cubes_fn=marching_cubes_fn,
+        )
+        added_geometry = _add_before_after_layers(
+            scene,
+            before_mesh=before_mesh,
+            after_mesh=after_mesh,
+            colors=colors,
+            baseline_date=baseline.acquisition_date,
+            target_date=target.acquisition_date,
+            tissue=tissue,
+            method_suffix="pve",
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+        ) or added_geometry
+
+    if not added_geometry:
+        raise ValueError("No PVE changed-region before/after mesh could be built.")
+    return _export_scene_to_glb_bytes(scene)
+
+
+def _build_nearest_distance_changed_region_before_after_glb(
+    *,
+    baseline: EvolutionMriArtifacts,
+    target: EvolutionMriArtifacts,
+    selected_tissues: Sequence[str],
+    distance_threshold_mm: float,
+    colors: _ComparisonColors,
+    trimesh_module: Any,
+    numpy_module: Any,
+    cKDTree_cls: Any,
+) -> bytes:
+    _require_visual_inputs(
+        (baseline, target),
+        selected_tissues=selected_tissues,
+        error_prefix="Cannot build nearest-distance changed-region before/after GLB",
+        include_meshes=True,
+    )
+
+    scene = trimesh_module.Scene()
+    added_geometry = False
+
+    for tissue in selected_tissues:
+        baseline_mesh = _load_first_trimesh(baseline.mesh_paths[tissue], trimesh_module=trimesh_module)
+        target_mesh = _load_first_trimesh(target.mesh_paths[tissue], trimesh_module=trimesh_module)
+        baseline_vertices = numpy_module.asarray(baseline_mesh.vertices, dtype=float)
+        target_vertices = numpy_module.asarray(target_mesh.vertices, dtype=float)
+        if len(baseline_vertices) == 0 or len(target_vertices) == 0:
+            continue
+
+        baseline_distances, _baseline_indices = cKDTree_cls(target_vertices).query(
+            baseline_vertices,
+            k=1,
+            workers=-1,
+        )
+        target_distances, _target_indices = cKDTree_cls(baseline_vertices).query(
+            target_vertices,
+            k=1,
+            workers=-1,
+        )
+        _baseline_unchanged, before_mesh = _split_mesh_by_vertex_mask(
+            baseline_mesh,
+            changed_vertex_mask=baseline_distances > distance_threshold_mm,
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+        )
+        _target_unchanged, after_mesh = _split_mesh_by_vertex_mask(
+            target_mesh,
+            changed_vertex_mask=target_distances > distance_threshold_mm,
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+        )
+        added_geometry = _add_before_after_layers(
+            scene,
+            before_mesh=before_mesh,
+            after_mesh=after_mesh,
+            colors=colors,
+            baseline_date=baseline.acquisition_date,
+            target_date=target.acquisition_date,
+            tissue=tissue,
+            method_suffix="nearest",
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+            extra_x_degrees=85.0,
+        ) or added_geometry
+
+    if not added_geometry:
+        raise ValueError("No nearest-distance changed-region before/after mesh could be built.")
+    return _export_scene_to_glb_bytes(scene)
+
+
+def _pve_data_to_mesh_or_none(
+    *,
+    data: Any,
+    affine: Any,
+    level: float,
+    step_size: int,
+    tissue_name: str,
+    trimesh_module: Any,
+    numpy_module: Any,
+    apply_affine_fn: Any,
+    marching_cubes_fn: Any,
+) -> Any | None:
+    data_min = float(data.min())
+    data_max = float(data.max())
+    if not (data_min < level < data_max):
+        return None
+
+    return _pve_data_to_mesh(
+        data=data,
+        affine=affine,
+        level=level,
+        step_size=step_size,
+        tissue_name=tissue_name,
+        trimesh_module=trimesh_module,
+        numpy_module=numpy_module,
+        apply_affine_fn=apply_affine_fn,
+        marching_cubes_fn=marching_cubes_fn,
+    )
+
+
+def _add_before_after_layers(
+    scene: Any,
+    *,
+    before_mesh: Any | None,
+    after_mesh: Any | None,
+    colors: _ComparisonColors,
+    baseline_date: str,
+    target_date: str,
+    tissue: str,
+    method_suffix: str,
+    trimesh_module: Any,
+    numpy_module: Any,
+    extra_x_degrees: float = 0.0,
+) -> bool:
+    geometries = [mesh for mesh in (before_mesh, after_mesh) if mesh is not None]
+    if not geometries:
+        return False
+
+    origin = _combined_geometry_center(geometries, numpy_module=numpy_module)
+    for geometry in geometries:
+        _apply_shared_view_transform(
+            geometry,
+            origin=origin,
+            trimesh_module=trimesh_module,
+            numpy_module=numpy_module,
+            extra_x_degrees=extra_x_degrees,
+        )
+
+    added = False
+    for change_label, mesh, date_label, color in (
+        ("before", before_mesh, baseline_date, colors.baseline),
+        ("after", after_mesh, target_date, colors.changed),
+    ):
+        if mesh is None:
+            continue
+        geometry_name = f"{change_label}_{date_label}_{tissue}_{method_suffix}_changed_region_mesh"
+        _apply_rgba(mesh, color, trimesh_module=trimesh_module, numpy_module=numpy_module)
+        scene.add_geometry(mesh, node_name=geometry_name, geom_name=geometry_name)
+        added = True
+
+    return added
 
 
 def _require_visual_inputs(
@@ -615,9 +935,13 @@ __all__ = [
     "_ComparisonColors",
     "_build_pve_difference_visual_glb",
     "_build_nearest_distance_visual_glb",
+    "_build_changed_region_before_after_glb",
+    "_build_pve_changed_region_before_after_glb",
+    "_build_nearest_distance_changed_region_before_after_glb",
     "_require_visual_inputs",
     "_reference_for_volume_change",
     "_add_comparison_layers",
+    "_add_before_after_layers",
     "_export_scene_to_glb_bytes",
     "_iter_loaded_geometries",
     "_load_first_trimesh",
@@ -627,6 +951,7 @@ __all__ = [
     "_sample_volume_at_world_vertices",
     "_split_mesh_by_vertex_mask",
     "_pve_data_to_mesh",
+    "_pve_data_to_mesh_or_none",
     "_geometry_vertices",
     "_combined_geometry_center",
     "_apply_shared_view_transform",

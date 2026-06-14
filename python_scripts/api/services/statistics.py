@@ -95,6 +95,7 @@ class StatisticsService:
         baseline_color: str = "#508cff",
         changed_color: str = "#ff2d2d",
         marching_cubes_step_size: int = 1,
+        visual_mode: str = "changed_unchanged",
     ) -> DbResult[bytes]:
         try:
             normalized_target_date = (
@@ -137,6 +138,7 @@ class StatisticsService:
                     baseline_color=baseline_color,
                     changed_color=changed_color,
                     marching_cubes_step_size=marching_cubes_step_size,
+                    visual_mode=visual_mode,
                 )
             )
         except Exception as exc:
