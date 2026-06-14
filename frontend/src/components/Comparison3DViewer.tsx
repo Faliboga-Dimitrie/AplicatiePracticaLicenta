@@ -81,28 +81,31 @@ function classifyLayer(name: string, variant: ComparisonVariant): LayerKind | nu
   return null
 }
 
-function cloneMaterialWithStyle(material: THREE.Material, color: string, opacity: number) {
+function cloneMaterialWithStyle(material: THREE.Material, color: string, opacity: number, preserveSourceColors: boolean) {
   const cloned = material.clone()
   cloned.side = THREE.DoubleSide
   cloned.transparent = opacity < 1
   cloned.opacity = opacity
   cloned.depthWrite = opacity >= 0.95
 
-  const colored = cloned as THREE.Material & { color?: THREE.Color }
+  const colored = cloned as THREE.Material & { color?: THREE.Color; vertexColors?: boolean }
   if (colored.color instanceof THREE.Color) {
-    colored.color.set(color)
+    colored.color.set(preserveSourceColors ? '#ffffff' : color)
+  }
+  if (preserveSourceColors && 'vertexColors' in colored) {
+    colored.vertexColors = true
   }
 
   return cloned
 }
 
-function applyGroupStyle(group: THREE.Group, color: string, opacity: number) {
+function applyGroupStyle(group: THREE.Group, color: string, opacity: number, preserveSourceColors: boolean) {
   group.traverse((object) => {
     if (!(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.LineSegments)) return
 
     const sourceMaterial = object.material
     const materials = Array.isArray(sourceMaterial) ? sourceMaterial : [sourceMaterial]
-    const styledMaterials = materials.map((material) => cloneMaterialWithStyle(material, color, opacity))
+    const styledMaterials = materials.map((material) => cloneMaterialWithStyle(material, color, opacity, preserveSourceColors))
     object.material = Array.isArray(sourceMaterial) ? styledMaterials : styledMaterials[0]
   })
 }
@@ -133,6 +136,7 @@ function ComparisonScene({
   backgroundColor,
   overlapping,
   variant,
+  preserveSourceColors,
 }: {
   objectUrl: string
   unchangedColor: string
@@ -144,6 +148,7 @@ function ComparisonScene({
   backgroundColor: string
   overlapping: boolean
   variant: ComparisonVariant
+  preserveSourceColors: boolean
 }) {
   const gltf = useGLTF(objectUrl)
 
@@ -166,11 +171,11 @@ function ComparisonScene({
       }
     })
 
-    applyGroupStyle(unchanged, unchangedColor, layerControls.unchanged.opacity)
-    applyGroupStyle(changed, changedColor, layerControls.changed.opacity)
+    applyGroupStyle(unchanged, unchangedColor, layerControls.unchanged.opacity, preserveSourceColors)
+    applyGroupStyle(changed, changedColor, layerControls.changed.opacity, preserveSourceColors)
 
     return { unchangedGroup: unchanged, changedGroup: changed }
-  }, [changedColor, gltf.scene, layerControls.changed.opacity, layerControls.unchanged.opacity, unchangedColor, variant])
+  }, [changedColor, gltf.scene, layerControls.changed.opacity, layerControls.unchanged.opacity, preserveSourceColors, unchangedColor, variant])
 
   useEffect(() => {
     return () => {
@@ -223,6 +228,7 @@ export function Comparison3DViewer({
   onReload,
   variant = 'changedUnchanged',
   layerLabels = defaultLayerLabels,
+  preserveSourceColors = false,
 }: {
   objectUrl: string | null
   title: string
@@ -233,6 +239,7 @@ export function Comparison3DViewer({
   onReload?: () => void
   variant?: ComparisonVariant
   layerLabels?: ComparisonLayerLabels
+  preserveSourceColors?: boolean
 }) {
   const [unchangedColor, setUnchangedColor] = useState('#508cff')
   const [changedColor, setChangedColor] = useState('#ff2d2d')
@@ -292,14 +299,18 @@ export function Comparison3DViewer({
           <p className="muted small-note">
             {overlapping ? `${layerLabels.unchanged} and ${layerLabels.changed} overlap. Use opacity to control layer strength.` : `${layerLabels.unchanged} and ${layerLabels.changed} are side by side. Use opacity to control each layer independently.`}
           </p>
-          <label className="inline-field">
-            {layerLabels.unchanged} color
-            <input type="color" value={unchangedColor} onChange={(event) => setUnchangedColor(event.target.value)} />
-          </label>
-          <label className="inline-field">
-            {layerLabels.changed} color
-            <input type="color" value={changedColor} onChange={(event) => setChangedColor(event.target.value)} />
-          </label>
+          {!preserveSourceColors && (
+            <>
+              <label className="inline-field">
+                {layerLabels.unchanged} color
+                <input type="color" value={unchangedColor} onChange={(event) => setUnchangedColor(event.target.value)} />
+              </label>
+              <label className="inline-field">
+                {layerLabels.changed} color
+                <input type="color" value={changedColor} onChange={(event) => setChangedColor(event.target.value)} />
+              </label>
+            </>
+          )}
           <label className="range-label">
             {layerLabels.unchanged} opacity {Math.round(layerControls.unchanged.opacity * 100)}%
             <input
@@ -363,6 +374,7 @@ export function Comparison3DViewer({
             backgroundColor={backgroundColor}
             overlapping={overlapping}
             variant={variant}
+            preserveSourceColors={preserveSourceColors}
           />
         )}
         {!isLoading && !error && !objectUrl && <div className="viewer-empty-state"><p className="muted">No comparison loaded yet.</p></div>}

@@ -20,6 +20,7 @@ export function getEvolutionReport(
 
 export type EvolutionComparisonMethod = 'pve' | 'nearest_distance'
 export type EvolutionVisualMode = 'changed_unchanged' | 'changed_region_before_after'
+export type EvolutionVisualStyle = 'binary' | 'statistical_heatmap'
 
 export type EvolutionVisualOptions = {
   subjectId: string
@@ -29,6 +30,7 @@ export type EvolutionVisualOptions = {
   tissue?: string
   comparisonMethod?: EvolutionComparisonMethod
   visualMode?: EvolutionVisualMode
+  visualStyle?: EvolutionVisualStyle
   pveThreshold?: number
   distanceThresholdMm?: number
   baselineColor?: string
@@ -42,6 +44,7 @@ export async function createEvolutionVisualComparisonObjectUrl(options: Evolutio
     end_date: options.endDate,
     comparison_method: options.comparisonMethod ?? 'pve',
     visual_mode: options.visualMode ?? 'changed_unchanged',
+    visual_style: options.visualStyle ?? 'binary',
     pve_threshold: String(options.pveThreshold ?? 0.2),
     distance_threshold_mm: String(options.distanceThresholdMm ?? 1),
     baseline_color: options.baselineColor ?? '#508cff',

@@ -82,6 +82,7 @@ def build_evolution_visual(
     changed_color: str = "#ff2d2d",
     marching_cubes_step_size: int = 1,
     visual_mode: str = "changed_unchanged",
+    visual_style: str = "binary",
     current_user: UserRecord = Depends(get_current_user),
     statistics: StatisticsService = Depends(get_statistics_service),
 ):
@@ -100,6 +101,7 @@ def build_evolution_visual(
         changed_color=changed_color,
         marching_cubes_step_size=marching_cubes_step_size,
         visual_mode=visual_mode,
+        visual_style=visual_style,
     )
     glb_bytes = unwrap_result(
         result,

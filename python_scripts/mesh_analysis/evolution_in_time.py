@@ -179,6 +179,7 @@ class MriEvolutionInTime:
         marching_cubes_step_size: int = 1,
         template_path: Path | str | None = None,
         visual_mode: str = "changed_unchanged",
+        visual_style: str = "binary",
     ) -> bytes:
         """
         Return an in-memory GLB comparing baseline and target acquisitions.
@@ -204,6 +205,7 @@ class MriEvolutionInTime:
             marching_cubes_step_size=marching_cubes_step_size,
             template_path=template_path,
             visual_mode=visual_mode,
+            visual_style=visual_style,
         )
 
     # ------------------------------------------------------------------

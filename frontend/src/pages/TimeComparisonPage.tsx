@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { apiMessage } from '../api/client'
 import { createEvolutionVisualComparisonObjectUrl, getEvolutionReport, listEvolutionDates } from '../api/metricsApi'
 import { Modal } from '../components/Modal'
-import type { EvolutionComparisonMethod } from '../api/metricsApi'
+import type { EvolutionComparisonMethod, EvolutionVisualStyle } from '../api/metricsApi'
 import { listSubjects } from '../api/subjectsApi'
 import type { AuthorizedSubject, EvolutionDateEntry, EvolutionReport, TissueKey } from '../types/api'
 import { formatNumber, metricUnit as measurementUnit, scaleMetricValue } from '../utils/measurements'
@@ -84,6 +84,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const [measurementScale, setMeasurementScale] = useState<MeasurementScale>('mm')
   const [selectedTissue, setSelectedTissue] = useState<TissueKey>('gm')
   const [comparisonMethod, setComparisonMethod] = useState<EvolutionComparisonMethod>('pve')
+  const [visualStyle, setVisualStyle] = useState<EvolutionVisualStyle>('binary')
   const [pveThreshold, setPveThreshold] = useState(0.2)
   const [distanceThresholdMm, setDistanceThresholdMm] = useState(1)
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(true)
@@ -171,8 +172,8 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
   const visualRequestSignature = useMemo(() => {
     if (!report || !selectedSubjectId) return null
     const sensitivity = comparisonMethod === 'pve' ? pveThreshold : distanceThresholdMm
-    return [selectedSubjectId, report.start_date, report.end_date, selectedTissue, comparisonMethod, sensitivity].join('|')
-  }, [comparisonMethod, distanceThresholdMm, pveThreshold, report, selectedSubjectId, selectedTissue])
+    return [selectedSubjectId, report.start_date, report.end_date, selectedTissue, comparisonMethod, visualStyle, sensitivity].join('|')
+  }, [comparisonMethod, distanceThresholdMm, pveThreshold, report, selectedSubjectId, selectedTissue, visualStyle])
   const visualNeedsRefresh = Boolean(visualOpen && visualRequestSignature && visualRequestSignature !== lastVisualSignature)
   const canOpenVisualComparison = Boolean(report) && !isLoadingVisual && (!visualOpen || visualNeedsRefresh)
 
@@ -215,6 +216,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
         tissue: selectedTissue,
         comparisonMethod,
         visualMode: 'changed_unchanged',
+        visualStyle,
         pveThreshold,
         distanceThresholdMm,
       })
@@ -231,6 +233,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
         tissue: selectedTissue,
         comparisonMethod,
         visualMode: 'changed_region_before_after',
+        visualStyle,
         pveThreshold,
         distanceThresholdMm,
       })
@@ -247,7 +250,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
     setChangedRegionError(changedRegionLoadError)
     setLastVisualSignature(comparisonUrl || changedRegionUrl ? visualRequestSignature : null)
     setIsLoadingVisual(false)
-  }, [clearVisualObjectUrls, report, selectedTissue, selectedSubjectId, comparisonMethod, pveThreshold, distanceThresholdMm, visualRequestSignature])
+  }, [clearVisualObjectUrls, report, selectedTissue, selectedSubjectId, comparisonMethod, visualStyle, pveThreshold, distanceThresholdMm, visualRequestSignature])
 
   function handleOpenVisualComparison() {
     if (!report || !canOpenVisualComparison) return
@@ -359,6 +362,13 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                     <option value="pve">Tissue probability</option>
                   </select>
                 </label>
+                <label className="inline-field">
+                  Visual style
+                  <select value={visualStyle} onChange={(event) => setVisualStyle(event.target.value as EvolutionVisualStyle)}>
+                    <option value="binary">Binary</option>
+                    <option value="statistical_heatmap">Statistical heatmap</option>
+                  </select>
+                </label>
                 {comparisonMethod === 'pve' ? (
                   <label className="inline-field">
                     Sensitivity
@@ -389,7 +399,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <ComparisonLineChart report={report} metricGroup={metricGroup} tissue={selectedTissue} scale={measurementScale} />
             {visualOpen && (
               <p className="muted small-note">
-                Change the sensitivity, tissue or comparison method, then use Update visual comparison to rebuild the 3D view. Current tissue: {tissueLabel(selectedTissue)}. 3D comparison: {comparisonMethod === 'pve' ? 'tissue probability' : 'surface distance'}.
+                Change the sensitivity, tissue, method or visual style, then use Update visual comparison to rebuild the 3D view. Current tissue: {tissueLabel(selectedTissue)}. 3D comparison: {comparisonMethod === 'pve' ? 'tissue probability' : 'surface distance'}; style: {visualStyle === 'statistical_heatmap' ? 'statistical heatmap' : 'binary'}.
               </p>
             )}
           </section>
@@ -426,28 +436,61 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
 
           {visualOpen && (
             <Suspense fallback={<section className="card"><p className="muted">Loading visual comparison...</p></section>}>
+              {visualStyle === 'statistical_heatmap' && (
+                <section className="card stack heatmap-legend-card">
+                  <div>
+                    <p className="eyebrow">Statistical heatmap legend</p>
+                    <h2>Color meaning</h2>
+                  </div>
+                  {comparisonMethod === 'pve' ? (
+                    <div className="heatmap-legend-grid">
+                      <div className="heatmap-legend-item">
+                        <span className="heatmap-gradient pve-decrease" />
+                        <strong>Blue shades</strong>
+                        <p className="muted small-note">Tissue probability decreased. Stronger blue means the threshold-relative change is closer to or above 3σ.</p>
+                      </div>
+                      <div className="heatmap-legend-item">
+                        <span className="heatmap-gradient pve-increase" />
+                        <strong>Orange/red shades</strong>
+                        <p className="muted small-note">Tissue probability increased. Stronger red means the threshold-relative change is closer to or above 3σ.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="heatmap-legend-grid">
+                      <div className="heatmap-legend-item">
+                        <span className="heatmap-gradient distance-change" />
+                        <strong>Purple shades</strong>
+                        <p className="muted small-note">Surface displacement above the threshold. Stronger purple means the threshold-relative distance is closer to or above 3σ.</p>
+                      </div>
+                    </div>
+                  )}
+                  <p className="muted small-note">σ is computed only from changed values, after removing first-pass values above 3σ and recomputing the standard deviation.</p>
+                </section>
+              )}
               <Comparison3DViewer
                 objectUrl={visualObjectUrl}
                 title="Visual comparison"
                 subtitle={comparisonMethod === 'pve'
-                  ? `Shows unchanged versus changed ${tissueLabel(selectedTissue)} areas using tissue-probability differences. Sensitivity: ${pveThreshold}.`
-                  : `Shows unchanged versus changed ${tissueLabel(selectedTissue)} surface areas using a ${distanceThresholdMm} mm distance threshold.`}
+                  ? `${visualStyle === 'statistical_heatmap' ? 'Heatmaps' : 'Shows'} unchanged versus changed ${tissueLabel(selectedTissue)} areas using tissue-probability differences. Sensitivity: ${pveThreshold}.`
+                  : `${visualStyle === 'statistical_heatmap' ? 'Heatmaps' : 'Shows'} unchanged versus changed ${tissueLabel(selectedTissue)} surface areas using a ${distanceThresholdMm} mm distance threshold.`}
                 loadingText="Building visual comparison..."
                 isLoading={isLoadingVisual}
                 error={visualError}
+                preserveSourceColors={visualStyle === 'statistical_heatmap'}
               />
 
               <Comparison3DViewer
                 objectUrl={changedRegionObjectUrl}
                 title="Changed region before / after"
                 subtitle={comparisonMethod === 'pve'
-                  ? `Shows only the detected changed ${tissueLabel(selectedTissue)} region, once from ${report.baseline_date} and once from ${report.end_date}.`
-                  : `Shows only the ${tissueLabel(selectedTissue)} surface parts that moved more than ${distanceThresholdMm} mm, before and after.`}
+                  ? `${visualStyle === 'statistical_heatmap' ? 'Heatmaps' : 'Shows'} only the detected changed ${tissueLabel(selectedTissue)} region, once from ${report.baseline_date} and once from ${report.end_date}.`
+                  : `${visualStyle === 'statistical_heatmap' ? 'Heatmaps' : 'Shows'} only the ${tissueLabel(selectedTissue)} surface parts that moved more than ${distanceThresholdMm} mm, before and after.`}
                 loadingText="Building changed-region before/after view..."
                 isLoading={isLoadingVisual}
                 error={changedRegionError}
                 variant="beforeAfter"
                 layerLabels={{ unchanged: 'Before region', changed: 'After region' }}
+                preserveSourceColors={visualStyle === 'statistical_heatmap'}
               />
             </Suspense>
           )}
@@ -460,7 +503,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <p>
               Visual comparison highlights the selected tissue between the baseline scan and the target scan.
               Unchanged areas use the baseline color, while detected changes use the change color.
-              The changed-region before/after view then uses the same detected-change mask to show only that region in the baseline scan and in the target scan.
+              The changed-region before/after view then uses the same detected-change mask to show only that region in the baseline scan and in the target scan. Binary style uses the classic changed/unchanged colors; statistical heatmap style preserves the real threshold-relative change magnitude and maps it to color intensity.
             </p>
             <article>
               <h3>Tissue probability</h3>

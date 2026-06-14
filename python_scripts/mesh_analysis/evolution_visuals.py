@@ -40,6 +40,7 @@ def build_visual_comparison_glb(
     marching_cubes_step_size: int = 1,
     template_path: Path | str | None = None,
     visual_mode: str = "changed_unchanged",
+    visual_style: str = "binary",
 ) -> bytes:
     """
     Return an in-memory GLB comparing baseline and target acquisitions.
@@ -75,6 +76,14 @@ def build_visual_comparison_glb(
             "visual_mode must be either 'changed_unchanged' or 'changed_region_before_after'."
         )
 
+    style = visual_style.strip().lower().replace("-", "_")
+    if style in {"default", "simple"}:
+        style = "binary"
+    if style in {"heatmap", "statistical", "statistics"}:
+        style = "statistical_heatmap"
+    if style not in {"binary", "statistical_heatmap"}:
+        raise ValueError("visual_style must be either 'binary' or 'statistical_heatmap'.")
+
     pve_threshold = float(pve_threshold)
     if not (0.0 <= pve_threshold <= 1.0):
         raise ValueError("pve_threshold must be between 0.0 and 1.0.")
@@ -109,9 +118,11 @@ def build_visual_comparison_glb(
             numpy_module=np,
             apply_affine_fn=apply_affine,
             marching_cubes_fn=marching_cubes,
+            map_coordinates_fn=map_coordinates,
             resample_from_to_fn=resample_from_to,
             cKDTree_cls=cKDTree,
             template_path=Path(template_path) if template_path is not None else settings.mni_template_path,
+            visual_style=style,
         )
 
     if method == "nearest_distance":
@@ -124,6 +135,7 @@ def build_visual_comparison_glb(
             trimesh_module=trimesh,
             numpy_module=np,
             cKDTree_cls=cKDTree,
+            visual_style=style,
         )
 
     return _build_pve_difference_visual_glb(
@@ -141,6 +153,7 @@ def build_visual_comparison_glb(
         map_coordinates_fn=map_coordinates,
         resample_from_to_fn=resample_from_to,
         template_path=Path(template_path) if template_path is not None else settings.mni_template_path,
+        visual_style=style,
     )
 
 
@@ -160,6 +173,7 @@ def _build_pve_difference_visual_glb(
     map_coordinates_fn: Any,
     resample_from_to_fn: Any,
     template_path: Path,
+    visual_style: str = "binary",
 ) -> bytes:
     _require_visual_inputs(
         (baseline, target),
@@ -199,7 +213,17 @@ def _build_pve_difference_visual_glb(
             resample_from_to_fn=resample_from_to_fn,
             numpy_module=numpy_module,
         )
-        diff_data = numpy_module.abs(target_data - baseline_data)
+        delta_data = target_data - baseline_data
+        diff_data = numpy_module.abs(delta_data)
+        normalized_data = _threshold_relative_signed(
+            delta_data,
+            threshold=pve_threshold,
+            numpy_module=numpy_module,
+        )
+        pve_sigma = _robust_std_from_changed_values(
+            normalized_data,
+            numpy_module=numpy_module,
+        )
         reference_label, reference_date, use_target_reference = _reference_for_volume_change(
             baseline_volume=float(baseline_metrics.volumes[tissue]),
             target_volume=float(target_metrics.volumes[tissue]),
@@ -226,25 +250,65 @@ def _build_pve_difference_visual_glb(
             numpy_module=numpy_module,
             map_coordinates_fn=map_coordinates_fn,
         )
-        changed_mask = vertex_diff >= pve_threshold
+        if visual_style == "statistical_heatmap":
+            vertex_normalized = _sample_volume_at_world_vertices(
+                normalized_data,
+                affine=template_img.affine,
+                vertices=reference_mesh.vertices,
+                numpy_module=numpy_module,
+                map_coordinates_fn=map_coordinates_fn,
+            )
+            changed_mask = numpy_module.abs(vertex_normalized) > 0.0
+        else:
+            changed_mask = vertex_diff >= pve_threshold
         unchanged_mesh, changed_mesh = _split_mesh_by_vertex_mask(
             reference_mesh,
             changed_vertex_mask=changed_mask,
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
         )
-        added_geometry = _add_comparison_layers(
-            scene,
-            unchanged_mesh=unchanged_mesh,
-            changed_mesh=changed_mesh,
-            colors=colors,
-            reference_label=reference_label,
-            reference_date=reference_date,
-            tissue=tissue,
-            method_suffix="pve",
-            trimesh_module=trimesh_module,
-            numpy_module=numpy_module,
-        ) or added_geometry
+        if visual_style == "statistical_heatmap" and changed_mesh is not None:
+            changed_vertex_normalized = _sample_volume_at_world_vertices(
+                normalized_data,
+                affine=template_img.affine,
+                vertices=changed_mesh.vertices,
+                numpy_module=numpy_module,
+                map_coordinates_fn=map_coordinates_fn,
+            )
+            _apply_heatmap_vertex_colors(
+                changed_mesh,
+                changed_vertex_normalized,
+                sigma=pve_sigma,
+                color_family="pve_signed",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+            )
+            added_geometry = _add_comparison_layers(
+                scene,
+                unchanged_mesh=unchanged_mesh,
+                changed_mesh=changed_mesh,
+                colors=colors,
+                reference_label=reference_label,
+                reference_date=reference_date,
+                tissue=tissue,
+                method_suffix="pve_heatmap",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+                preserve_changed_vertex_colors=True,
+            ) or added_geometry
+        else:
+            added_geometry = _add_comparison_layers(
+                scene,
+                unchanged_mesh=unchanged_mesh,
+                changed_mesh=changed_mesh,
+                colors=colors,
+                reference_label=reference_label,
+                reference_date=reference_date,
+                tissue=tissue,
+                method_suffix="pve",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+            ) or added_geometry
 
     if not added_geometry:
         raise ValueError("No PVE comparison mesh could be built.")
@@ -261,6 +325,7 @@ def _build_nearest_distance_visual_glb(
     trimesh_module: Any,
     numpy_module: Any,
     cKDTree_cls: Any,
+    visual_style: str = "binary",
 ) -> bytes:
     _require_visual_inputs(
         (baseline, target),
@@ -291,31 +356,75 @@ def _build_nearest_distance_visual_glb(
         if len(reference_mesh.vertices) == 0 or len(comparison_vertices) == 0:
             raise ValueError(f"Mesh comparison for {tissue} contains no vertices.")
 
-        distances, _indices = cKDTree_cls(comparison_vertices).query(
+        comparison_tree = cKDTree_cls(comparison_vertices)
+        distances, _indices = comparison_tree.query(
             numpy_module.asarray(reference_mesh.vertices, dtype=float),
             k=1,
             workers=-1,
         )
-        changed_mask = distances > distance_threshold_mm
+        normalized_distances = _threshold_relative_unsigned(
+            distances,
+            threshold=distance_threshold_mm,
+            numpy_module=numpy_module,
+        )
+        distance_sigma = _robust_std_from_changed_values(
+            normalized_distances,
+            numpy_module=numpy_module,
+        )
+        changed_mask = normalized_distances > 0.0 if visual_style == "statistical_heatmap" else distances > distance_threshold_mm
         unchanged_mesh, changed_mesh = _split_mesh_by_vertex_mask(
             reference_mesh,
             changed_vertex_mask=changed_mask,
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
         )
-        added_geometry = _add_comparison_layers(
-            scene,
-            unchanged_mesh=unchanged_mesh,
-            changed_mesh=changed_mesh,
-            colors=colors,
-            reference_label=reference_label,
-            reference_date=reference_date,
-            tissue=tissue,
-            method_suffix="nearest",
-            trimesh_module=trimesh_module,
-            numpy_module=numpy_module,
-            extra_x_degrees=85.0,
-        ) or added_geometry
+        if visual_style == "statistical_heatmap" and changed_mesh is not None:
+            changed_distances, _changed_indices = comparison_tree.query(
+                numpy_module.asarray(changed_mesh.vertices, dtype=float),
+                k=1,
+                workers=-1,
+            )
+            changed_normalized = _threshold_relative_unsigned(
+                changed_distances,
+                threshold=distance_threshold_mm,
+                numpy_module=numpy_module,
+            )
+            _apply_heatmap_vertex_colors(
+                changed_mesh,
+                changed_normalized,
+                sigma=distance_sigma,
+                color_family="distance",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+            )
+            added_geometry = _add_comparison_layers(
+                scene,
+                unchanged_mesh=unchanged_mesh,
+                changed_mesh=changed_mesh,
+                colors=colors,
+                reference_label=reference_label,
+                reference_date=reference_date,
+                tissue=tissue,
+                method_suffix="nearest_heatmap",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+                extra_x_degrees=85.0,
+                preserve_changed_vertex_colors=True,
+            ) or added_geometry
+        else:
+            added_geometry = _add_comparison_layers(
+                scene,
+                unchanged_mesh=unchanged_mesh,
+                changed_mesh=changed_mesh,
+                colors=colors,
+                reference_label=reference_label,
+                reference_date=reference_date,
+                tissue=tissue,
+                method_suffix="nearest",
+                trimesh_module=trimesh_module,
+                numpy_module=numpy_module,
+                extra_x_degrees=85.0,
+            ) or added_geometry
 
     if not added_geometry:
         raise ValueError("No nearest-distance comparison mesh could be built.")
@@ -337,9 +446,11 @@ def _build_changed_region_before_after_glb(
     numpy_module: Any,
     apply_affine_fn: Any,
     marching_cubes_fn: Any,
+    map_coordinates_fn: Any,
     resample_from_to_fn: Any,
     cKDTree_cls: Any,
     template_path: Path,
+    visual_style: str = "binary",
 ) -> bytes:
     if comparison_method == "nearest_distance":
         return _build_nearest_distance_changed_region_before_after_glb(
@@ -351,6 +462,7 @@ def _build_changed_region_before_after_glb(
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
             cKDTree_cls=cKDTree_cls,
+            visual_style=visual_style,
         )
 
     return _build_pve_changed_region_before_after_glb(
@@ -365,8 +477,10 @@ def _build_changed_region_before_after_glb(
         numpy_module=numpy_module,
         apply_affine_fn=apply_affine_fn,
         marching_cubes_fn=marching_cubes_fn,
+        map_coordinates_fn=map_coordinates_fn,
         resample_from_to_fn=resample_from_to_fn,
         template_path=template_path,
+        visual_style=visual_style,
     )
 
 
@@ -383,8 +497,10 @@ def _build_pve_changed_region_before_after_glb(
     numpy_module: Any,
     apply_affine_fn: Any,
     marching_cubes_fn: Any,
+    map_coordinates_fn: Any,
     resample_from_to_fn: Any,
     template_path: Path,
+    visual_style: str = "binary",
 ) -> bytes:
     _require_visual_inputs(
         (baseline, target),
@@ -421,7 +537,13 @@ def _build_pve_changed_region_before_after_glb(
             resample_from_to_fn=resample_from_to_fn,
             numpy_module=numpy_module,
         )
-        changed_volume_mask = numpy_module.abs(target_data - baseline_data) >= pve_threshold
+        delta_data = target_data - baseline_data
+        normalized_data = _threshold_relative_signed(
+            delta_data,
+            threshold=pve_threshold,
+            numpy_module=numpy_module,
+        )
+        changed_volume_mask = numpy_module.abs(normalized_data) > 0.0 if visual_style == "statistical_heatmap" else numpy_module.abs(delta_data) >= pve_threshold
         if not bool(numpy_module.any(changed_volume_mask)):
             continue
 
@@ -450,6 +572,29 @@ def _build_pve_changed_region_before_after_glb(
             apply_affine_fn=apply_affine_fn,
             marching_cubes_fn=marching_cubes_fn,
         )
+        if visual_style == "statistical_heatmap":
+            pve_sigma = _robust_std_from_changed_values(
+                normalized_data,
+                numpy_module=numpy_module,
+            )
+            for mesh in (before_mesh, after_mesh):
+                if mesh is None:
+                    continue
+                mesh_values = _sample_volume_at_world_vertices(
+                    normalized_data,
+                    affine=template_img.affine,
+                    vertices=mesh.vertices,
+                    numpy_module=numpy_module,
+                    map_coordinates_fn=map_coordinates_fn,
+                )
+                _apply_heatmap_vertex_colors(
+                    mesh,
+                    mesh_values,
+                    sigma=pve_sigma,
+                    color_family="pve_signed",
+                    trimesh_module=trimesh_module,
+                    numpy_module=numpy_module,
+                )
         added_geometry = _add_before_after_layers(
             scene,
             before_mesh=before_mesh,
@@ -458,9 +603,10 @@ def _build_pve_changed_region_before_after_glb(
             baseline_date=baseline.acquisition_date,
             target_date=target.acquisition_date,
             tissue=tissue,
-            method_suffix="pve",
+            method_suffix="pve_heatmap" if visual_style == "statistical_heatmap" else "pve",
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
+            preserve_source_colors=visual_style == "statistical_heatmap",
         ) or added_geometry
 
     if not added_geometry:
@@ -478,6 +624,7 @@ def _build_nearest_distance_changed_region_before_after_glb(
     trimesh_module: Any,
     numpy_module: Any,
     cKDTree_cls: Any,
+    visual_style: str = "binary",
 ) -> bytes:
     _require_visual_inputs(
         (baseline, target),
@@ -497,28 +644,84 @@ def _build_nearest_distance_changed_region_before_after_glb(
         if len(baseline_vertices) == 0 or len(target_vertices) == 0:
             continue
 
-        baseline_distances, _baseline_indices = cKDTree_cls(target_vertices).query(
+        target_tree = cKDTree_cls(target_vertices)
+        baseline_tree = cKDTree_cls(baseline_vertices)
+        baseline_distances, _baseline_indices = target_tree.query(
             baseline_vertices,
             k=1,
             workers=-1,
         )
-        target_distances, _target_indices = cKDTree_cls(baseline_vertices).query(
+        target_distances, _target_indices = baseline_tree.query(
             target_vertices,
             k=1,
             workers=-1,
         )
+        baseline_normalized = _threshold_relative_unsigned(
+            baseline_distances,
+            threshold=distance_threshold_mm,
+            numpy_module=numpy_module,
+        )
+        target_normalized = _threshold_relative_unsigned(
+            target_distances,
+            threshold=distance_threshold_mm,
+            numpy_module=numpy_module,
+        )
         _baseline_unchanged, before_mesh = _split_mesh_by_vertex_mask(
             baseline_mesh,
-            changed_vertex_mask=baseline_distances > distance_threshold_mm,
+            changed_vertex_mask=baseline_normalized > 0.0 if visual_style == "statistical_heatmap" else baseline_distances > distance_threshold_mm,
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
         )
         _target_unchanged, after_mesh = _split_mesh_by_vertex_mask(
             target_mesh,
-            changed_vertex_mask=target_distances > distance_threshold_mm,
+            changed_vertex_mask=target_normalized > 0.0 if visual_style == "statistical_heatmap" else target_distances > distance_threshold_mm,
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
         )
+        if visual_style == "statistical_heatmap":
+            combined_normalized = numpy_module.concatenate([baseline_normalized, target_normalized])
+            distance_sigma = _robust_std_from_changed_values(
+                combined_normalized,
+                numpy_module=numpy_module,
+            )
+            if before_mesh is not None:
+                before_distances, _before_indices = target_tree.query(
+                    numpy_module.asarray(before_mesh.vertices, dtype=float),
+                    k=1,
+                    workers=-1,
+                )
+                before_normalized = _threshold_relative_unsigned(
+                    before_distances,
+                    threshold=distance_threshold_mm,
+                    numpy_module=numpy_module,
+                )
+                _apply_heatmap_vertex_colors(
+                    before_mesh,
+                    before_normalized,
+                    sigma=distance_sigma,
+                    color_family="distance",
+                    trimesh_module=trimesh_module,
+                    numpy_module=numpy_module,
+                )
+            if after_mesh is not None:
+                after_distances, _after_indices = baseline_tree.query(
+                    numpy_module.asarray(after_mesh.vertices, dtype=float),
+                    k=1,
+                    workers=-1,
+                )
+                after_normalized = _threshold_relative_unsigned(
+                    after_distances,
+                    threshold=distance_threshold_mm,
+                    numpy_module=numpy_module,
+                )
+                _apply_heatmap_vertex_colors(
+                    after_mesh,
+                    after_normalized,
+                    sigma=distance_sigma,
+                    color_family="distance",
+                    trimesh_module=trimesh_module,
+                    numpy_module=numpy_module,
+                )
         added_geometry = _add_before_after_layers(
             scene,
             before_mesh=before_mesh,
@@ -527,10 +730,11 @@ def _build_nearest_distance_changed_region_before_after_glb(
             baseline_date=baseline.acquisition_date,
             target_date=target.acquisition_date,
             tissue=tissue,
-            method_suffix="nearest",
+            method_suffix="nearest_heatmap" if visual_style == "statistical_heatmap" else "nearest",
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
             extra_x_degrees=85.0,
+            preserve_source_colors=visual_style == "statistical_heatmap",
         ) or added_geometry
 
     if not added_geometry:
@@ -568,6 +772,109 @@ def _pve_data_to_mesh_or_none(
     )
 
 
+def _threshold_relative_signed(values: Any, *, threshold: float, numpy_module: Any) -> Any:
+    """Keep only signed change that exceeds the user threshold."""
+    values_array = numpy_module.asarray(values, dtype=numpy_module.float32)
+    magnitude = numpy_module.maximum(numpy_module.abs(values_array) - float(threshold), 0.0)
+    return numpy_module.sign(values_array) * magnitude
+
+
+def _threshold_relative_unsigned(values: Any, *, threshold: float, numpy_module: Any) -> Any:
+    """Keep only unsigned change that exceeds the user threshold."""
+    values_array = numpy_module.asarray(values, dtype=numpy_module.float32)
+    return numpy_module.maximum(values_array - float(threshold), 0.0)
+
+
+def _robust_std_from_changed_values(values: Any, *, numpy_module: Any) -> float:
+    """Return std on changed magnitudes after a first-pass 3σ outlier rejection."""
+    values_array = numpy_module.asarray(values, dtype=numpy_module.float32)
+    changed_magnitudes = numpy_module.abs(values_array[values_array != 0])
+    if changed_magnitudes.size == 0:
+        return 1.0
+
+    first_sigma = float(numpy_module.std(changed_magnitudes))
+    if first_sigma <= 1e-12:
+        fallback = float(numpy_module.max(changed_magnitudes))
+        return fallback if fallback > 1e-12 else 1.0
+
+    first_z = changed_magnitudes / first_sigma
+    kept = changed_magnitudes[first_z <= 3.0]
+    if kept.size == 0:
+        kept = changed_magnitudes
+
+    refined_sigma = float(numpy_module.std(kept))
+    if refined_sigma <= 1e-12:
+        fallback = float(numpy_module.max(kept))
+        return fallback if fallback > 1e-12 else first_sigma
+    return refined_sigma
+
+
+def _heatmap_intensity(values: Any, *, sigma: float, numpy_module: Any) -> Any:
+    magnitudes = numpy_module.abs(numpy_module.asarray(values, dtype=numpy_module.float32))
+    safe_sigma = float(sigma) if float(sigma) > 1e-12 else 1.0
+    z_scores = magnitudes / safe_sigma
+    t = numpy_module.clip(z_scores / 3.0, 0.0, 1.0)
+    return numpy_module.where(z_scores >= 3.0, 1.0, numpy_module.power(t, 1.8))
+
+
+def _mix_rgb(
+    low_rgb: tuple[int, int, int],
+    high_rgb: tuple[int, int, int],
+    intensity: Any,
+    *,
+    numpy_module: Any,
+) -> Any:
+    low = numpy_module.asarray(low_rgb, dtype=numpy_module.float32)
+    high = numpy_module.asarray(high_rgb, dtype=numpy_module.float32)
+    intensity_column = numpy_module.asarray(intensity, dtype=numpy_module.float32).reshape(-1, 1)
+    return low + (high - low) * intensity_column
+
+
+def _rgba_heatmap_colors(
+    values: Any,
+    *,
+    sigma: float,
+    color_family: str,
+    numpy_module: Any,
+) -> Any:
+    values_array = numpy_module.asarray(values, dtype=numpy_module.float32)
+    intensity = _heatmap_intensity(values_array, sigma=sigma, numpy_module=numpy_module)
+
+    if color_family == "pve_signed":
+        positive_rgb = _mix_rgb((255, 213, 170), (255, 28, 0), intensity, numpy_module=numpy_module)
+        negative_rgb = _mix_rgb((178, 220, 255), (0, 60, 255), intensity, numpy_module=numpy_module)
+        rgb = numpy_module.where((values_array >= 0).reshape(-1, 1), positive_rgb, negative_rgb)
+    else:
+        rgb = _mix_rgb((215, 206, 255), (103, 36, 255), intensity, numpy_module=numpy_module)
+
+    alpha = numpy_module.full((len(values_array), 1), 255.0, dtype=numpy_module.float32)
+    rgba = numpy_module.concatenate([rgb, alpha], axis=1)
+    return numpy_module.clip(rgba, 0, 255).astype(numpy_module.uint8)
+
+
+def _apply_heatmap_vertex_colors(
+    geometry: Any,
+    values: Any,
+    *,
+    sigma: float,
+    color_family: str,
+    trimesh_module: Any,
+    numpy_module: Any,
+) -> None:
+    if not isinstance(geometry, trimesh_module.Trimesh):
+        return
+
+    rgba = _rgba_heatmap_colors(
+        values,
+        sigma=sigma,
+        color_family=color_family,
+        numpy_module=numpy_module,
+    )
+    if len(rgba) != len(geometry.vertices):
+        raise ValueError("Heatmap color count does not match mesh vertex count.")
+    geometry.visual = trimesh_module.visual.ColorVisuals(mesh=geometry, vertex_colors=rgba)
+
+
 def _add_before_after_layers(
     scene: Any,
     *,
@@ -581,6 +888,7 @@ def _add_before_after_layers(
     trimesh_module: Any,
     numpy_module: Any,
     extra_x_degrees: float = 0.0,
+    preserve_source_colors: bool = False,
 ) -> bool:
     geometries = [mesh for mesh in (before_mesh, after_mesh) if mesh is not None]
     if not geometries:
@@ -604,7 +912,8 @@ def _add_before_after_layers(
         if mesh is None:
             continue
         geometry_name = f"{change_label}_{date_label}_{tissue}_{method_suffix}_changed_region_mesh"
-        _apply_rgba(mesh, color, trimesh_module=trimesh_module, numpy_module=numpy_module)
+        if not preserve_source_colors:
+            _apply_rgba(mesh, color, trimesh_module=trimesh_module, numpy_module=numpy_module)
         scene.add_geometry(mesh, node_name=geometry_name, geom_name=geometry_name)
         added = True
 
@@ -658,6 +967,7 @@ def _add_comparison_layers(
     trimesh_module: Any,
     numpy_module: Any,
     extra_x_degrees: float = 0.0,
+    preserve_changed_vertex_colors: bool = False,
 ) -> bool:
     geometries = [mesh for mesh in (unchanged_mesh, changed_mesh) if mesh is not None]
     if not geometries:
@@ -681,7 +991,8 @@ def _add_comparison_layers(
         if mesh is None:
             continue
         geometry_name = f"{change_label}_{reference_label}_{reference_date}_{tissue}_{method_suffix}_mesh"
-        _apply_rgba(mesh, color, trimesh_module=trimesh_module, numpy_module=numpy_module)
+        if not (change_label == "changed" and preserve_changed_vertex_colors):
+            _apply_rgba(mesh, color, trimesh_module=trimesh_module, numpy_module=numpy_module)
         scene.add_geometry(mesh, node_name=geometry_name, geom_name=geometry_name)
         added = True
 
