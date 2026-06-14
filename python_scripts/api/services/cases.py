@@ -12,6 +12,9 @@ CASE_BUSY_STATUSES = {
     "mesh_analysis",
 }
 
+CASE_MRI_ALREADY_EXISTS_MESSAGE = "This MRI case already has a registered raw scan. Confirm replacement to overwrite it."
+CASE_MRI_BUSY_MESSAGE = "The MRI scan cannot be changed while processing is running for this case."
+
 
 def _is_future_date(value: str | date) -> bool:
     normalized = value if isinstance(value, date) else date.fromisoformat(str(value))
@@ -229,6 +232,58 @@ class CaseService:
 
         return self.delete_for_user(user, current.data.id)
 
+    def register_mri_input_for_user(
+        self,
+        user: UserRecord,
+        case_id: int,
+        *,
+        source_raw_path: Path,
+        replace_existing: bool = False,
+    ) -> DbResult[MriCaseRecord]:
+        """Register or replace the raw MRI file for an existing case.
+
+        This fixes the recovery flow where the database case still exists, but
+        input_mri/<subject>/<date>/ was removed from disk. When the case has no
+        staged raw input, only the missing input file is copied back into the
+        case workspace. When a raw input already exists, callers must explicitly
+        request replacement; replacement clears every generated artifact for the
+        case and resets its status to ``registered``.
+        """
+        current = self.get_for_user(user, case_id)
+        if not current.success:
+            return DbResult.fail(current.error or "Could not load MRI case before input registration.")
+        if current.data is None:
+            return DbResult.ok(None)
+
+        status = (current.data.status or "").lower()
+        if status in CASE_BUSY_STATUSES:
+            return DbResult.fail(CASE_MRI_BUSY_MESSAGE)
+
+        workspace = current.data.workspace
+        raw_exists = bool(workspace and workspace.raw_path.exists())
+        if raw_exists and not replace_existing:
+            return DbResult.fail(CASE_MRI_ALREADY_EXISTS_MESSAGE)
+
+        if raw_exists and replace_existing:
+            result = self.access.replace_mri_case_input(
+                current.data.subject_id,
+                current.data.acquisition_date,
+                source_raw_path=source_raw_path,
+            )
+        else:
+            result = self.access.register_mri_case_input(
+                current.data.subject_id,
+                current.data.acquisition_date,
+                source_raw_path=source_raw_path,
+            )
+
+        if not result.success:
+            return DbResult.fail(result.error or "Could not register MRI scan for this case.")
+        if result.data is None:
+            return DbResult.ok(None)
+
+        return result
+
     def set_status_for_user(
         self,
         user: UserRecord,
@@ -285,4 +340,9 @@ class CaseService:
         )
 
 
-__all__ = ["CaseService", "CASE_BUSY_STATUSES"]
+__all__ = [
+    "CaseService",
+    "CASE_BUSY_STATUSES",
+    "CASE_MRI_ALREADY_EXISTS_MESSAGE",
+    "CASE_MRI_BUSY_MESSAGE",
+]

@@ -1,5 +1,12 @@
 import { apiRequest } from './client'
-import type { CreatedCaseResponse, DeletedCaseResponse, MriCase, UpdateCaseInput, UpdatedCaseResponse } from '../types/api'
+import type {
+  CreatedCaseResponse,
+  DeletedCaseResponse,
+  MriCase,
+  RegisteredCaseMriResponse,
+  UpdateCaseInput,
+  UpdatedCaseResponse,
+} from '../types/api'
 
 export function getCase(caseId: number): Promise<MriCase> {
   return apiRequest<MriCase>(`/cases/${caseId}`)
@@ -15,6 +22,22 @@ export function updateCase(caseId: number, input: UpdateCaseInput): Promise<Upda
 export function deleteCase(caseId: number): Promise<DeletedCaseResponse> {
   return apiRequest<DeletedCaseResponse>(`/cases/${caseId}`, {
     method: 'DELETE',
+  })
+}
+
+
+export function registerCaseMri(input: {
+  caseId: number
+  file: File
+  replaceExisting?: boolean
+}): Promise<RegisteredCaseMriResponse> {
+  const formData = new FormData()
+  formData.append('replace_existing', input.replaceExisting ? 'true' : 'false')
+  formData.append('file', input.file)
+
+  return apiRequest<RegisteredCaseMriResponse>(`/cases/${input.caseId}/mri`, {
+    method: 'POST',
+    formData,
   })
 }
 

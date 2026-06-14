@@ -152,6 +152,7 @@ type MutationResponse<TName extends string, TPayload> = {
 } & TPayload
 
 export type CreatedCaseResponse = MutationResponse<'created', { case: MriCase }>
+export type RegisteredCaseMriResponse = MutationResponse<'registered', { replaced: boolean; case: MriCase }>
 export type UpdatedCaseResponse = MutationResponse<'updated', { case: MriCase }>
 export type DeletedCaseResponse = MutationResponse<'deleted', { case: MriCase }>
 export type CreatedSubjectResponse = AuthorizedSubject

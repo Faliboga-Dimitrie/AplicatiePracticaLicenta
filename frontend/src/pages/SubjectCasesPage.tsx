@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import { apiMessage } from '../api/client'
-import { deleteCase, updateCase } from '../api/casesApi'
+import { deleteCase, registerCaseMri, updateCase } from '../api/casesApi'
 import { listSubjectCases } from '../api/subjectsApi'
 import { CaseProgress } from '../components/CaseProgress'
 import { Modal } from '../components/Modal'
@@ -39,6 +39,10 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
   const [isUpdating, setIsUpdating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<MriCase | null>(null)
   const [deletingCaseId, setDeletingCaseId] = useState<number | null>(null)
+  const [mriRegistrationTarget, setMriRegistrationTarget] = useState<MriCase | null>(null)
+  const [mriRegistrationFile, setMriRegistrationFile] = useState<File | null>(null)
+  const [isRegisteringMri, setIsRegisteringMri] = useState(false)
+  const [mriRegistrationError, setMriRegistrationError] = useState<string | null>(null)
 
   const readyCounts = useMemo(() => {
     return {
@@ -72,6 +76,54 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
 
   function handleCreatedCase(createdCase: MriCase) {
     setCases((currentCases) => [createdCase, ...currentCases])
+  }
+
+  function openMriRegistration(mriCase: MriCase) {
+    setMriRegistrationTarget(mriCase)
+    setMriRegistrationFile(null)
+    setMriRegistrationError(null)
+  }
+
+  function closeMriRegistration() {
+    if (isRegisteringMri) return
+    setMriRegistrationTarget(null)
+    setMriRegistrationFile(null)
+    setMriRegistrationError(null)
+  }
+
+  function handleMriRegistrationFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setMriRegistrationFile(event.target.files?.[0] ?? null)
+    setMriRegistrationError(null)
+  }
+
+  async function handleRegisterMri(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!mriRegistrationTarget) return
+
+    if (!mriRegistrationFile) {
+      setMriRegistrationError('Choose a .nii or .nii.gz MRI file first.')
+      return
+    }
+
+    const replaceExisting = Boolean(mriRegistrationTarget.capabilities.raw_uploaded)
+
+    setIsRegisteringMri(true)
+    setMriRegistrationError(null)
+    setError(null)
+    try {
+      const response = await registerCaseMri({
+        caseId: mriRegistrationTarget.id,
+        file: mriRegistrationFile,
+        replaceExisting,
+      })
+      setCases((currentCases) => currentCases.map((item) => (item.id === response.case.id ? response.case : item)))
+      setMriRegistrationTarget(null)
+      setMriRegistrationFile(null)
+    } catch (registrationError) {
+      setMriRegistrationError(apiMessage(registrationError))
+    } finally {
+      setIsRegisteringMri(false)
+    }
   }
 
   async function handleUpdateCase(event: FormEvent<HTMLFormElement>) {
@@ -186,6 +238,14 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
                   <button type="button" onClick={() => onSelectCase(mriCase.id)}>
                     Open scan
                   </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => openMriRegistration(mriCase)}
+                    disabled={mriCase.capabilities.is_busy || (isRegisteringMri && mriRegistrationTarget?.id === mriCase.id)}
+                  >
+                    {mriCase.capabilities.raw_uploaded ? 'Replace MRI file' : 'Register MRI file'}
+                  </button>
                   <button type="button" className="secondary" onClick={() => setEditingCase(toCaseEditorState(mriCase))}>
                     Edit notes/date
                   </button>
@@ -236,6 +296,50 @@ export function SubjectCasesPage({ subjectId, onBack, onSelectCase, onOpenTimeCo
                 {isUpdating ? 'Saving...' : 'Save changes'}
               </button>
               <button type="button" className="secondary" onClick={() => setEditingCase(null)} disabled={isUpdating}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {mriRegistrationTarget && (
+        <Modal
+          title={mriRegistrationTarget.capabilities.raw_uploaded ? 'Replace MRI scan?' : 'Register MRI scan'}
+          eyebrow={formatDateLabel(mriRegistrationTarget.acquisition_date)}
+          onClose={closeMriRegistration}
+          hideCloseButton
+        >
+          <form className="form-grid" onSubmit={handleRegisterMri}>
+            {mriRegistrationTarget.capabilities.raw_uploaded ? (
+              <p className="error-text">
+                This case already has a raw MRI file. Replacing it will delete the current raw file and all generated preprocessing, mesh and metric files for this acquisition.
+              </p>
+            ) : (
+              <p className="muted">
+                No raw MRI file is currently available for this case. The selected file will be copied back into the case workspace without deleting existing results.
+              </p>
+            )}
+
+            <label>
+              MRI file
+              <input
+                type="file"
+                accept=".nii,.gz,.nii.gz"
+                onChange={handleMriRegistrationFileChange}
+                required
+              />
+            </label>
+
+            {mriRegistrationError && <p className="error-text">{mriRegistrationError}</p>}
+
+            <div className="button-row modal-form-actions">
+              <button type="submit" disabled={isRegisteringMri}>
+                {isRegisteringMri
+                  ? (mriRegistrationTarget.capabilities.raw_uploaded ? 'Replacing...' : 'Registering...')
+                  : (mriRegistrationTarget.capabilities.raw_uploaded ? 'Replace MRI scan' : 'Register MRI scan')}
+              </button>
+              <button type="button" className="secondary" onClick={closeMriRegistration} disabled={isRegisteringMri}>
                 Cancel
               </button>
             </div>

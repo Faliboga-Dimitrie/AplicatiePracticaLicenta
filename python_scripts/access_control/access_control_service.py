@@ -610,6 +610,120 @@ class AccessControlService:
             return DbResult.fail(str(exc))
 
 
+    def register_mri_case_input(
+        self,
+        subject_id: str,
+        acquisition_date: str | date,
+        *,
+        source_raw_path: Path,
+    ) -> DbResult[MriCaseRecord]:
+        """Copy a raw MRI file into an existing case workspace.
+
+        This method is intentionally non-destructive. It is used when the case
+        metadata exists but the canonical input file is missing, for example
+        after input_mri/ was deleted manually. Processed outputs are preserved.
+        """
+        try:
+            acq_date = normalize_date(acquisition_date)
+            existing = self.cases.get_by_subject_date(subject_id, acq_date)
+            if not existing.success:
+                return DbResult.fail(existing.error or "Could not load MRI case before input registration.")
+            if existing.data is None:
+                return DbResult.ok(None)
+
+            workspace = self._create_workspace(
+                subject_id=subject_id,
+                acquisition_date=acq_date,
+                source_raw_path=source_raw_path,
+            )
+
+            return DbResult.ok(
+                MriCaseRecord(
+                    id=existing.data.id,
+                    subject_id=existing.data.subject_id,
+                    acquisition_date=existing.data.acquisition_date,
+                    notes=existing.data.notes,
+                    status=existing.data.status,
+                    workspace=workspace,
+                )
+            )
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
+    def replace_mri_case_input(
+        self,
+        subject_id: str,
+        acquisition_date: str | date,
+        *,
+        source_raw_path: Path,
+    ) -> DbResult[MriCaseRecord]:
+        """Replace a case raw MRI and clear all generated case files.
+
+        The database row is kept, because the operation belongs to the existing
+        case card. Only the filesystem workspace is replaced and the status is
+        reset to ``registered`` so preprocessing can be run again from scratch.
+        """
+        try:
+            acq_date = normalize_date(acquisition_date)
+            existing = self.cases.get_by_subject_date(subject_id, acq_date)
+            if not existing.success:
+                return DbResult.fail(existing.error or "Could not load MRI case before input replacement.")
+            if existing.data is None:
+                return DbResult.ok(None)
+
+            if self.workspace_gateway is None:
+                return DbResult.fail("replace_workspace=True requires a workspace_gateway.")
+
+            staged_workspace_delete = self.workspace_gateway.stage_case_workspace_delete(
+                subject_id=existing.data.subject_id,
+                acquisition_date=existing.data.acquisition_date,
+            )
+
+            try:
+                workspace = self._create_workspace(
+                    subject_id=existing.data.subject_id,
+                    acquisition_date=existing.data.acquisition_date,
+                    source_raw_path=source_raw_path,
+                )
+
+                updated = self.cases.update_by_subject_date(
+                    existing.data.subject_id,
+                    existing.data.acquisition_date,
+                    status="registered",
+                )
+                if not updated.success:
+                    self.workspace_gateway.delete_case_workspace(
+                        subject_id=existing.data.subject_id,
+                        acquisition_date=existing.data.acquisition_date,
+                    )
+                    self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
+                    return DbResult.fail(updated.error or "Could not reset MRI case status after input replacement.")
+
+            except Exception as exc:
+                try:
+                    self.workspace_gateway.delete_case_workspace(
+                        subject_id=existing.data.subject_id,
+                        acquisition_date=existing.data.acquisition_date,
+                    )
+                finally:
+                    self.workspace_gateway.rollback_staged_delete(staged_workspace_delete)
+                return DbResult.fail(str(exc))
+
+            self.workspace_gateway.commit_staged_delete(staged_workspace_delete)
+
+            return DbResult.ok(
+                MriCaseRecord(
+                    id=existing.data.id,
+                    subject_id=existing.data.subject_id,
+                    acquisition_date=existing.data.acquisition_date,
+                    notes=existing.data.notes,
+                    status="registered",
+                    workspace=workspace,
+                )
+            )
+        except Exception as exc:
+            return DbResult.fail(str(exc))
+
     def delete_mri_case_by_subject_date(
         self,
         subject_id: str,

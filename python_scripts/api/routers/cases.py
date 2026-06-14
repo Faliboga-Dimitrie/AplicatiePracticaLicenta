@@ -14,6 +14,7 @@ from ..errors import raise_api_error, unwrap_result
 from ..schemas import MriCaseResponse, UpdateMriCaseRequest
 from ..serialization import mri_case_to_dict
 from ..services import CaseService
+from ..services.cases import CASE_MRI_ALREADY_EXISTS_MESSAGE, CASE_MRI_BUSY_MESSAGE
 from ..upload_validation import safe_nifti_upload_filename
 
 router = APIRouter()
@@ -68,6 +69,61 @@ def create_case_with_upload(
         "created": True,
         "case": mri_case_to_dict(case),
     }
+
+
+@router.post("/{case_id}/mri")
+def register_case_mri_input(
+    case_id: int,
+    replace_existing: bool = Form(False),
+    file: UploadFile = File(...),
+    current_user: UserRecord = Depends(get_current_user),
+    cases: CaseService = Depends(get_case_service),
+):
+    """Register or replace the raw MRI file for an existing case.
+
+    This endpoint is used when a case already exists in the database but the
+    staged input file is missing, or when the user explicitly chooses to replace
+    the raw scan for that case. Replacement clears generated workspace files and
+    resets the case to the registered state.
+    """
+    try:
+        filename = safe_nifti_upload_filename(file.filename, default="raw_mri.nii.gz")
+    except ValueError as exc:
+        raise_api_error(
+            400,
+            str(exc),
+            code="INVALID_UPLOAD_FILE",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="mri_api_case_input_") as tmpdir:
+        temp_path = Path(tmpdir) / filename
+        with temp_path.open("wb") as target:
+            file.file.seek(0)
+            shutil.copyfileobj(file.file, target)
+
+        result = cases.register_mri_input_for_user(
+            current_user,
+            case_id,
+            source_raw_path=temp_path,
+            replace_existing=replace_existing,
+        )
+
+    if not result.success and result.error == CASE_MRI_ALREADY_EXISTS_MESSAGE:
+        raise_api_error(409, result.error, code="MRI_SCAN_ALREADY_REGISTERED")
+    if not result.success and result.error == CASE_MRI_BUSY_MESSAGE:
+        raise_api_error(409, result.error, code="CASE_PROCESSING_IN_PROGRESS")
+
+    case = unwrap_result(
+        result,
+        not_found_message="MRI case not found or not enough permissions to register a scan.",
+    )
+
+    return {
+        "registered": True,
+        "replaced": bool(replace_existing),
+        "case": mri_case_to_dict(case),
+    }
+
 
 @router.get("/{case_id}", response_model=MriCaseResponse)
 def get_case(
