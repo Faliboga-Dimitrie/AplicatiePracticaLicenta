@@ -137,6 +137,7 @@ function ComparisonScene({
   overlapping,
   variant,
   preserveSourceColors,
+  preserveChangedSourceColors,
 }: {
   objectUrl: string
   unchangedColor: string
@@ -149,6 +150,7 @@ function ComparisonScene({
   overlapping: boolean
   variant: ComparisonVariant
   preserveSourceColors: boolean
+  preserveChangedSourceColors: boolean
 }) {
   const gltf = useGLTF(objectUrl)
 
@@ -172,10 +174,10 @@ function ComparisonScene({
     })
 
     applyGroupStyle(unchanged, unchangedColor, layerControls.unchanged.opacity, preserveSourceColors)
-    applyGroupStyle(changed, changedColor, layerControls.changed.opacity, preserveSourceColors)
+    applyGroupStyle(changed, changedColor, layerControls.changed.opacity, preserveSourceColors || preserveChangedSourceColors)
 
     return { unchangedGroup: unchanged, changedGroup: changed }
-  }, [changedColor, gltf.scene, layerControls.changed.opacity, layerControls.unchanged.opacity, preserveSourceColors, unchangedColor, variant])
+  }, [changedColor, gltf.scene, layerControls.changed.opacity, layerControls.unchanged.opacity, preserveChangedSourceColors, preserveSourceColors, unchangedColor, variant])
 
   useEffect(() => {
     return () => {
@@ -229,6 +231,9 @@ export function Comparison3DViewer({
   variant = 'changedUnchanged',
   layerLabels = defaultLayerLabels,
   preserveSourceColors = false,
+  preserveChangedSourceColors = false,
+  defaultUnchangedColor = '#508cff',
+  defaultChangedColor = '#ff2d2d',
 }: {
   objectUrl: string | null
   title: string
@@ -240,9 +245,12 @@ export function Comparison3DViewer({
   variant?: ComparisonVariant
   layerLabels?: ComparisonLayerLabels
   preserveSourceColors?: boolean
+  preserveChangedSourceColors?: boolean
+  defaultUnchangedColor?: string
+  defaultChangedColor?: string
 }) {
-  const [unchangedColor, setUnchangedColor] = useState('#508cff')
-  const [changedColor, setChangedColor] = useState('#ff2d2d')
+  const [unchangedColor, setUnchangedColor] = useState(defaultUnchangedColor)
+  const [changedColor, setChangedColor] = useState(defaultChangedColor)
   const [autoRotate, setAutoRotate] = useState(false)
   const [overlapping, setOverlapping] = useState(false)
   const [layerControls, setLayerControls] = useState<ComparisonLayerControls>(() => createDefaultLayerControls())
@@ -254,6 +262,11 @@ export function Comparison3DViewer({
     { value: 'unchanged', label: layerLabels.unchanged },
     { value: 'changed', label: layerLabels.changed },
   ], [layerLabels])
+
+  useEffect(() => {
+    setUnchangedColor(defaultUnchangedColor)
+    setChangedColor(defaultChangedColor)
+  }, [defaultChangedColor, defaultUnchangedColor])
 
   function updateTransform(target: TransformTarget, transform: ViewerTransform) {
     setTransforms((current) => ({ ...current, [target]: transform }))
@@ -300,16 +313,16 @@ export function Comparison3DViewer({
             {overlapping ? `${layerLabels.unchanged} and ${layerLabels.changed} overlap. Use opacity to control layer strength.` : `${layerLabels.unchanged} and ${layerLabels.changed} are side by side. Use opacity to control each layer independently.`}
           </p>
           {!preserveSourceColors && (
-            <>
-              <label className="inline-field">
-                {layerLabels.unchanged} color
-                <input type="color" value={unchangedColor} onChange={(event) => setUnchangedColor(event.target.value)} />
-              </label>
-              <label className="inline-field">
-                {layerLabels.changed} color
-                <input type="color" value={changedColor} onChange={(event) => setChangedColor(event.target.value)} />
-              </label>
-            </>
+            <label className="inline-field">
+              {layerLabels.unchanged} color
+              <input type="color" value={unchangedColor} onChange={(event) => setUnchangedColor(event.target.value)} />
+            </label>
+          )}
+          {!preserveSourceColors && !preserveChangedSourceColors && (
+            <label className="inline-field">
+              {layerLabels.changed} color
+              <input type="color" value={changedColor} onChange={(event) => setChangedColor(event.target.value)} />
+            </label>
           )}
           <label className="range-label">
             {layerLabels.unchanged} opacity {Math.round(layerControls.unchanged.opacity * 100)}%
@@ -375,6 +388,7 @@ export function Comparison3DViewer({
             overlapping={overlapping}
             variant={variant}
             preserveSourceColors={preserveSourceColors}
+            preserveChangedSourceColors={preserveChangedSourceColors}
           />
         )}
         {!isLoading && !error && !objectUrl && <div className="viewer-empty-state"><p className="muted">No comparison loaded yet.</p></div>}

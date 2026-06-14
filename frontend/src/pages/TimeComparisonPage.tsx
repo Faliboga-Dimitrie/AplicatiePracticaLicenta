@@ -445,6 +445,11 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                   {comparisonMethod === 'pve' ? (
                     <div className="heatmap-legend-grid">
                       <div className="heatmap-legend-item">
+                        <span className="heatmap-swatch unchanged-context" />
+                        <strong>Yellow</strong>
+                        <p className="muted small-note">Unchanged tissue. This layer is intentionally not heatmapped, so it remains easy to distinguish from the statistical change colors.</p>
+                      </div>
+                      <div className="heatmap-legend-item">
                         <span className="heatmap-gradient pve-decrease" />
                         <strong>Blue shades</strong>
                         <p className="muted small-note">Tissue probability decreased. Stronger blue means the threshold-relative change is closer to or above 3σ.</p>
@@ -457,6 +462,11 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                     </div>
                   ) : (
                     <div className="heatmap-legend-grid">
+                      <div className="heatmap-legend-item">
+                        <span className="heatmap-swatch unchanged-context" />
+                        <strong>Yellow</strong>
+                        <p className="muted small-note">Unchanged surface. This layer is intentionally not heatmapped, so only changed geometry carries statistical intensity.</p>
+                      </div>
                       <div className="heatmap-legend-item">
                         <span className="heatmap-gradient distance-change" />
                         <strong>Purple shades</strong>
@@ -476,21 +486,21 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                 loadingText="Building visual comparison..."
                 isLoading={isLoadingVisual}
                 error={visualError}
-                preserveSourceColors={visualStyle === 'statistical_heatmap'}
+                preserveChangedSourceColors={visualStyle === 'statistical_heatmap'}
+                defaultUnchangedColor={visualStyle === 'statistical_heatmap' ? '#ffd60a' : '#508cff'}
               />
 
               <Comparison3DViewer
                 objectUrl={changedRegionObjectUrl}
                 title="Changed region before / after"
                 subtitle={comparisonMethod === 'pve'
-                  ? `${visualStyle === 'statistical_heatmap' ? 'Heatmaps' : 'Shows'} only the detected changed ${tissueLabel(selectedTissue)} region, once from ${report.baseline_date} and once from ${report.end_date}.`
-                  : `${visualStyle === 'statistical_heatmap' ? 'Heatmaps' : 'Shows'} only the ${tissueLabel(selectedTissue)} surface parts that moved more than ${distanceThresholdMm} mm, before and after.`}
+                  ? `Shows only the detected changed ${tissueLabel(selectedTissue)} region, once from ${report.baseline_date} and once from ${report.end_date}.`
+                  : `Shows only the ${tissueLabel(selectedTissue)} surface parts that moved more than ${distanceThresholdMm} mm, before and after.`}
                 loadingText="Building changed-region before/after view..."
                 isLoading={isLoadingVisual}
                 error={changedRegionError}
                 variant="beforeAfter"
                 layerLabels={{ unchanged: 'Before region', changed: 'After region' }}
-                preserveSourceColors={visualStyle === 'statistical_heatmap'}
               />
             </Suspense>
           )}
@@ -503,7 +513,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
             <p>
               Visual comparison highlights the selected tissue between the baseline scan and the target scan.
               Unchanged areas use the baseline color, while detected changes use the change color.
-              The changed-region before/after view then uses the same detected-change mask to show only that region in the baseline scan and in the target scan. Binary style uses the classic changed/unchanged colors; statistical heatmap style preserves the real threshold-relative change magnitude and maps it to color intensity.
+              The changed-region before/after view then uses the same detected-change mask to show only that region in the baseline scan and in the target scan. Binary style uses the classic changed/unchanged colors. Statistical heatmap style preserves the real threshold-relative change magnitude only on the main changed layer, while the unchanged layer and the before/after view remain simple solid colors for context.
             </p>
             <article>
               <h3>Tissue probability</h3>

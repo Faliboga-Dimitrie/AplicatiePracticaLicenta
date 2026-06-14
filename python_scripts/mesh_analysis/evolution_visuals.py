@@ -27,6 +27,9 @@ class _ComparisonColors:
         )
 
 
+_HEATMAP_UNCHANGED_COLOR: tuple[int, int, int, int] = (255, 214, 10, 210)
+
+
 def build_visual_comparison_glb(
     *,
     selected: Sequence[EvolutionMriArtifacts],
@@ -288,6 +291,7 @@ def _build_pve_difference_visual_glb(
                 unchanged_mesh=unchanged_mesh,
                 changed_mesh=changed_mesh,
                 colors=colors,
+                unchanged_color_override=_HEATMAP_UNCHANGED_COLOR,
                 reference_label=reference_label,
                 reference_date=reference_date,
                 tissue=tissue,
@@ -402,6 +406,7 @@ def _build_nearest_distance_visual_glb(
                 unchanged_mesh=unchanged_mesh,
                 changed_mesh=changed_mesh,
                 colors=colors,
+                unchanged_color_override=_HEATMAP_UNCHANGED_COLOR,
                 reference_label=reference_label,
                 reference_date=reference_date,
                 tissue=tissue,
@@ -572,29 +577,6 @@ def _build_pve_changed_region_before_after_glb(
             apply_affine_fn=apply_affine_fn,
             marching_cubes_fn=marching_cubes_fn,
         )
-        if visual_style == "statistical_heatmap":
-            pve_sigma = _robust_std_from_changed_values(
-                normalized_data,
-                numpy_module=numpy_module,
-            )
-            for mesh in (before_mesh, after_mesh):
-                if mesh is None:
-                    continue
-                mesh_values = _sample_volume_at_world_vertices(
-                    normalized_data,
-                    affine=template_img.affine,
-                    vertices=mesh.vertices,
-                    numpy_module=numpy_module,
-                    map_coordinates_fn=map_coordinates_fn,
-                )
-                _apply_heatmap_vertex_colors(
-                    mesh,
-                    mesh_values,
-                    sigma=pve_sigma,
-                    color_family="pve_signed",
-                    trimesh_module=trimesh_module,
-                    numpy_module=numpy_module,
-                )
         added_geometry = _add_before_after_layers(
             scene,
             before_mesh=before_mesh,
@@ -603,10 +585,9 @@ def _build_pve_changed_region_before_after_glb(
             baseline_date=baseline.acquisition_date,
             target_date=target.acquisition_date,
             tissue=tissue,
-            method_suffix="pve_heatmap" if visual_style == "statistical_heatmap" else "pve",
+            method_suffix="pve",
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
-            preserve_source_colors=visual_style == "statistical_heatmap",
         ) or added_geometry
 
     if not added_geometry:
@@ -678,50 +659,6 @@ def _build_nearest_distance_changed_region_before_after_glb(
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
         )
-        if visual_style == "statistical_heatmap":
-            combined_normalized = numpy_module.concatenate([baseline_normalized, target_normalized])
-            distance_sigma = _robust_std_from_changed_values(
-                combined_normalized,
-                numpy_module=numpy_module,
-            )
-            if before_mesh is not None:
-                before_distances, _before_indices = target_tree.query(
-                    numpy_module.asarray(before_mesh.vertices, dtype=float),
-                    k=1,
-                    workers=-1,
-                )
-                before_normalized = _threshold_relative_unsigned(
-                    before_distances,
-                    threshold=distance_threshold_mm,
-                    numpy_module=numpy_module,
-                )
-                _apply_heatmap_vertex_colors(
-                    before_mesh,
-                    before_normalized,
-                    sigma=distance_sigma,
-                    color_family="distance",
-                    trimesh_module=trimesh_module,
-                    numpy_module=numpy_module,
-                )
-            if after_mesh is not None:
-                after_distances, _after_indices = baseline_tree.query(
-                    numpy_module.asarray(after_mesh.vertices, dtype=float),
-                    k=1,
-                    workers=-1,
-                )
-                after_normalized = _threshold_relative_unsigned(
-                    after_distances,
-                    threshold=distance_threshold_mm,
-                    numpy_module=numpy_module,
-                )
-                _apply_heatmap_vertex_colors(
-                    after_mesh,
-                    after_normalized,
-                    sigma=distance_sigma,
-                    color_family="distance",
-                    trimesh_module=trimesh_module,
-                    numpy_module=numpy_module,
-                )
         added_geometry = _add_before_after_layers(
             scene,
             before_mesh=before_mesh,
@@ -730,11 +667,10 @@ def _build_nearest_distance_changed_region_before_after_glb(
             baseline_date=baseline.acquisition_date,
             target_date=target.acquisition_date,
             tissue=tissue,
-            method_suffix="nearest_heatmap" if visual_style == "statistical_heatmap" else "nearest",
+            method_suffix="nearest",
             trimesh_module=trimesh_module,
             numpy_module=numpy_module,
             extra_x_degrees=85.0,
-            preserve_source_colors=visual_style == "statistical_heatmap",
         ) or added_geometry
 
     if not added_geometry:
@@ -968,6 +904,7 @@ def _add_comparison_layers(
     numpy_module: Any,
     extra_x_degrees: float = 0.0,
     preserve_changed_vertex_colors: bool = False,
+    unchanged_color_override: tuple[int, int, int, int] | None = None,
 ) -> bool:
     geometries = [mesh for mesh in (unchanged_mesh, changed_mesh) if mesh is not None]
     if not geometries:
@@ -985,7 +922,7 @@ def _add_comparison_layers(
 
     added = False
     for change_label, mesh, color in (
-        ("unchanged", unchanged_mesh, colors.baseline),
+        ("unchanged", unchanged_mesh, unchanged_color_override or colors.baseline),
         ("changed", changed_mesh, colors.changed),
     ):
         if mesh is None:
