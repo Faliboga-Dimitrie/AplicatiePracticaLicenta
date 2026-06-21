@@ -333,6 +333,7 @@ export function CaseDetailPage({ caseId, onBack, onOpenViewer, onOpenStatistics,
               </button>
             </>
           )}
+          hideCloseButton
         >
           <p>This will delete the selected MRI scan and its generated result files.</p>
           <dl className="details-list clean-details-list">

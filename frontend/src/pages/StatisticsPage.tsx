@@ -151,14 +151,16 @@ export function StatisticsPage({ caseId, subjectId, onBack, onOpenViewer }: Stat
           <h2>Choose scan</h2>
           <label className={subjectTouched ? 'touched-field' : undefined}>
             Subject
-            {isLoadingSubjects && <span className="muted small-note">Loading subjects...</span>}
+            {isLoadingSubjects && <span className="muted">Loading subjects...</span>}
+            {!isLoadingSubjects && subjects.length > 0 && <span className="muted">Subjects loaded. Choose one to continue.</span>}
             <select value={selectedSubjectId} disabled={isLoadingSubjects} onChange={(event) => handleSubjectChange(event.target.value)}>
               <option value="">Choose subject</option>
               {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.id} · {subject.case_count} cases</option>)}
             </select>
           </label>
 
-          {selectedSubjectId && isLoadingCases && <p className="muted small-note">Loading cases...</p>}
+          {selectedSubjectId && isLoadingCases && <p className="muted">Loading cases...</p>}
+          {!isLoadingCases && selectedSubjectId && <span className="muted">Cases loaded. Choose one to continue.</span>}
 
           {showCaseField && (
             <label className={caseTouched ? 'touched-field' : undefined}>

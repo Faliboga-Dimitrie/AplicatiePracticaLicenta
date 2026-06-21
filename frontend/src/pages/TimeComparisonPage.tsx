@@ -285,8 +285,8 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
         <h2>Choose subject</h2>
         <label>
           Subject
-          {isLoadingSubjects && <span className="muted small-note">Loading subjects...</span>}
-          {!isLoadingSubjects && subjects.length > 0 && <span className="muted small-note">Subjects loaded. Choose one to continue.</span>}
+          {isLoadingSubjects && <span className="muted">Loading subjects...</span>}
+          {!isLoadingSubjects && subjects.length > 0 && <span className="muted">Subjects loaded. Choose one to continue.</span>}
           <select value={selectedSubjectId} disabled={isLoadingSubjects} onChange={(event) => handleSubjectChange(event.target.value)}>
             <option value="">Choose subject</option>
             {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.id} · {subject.case_count} cases</option>)}

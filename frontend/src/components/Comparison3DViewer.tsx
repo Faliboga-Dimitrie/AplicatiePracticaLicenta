@@ -19,8 +19,8 @@ const defaultLayerLabels: ComparisonLayerLabels = {
 }
 
 const sideBySideOffsets: Record<LayerKind, number> = {
-  unchanged: -110,
-  changed: 110,
+  unchanged: -80,
+  changed: 80,
 }
 
 function createDefaultLayerControls(): ComparisonLayerControls {
@@ -200,7 +200,7 @@ function ComparisonScene({
   ] as [number, number, number]
 
   return (
-    <Canvas camera={{ position: [0, -360, 170], fov: 50 }} dpr={[1, 2]}>
+    <Canvas camera={{ position: [0, -360, 170], fov: 70 }} dpr={[1, 2]}>
       <color attach="background" args={[backgroundColor]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[80, -120, 160]} intensity={2.1} />
@@ -288,7 +288,7 @@ export function Comparison3DViewer({
     setOverlapping(isOverlapping)
     const nextOpacity = isOverlapping ? 0.5 : 1
     setLayerControls({
-      unchanged: { opacity: nextOpacity },
+      unchanged: { opacity: 1 },
       changed: { opacity: nextOpacity },
     })
   }

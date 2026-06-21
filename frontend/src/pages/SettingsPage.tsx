@@ -69,7 +69,6 @@ export function SettingsPage({ user, onBackHome, onLogout, onLogoutAll, onDelete
           </div>
           <dl className="details-list">
             <div><dt>Email</dt><dd>{user.email}</dd></div>
-            <div><dt>Status</dt><dd>Active</dd></div>
           </dl>
         </article>
 

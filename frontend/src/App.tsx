@@ -142,7 +142,7 @@ function AppContent() {
           </button>
           <button
             type="button"
-            className={currentSection === 'workspace' ? 'active' : ''}
+            className={view.name === 'subjects' ? 'active' : ''}
             onClick={() => setView({ name: 'subjects' })}
             disabled={isSidebarCollapsed}
             title="Subjects & scans"

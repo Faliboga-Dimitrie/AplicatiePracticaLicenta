@@ -51,20 +51,18 @@ function ModelLayer({
   item,
   controls,
   transform,
-  showMeshes,
   doubleSided,
   overlapping,
 }: {
   item: BrainViewerItem
   controls: TissueControls
   transform: ViewerTransform
-  showMeshes: boolean
   doubleSided: boolean
   overlapping: boolean
 }) {
   const gltf = useGLTF(item.objectUrl)
   const control = controls[item.tissue]
-  const shouldShow = control.visible && showMeshes
+  const shouldShow = control.visible
 
   const scene = useMemo(() => {
     const clone = gltf.scene.clone(true)
@@ -183,7 +181,6 @@ function BrainGlbScene({
   items,
   controls,
   transforms,
-  showMeshes,
   doubleSided,
   autoRotate,
   resetSignal,
@@ -194,7 +191,6 @@ function BrainGlbScene({
   items: BrainViewerItem[]
   controls: TissueControls
   transforms: TissueTransforms
-  showMeshes: boolean
   doubleSided: boolean
   autoRotate: boolean
   resetSignal: number
@@ -203,7 +199,7 @@ function BrainGlbScene({
   onSceneReady?: () => void
 }) {
   return (
-    <Canvas camera={{ position: [0, -380, 170], fov: 50 }} dpr={[1, 2]}>
+    <Canvas camera={{ position: [0, -380, 170], fov: 70 }} dpr={[1, 2]}>
       <color attach="background" args={[backgroundColor]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[80, -120, 160]} intensity={2.1} />
@@ -220,7 +216,6 @@ function BrainGlbScene({
                 item={item}
                 controls={controls}
                 transform={transforms[item.tissue]}
-                showMeshes={showMeshes}
                 doubleSided={doubleSided}
                 overlapping={overlapping}
               />
@@ -241,7 +236,6 @@ export function Brain3DViewer({
   isLoading = false,
   error = null,
   onReload,
-  controlMode = 'full',
   onSceneReady,
 }: {
   items: BrainViewerItem[]
@@ -251,11 +245,9 @@ export function Brain3DViewer({
   isLoading?: boolean
   error?: string | null
   onReload?: () => void
-  controlMode?: 'full' | 'comparison'
   onSceneReady?: () => void
 }) {
   const [controls, setControls] = useState<TissueControls>(defaultTissueControls)
-  const [showMeshes, setShowMeshes] = useState(true)
   const [doubleSided, setDoubleSided] = useState(true)
   const [autoRotate, setAutoRotate] = useState(false)
   const [transforms, setTransforms] = useState<TissueTransforms>(() => createDefaultTissueTransforms())
@@ -277,8 +269,9 @@ export function Brain3DViewer({
   function handleOverlappingChange(isOverlapping: boolean) {
     setOverlapping(isOverlapping)
     const nextOpacity = isOverlapping ? 0.5 : 1
+    const fullOpacity = 1
     setControls((current) => ({
-      gm: { ...current.gm, opacity: nextOpacity },
+      gm: { ...current.gm, opacity: fullOpacity },
       wm: { ...current.wm, opacity: nextOpacity },
       csf: { ...current.csf, opacity: nextOpacity },
     }))
@@ -295,11 +288,8 @@ export function Brain3DViewer({
 
   const visibleCount = items.filter((item) => {
     const tissueControl = controls[item.tissue]
-    return tissueControl.visible && showMeshes
+    return tissueControl.visible
   }).length
-
-  const hasMeshes = items.some((item) => item.mode === 'mesh')
-  const showLayerControls = controlMode === 'full'
 
   return (
     <section className="viewer-layout">
@@ -317,18 +307,14 @@ export function Brain3DViewer({
         )}
 
         <div className="viewer-toggle-grid">
-          {showLayerControls && (
+          {
             <>
-              <label className="checkbox-row">
-                <input type="checkbox" checked={showMeshes} disabled={!hasMeshes} onChange={(event) => setShowMeshes(event.target.checked)} />
-                3D tissue layers
-              </label>
               <label className="checkbox-row">
                 <input type="checkbox" checked={doubleSided} onChange={(event) => setDoubleSided(event.target.checked)} />
                 Show inside surfaces
               </label>
             </>
-          )}
+          }
           <label className="checkbox-row">
             <input type="checkbox" checked={autoRotate} onChange={(event) => setAutoRotate(event.target.checked)} />
             Auto rotate
@@ -347,7 +333,7 @@ export function Brain3DViewer({
           </label>
         </div>
 
-        {showLayerControls && (
+        {
           <div className="stack compact-stack">
             <h3>Tissues</h3>
             <p className="muted small-note">{overlapping ? 'Layers overlap. Use opacity to control how strongly each tissue is visible.' : 'Layers are placed side by side. Use opacity to control each tissue independently.'}</p>
@@ -384,7 +370,7 @@ export function Brain3DViewer({
               </div>
             ))}
           </div>
-        )}
+        }
 
         <ViewerTransformControls
           title="Model position"
@@ -416,7 +402,6 @@ export function Brain3DViewer({
               items={items}
               controls={controls}
               transforms={transforms}
-              showMeshes={showMeshes}
               doubleSided={doubleSided}
               autoRotate={autoRotate}
               resetSignal={resetSignal}

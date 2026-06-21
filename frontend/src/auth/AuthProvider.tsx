@@ -6,11 +6,7 @@ import { AuthContext } from './AuthContext'
 import type { AuthContextValue } from './AuthContext'
 import type { User } from '../types/api'
 
-type AuthProviderProps = {
-  children: ReactNode
-}
-
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
