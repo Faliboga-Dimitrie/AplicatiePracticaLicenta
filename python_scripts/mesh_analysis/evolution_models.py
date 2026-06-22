@@ -118,15 +118,6 @@ class EvolutionCaseMetrics:
         }
 
 
-def evolution_artifacts_from_workspaces(
-    workspaces: Iterable[CaseWorkspace],
-) -> list[EvolutionMriArtifacts]:
-    """
-    Helper function useful for the future API service layer.
-    """
-    return [EvolutionMriArtifacts.from_workspace(workspace) for workspace in workspaces]
-
-
 def _normalize_tissues(tissues: Iterable[str] | None) -> tuple[str, ...]:
     if tissues is None:
         return (TissueName.CSF.value, TissueName.GM.value, TissueName.WM.value)
@@ -150,5 +141,4 @@ __all__ = [
     "JsonDict",
     "EvolutionMriArtifacts",
     "EvolutionCaseMetrics",
-    "evolution_artifacts_from_workspaces",
 ]

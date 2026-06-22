@@ -203,5 +203,4 @@ __all__ = [
     "_require_float",
     "_append_optional_float",
     "_basic_stats",
-    "_nested_mapping",
 ]

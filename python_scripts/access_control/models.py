@@ -50,6 +50,13 @@ class SubjectRecord:
     age: int | None
     notes: str | None
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "age": self.age,
+            "notes": self.notes,
+        }
 
 @dataclass(frozen=True)
 class MriCaseRecord:
@@ -63,6 +70,17 @@ class MriCaseRecord:
     @property
     def case_key(self) -> str:
         return f"{self.subject_id}_{self.acquisition_date.isoformat()}"
+    
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "subject_id": self.subject_id,
+            "acquisition_date": self.acquisition_date.isoformat(),
+            "notes": self.notes,
+            "status": self.status,
+            "case_key": self.case_key,
+            "workspace": self.workspace.to_dict() if self.workspace else None,
+        }
 
 
 @dataclass(frozen=True)
@@ -88,6 +106,12 @@ class SubjectSummaryRecord:
 
     subject: SubjectRecord
     case_count: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            **self.subject.to_dict(),
+            "case_count": self.case_count,
+        }
 
 
 __all__ = [

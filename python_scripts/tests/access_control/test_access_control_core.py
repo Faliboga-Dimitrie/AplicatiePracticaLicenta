@@ -5,11 +5,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from python_scripts.access_control.models import (
-    AuthSessionRecord,
-    MriCaseRecord,
     SubjectAccessRecord,
-    SubjectRecord,
-    UserCredentialsRecord,
     UserRecord,
 )
 from python_scripts.access_control.password_hashing import PasswordHasher

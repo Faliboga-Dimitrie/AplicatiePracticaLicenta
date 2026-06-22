@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 from datetime import date, datetime, timezone
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest

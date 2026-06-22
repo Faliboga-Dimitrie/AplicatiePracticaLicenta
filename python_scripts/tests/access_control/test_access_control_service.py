@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any
 
 from python_scripts.access_control.access_control_service import AccessControlRepositories, AccessControlService
 from python_scripts.access_control.models import (
@@ -177,7 +176,7 @@ class FakeCases:
         return DbResult.ok(next((c for c in self.cases.values() if c.subject_id == subject_id and c.acquisition_date == acq), None))
 
     def update_by_subject_date(self, subject_id, acquisition_date, *, new_acquisition_date=object(), notes=object(), status=object()):
-        case = self.get_by_subject_date(subject_id, acquisition_date).data
+        case: MriCaseRecord | None = self.get_by_subject_date(subject_id, acquisition_date).data
         if case is None:
             return DbResult.ok(False)
         new_date = case.acquisition_date if isinstance(new_acquisition_date, object) and new_acquisition_date.__class__ is object else new_acquisition_date

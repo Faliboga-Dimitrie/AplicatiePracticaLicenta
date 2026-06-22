@@ -12,7 +12,7 @@ from ..schemas import (
     MriCaseResponse,
     UpdateSubjectRequest,
 )
-from ..serialization import mri_case_to_dict, subject_summary_to_dict, subject_to_dict, subject_with_cases_to_dict
+from ..serialization import mri_case_to_dict, subject_with_cases_to_dict
 from ..services import SubjectService
 
 router = APIRouter()
@@ -35,7 +35,7 @@ def list_subjects(
     if not result.success:
         raise HTTPException(status_code=400, detail=result.error or "Could not load subjects.")
 
-    return [subject_summary_to_dict(subject_summary) for subject_summary in result.data or []]
+    return [subject_summary.to_dict() for subject_summary in result.data or []]
 
 
 @router.get("/{subject_id}", response_model=AuthorizedSubjectResponse)
@@ -51,7 +51,7 @@ def get_subject(
     has access to that subject.
     """
     result = subjects.get_for_user(current_user, subject_id, include_cases=True)
-    subject_with_cases = unwrap_result(
+    subject_with_cases : SubjectWithCases = unwrap_result(
         result,
         not_found_message="Subject not found or not authorized.",
     )
@@ -102,9 +102,8 @@ def create_subject(
         age=request.age,
         notes=request.notes,
     )
-    subject_with_cases = unwrap_result(result, not_found_message="Subject could not be created.")
+    subject_with_cases : SubjectWithCases = unwrap_result(result, not_found_message="Subject could not be created.")
     return subject_with_cases_to_dict(subject_with_cases, include_cases=True)
-
 
 @router.put("/{subject_id}")
 def update_subject(
@@ -131,7 +130,7 @@ def update_subject(
 
     return {
         "updated": True,
-        "subject": subject_to_dict(subject.subject),
+        "subject": subject.subject.to_dict(),
     }
 
 

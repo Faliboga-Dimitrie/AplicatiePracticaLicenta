@@ -7,31 +7,9 @@ from typing import Any
 from ..api.services import JobRecord, CaseArtifactBundle, ArtifactFile
 from ..api.services.cases import CASE_BUSY_STATUSES
 
-from ..access_control import MriCaseRecord, SubjectRecord, SubjectSummaryRecord, SubjectWithCases
+from ..access_control import MriCaseRecord, SubjectWithCases
 
 from ..project_core import CaseWorkspace
-
-
-def _has_file_with_suffix(directory: Path, *suffixes: str) -> bool:
-    if not directory.exists() or not directory.is_dir():
-        return False
-    lowered_suffixes = tuple(suffix.lower() for suffix in suffixes)
-    return any(
-        path.is_file() and path.name.lower().endswith(lowered_suffixes)
-        for path in directory.iterdir()
-    )
-
-def _metrics_json_exists(workspace: CaseWorkspace) -> bool:
-    return (
-        workspace.metrics_json_path.exists()
-        or _has_file_with_suffix(workspace.mesh_dir, ".json")
-    )
-
-def _mesh_glb_exists(workspace: CaseWorkspace) -> bool:
-    return (
-        any(path.exists() for path in workspace.mesh_paths.values())
-        or _has_file_with_suffix(workspace.mesh_dir, ".glb")
-    )
 
 
 def workspace_to_dict(workspace: CaseWorkspace | None) -> dict[str, object] | None:
@@ -43,8 +21,8 @@ def workspace_to_dict(workspace: CaseWorkspace | None) -> dict[str, object] | No
     reoriented_exists = workspace.reoriented_path.exists()
     skull_stripped_exists = workspace.skull_stripped_path.exists()
     fast_pve_outputs_exist = bool(getattr(workspace, "has_fast_pve_outputs", False))
-    metrics_exists = _metrics_json_exists(workspace)
-    any_mesh_outputs_exist = _mesh_glb_exists(workspace)
+    metrics_exists = bool(getattr(workspace, "has_metrics_json", False))
+    any_mesh_outputs_exist = bool(getattr(workspace, "has_any_mesh_analysis_outputs", False))
     complete_mesh_outputs_exist = bool(getattr(workspace, "has_complete_mesh_analysis_outputs", False))
 
     return {
@@ -91,8 +69,8 @@ def case_capabilities_to_dict(case: MriCaseRecord) -> dict[str, bool]:
 
     raw_exists = workspace.raw_path.exists()
     has_fast_pve_outputs = bool(getattr(workspace, "has_fast_pve_outputs", False))
-    has_any_mesh_outputs = _mesh_glb_exists(workspace)
-    has_metrics = _metrics_json_exists(workspace)
+    has_any_mesh_outputs = bool(getattr(workspace, "has_any_mesh_analysis_outputs", False))
+    has_metrics = bool(getattr(workspace, "has_metrics_json", False))
     can_view_artifacts = has_any_mesh_outputs or has_metrics
 
     return {
@@ -110,15 +88,6 @@ def case_capabilities_to_dict(case: MriCaseRecord) -> dict[str, bool]:
         "is_busy": is_busy,
     }
 
-def subject_to_dict(subject: SubjectRecord) -> dict[str, object]:
-    return {
-        "id": subject.id,
-        "name": subject.name,
-        "age": subject.age,
-        "notes": subject.notes,
-    }
-
-
 def _isoformat(value: Any) -> Any:
     return value.isoformat() if hasattr(value, "isoformat") else value
 
@@ -135,13 +104,6 @@ def mri_case_to_dict(case: MriCaseRecord) -> dict[str, object]:
         "capabilities": case_capabilities_to_dict(case),
     }
 
-
-def subject_summary_to_dict(subject_summary: SubjectSummaryRecord) -> dict[str, object]:
-    return {
-        **subject_to_dict(subject_summary.subject),
-        "case_count": int(subject_summary.case_count or 0),
-    }
-
 def subject_with_cases_to_dict(
     subject_with_cases: SubjectWithCases,
     *,
@@ -150,7 +112,7 @@ def subject_with_cases_to_dict(
     cases = list(subject_with_cases.cases or [])
 
     result: dict[str, object] = {
-        **subject_to_dict(subject_with_cases.subject),
+        **subject_with_cases.subject.to_dict(),
         "case_count": len(cases),
     }
 
@@ -158,8 +120,6 @@ def subject_with_cases_to_dict(
         result["cases"] = [mri_case_to_dict(case) for case in cases]
 
     return result
-
-
 
 def _json_safe(value):
     if value is None or isinstance(value, (str, int, float, bool)):

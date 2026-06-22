@@ -359,6 +359,10 @@ class CaseWorkspace:
     @property
     def metrics_json_path(self) -> Path:
         return self.mesh_dir / f"{self.subject_id}_metrics.json"
+    
+    @property
+    def has_metrics_json(self) -> bool:
+        return self.metrics_json_path.exists() and self.metrics_json_path.is_file()
 
     @property
     def mesh_paths(self) -> dict[str, Path]:

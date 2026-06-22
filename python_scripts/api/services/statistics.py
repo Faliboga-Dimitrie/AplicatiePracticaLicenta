@@ -90,8 +90,8 @@ class StatisticsService:
         target_date: str | None = None,
         tissues: list[str] | None = None,
         comparison_method: str = "pve",
-        pve_threshold: float = 0.2,
-        distance_threshold_mm: float = 1.0,
+        pve_threshold: float = 0.3,
+        distance_threshold_mm: float = 2.0,
         baseline_color: str = "#508cff",
         changed_color: str = "#ff2d2d",
         marching_cubes_step_size: int = 1,
@@ -179,7 +179,7 @@ class StatisticsService:
             workspace = getattr(case, "workspace", None)
             if workspace is None:
                 continue
-            if require_metrics and self._metrics_json_path(workspace) is None:
+            if require_metrics and getattr(workspace, "has_metrics_json", False) is False:
                 continue
             workspaces.append(workspace)
 
@@ -187,7 +187,7 @@ class StatisticsService:
 
     def _metrics_payload_for_case(self, case: MriCaseRecord) -> dict[str, Any]:
         workspace = getattr(case, "workspace", None)
-        metrics_path = self._metrics_json_path(workspace)
+        metrics_path = getattr(workspace, "metrics_json_path", False)
         if metrics_path is None:
             raise FileNotFoundError("Metrics JSON does not exist for this case.")
 
@@ -221,10 +221,10 @@ class StatisticsService:
 
     def _date_entry(self, case: MriCaseRecord) -> dict[str, Any]:
         workspace = getattr(case, "workspace", None)
-        metrics_ready = self._metrics_json_path(workspace) is not None
-        mesh_ready = bool(workspace is not None and self._has_glb_outputs(workspace))
+        metrics_ready = getattr(workspace, "has_metrics_json", False)
+        mesh_ready = bool(workspace is not None and getattr(workspace, "has_complete_mesh_analysis_outputs", False))
         pve_ready = bool(workspace is not None and getattr(workspace, "has_fast_pve_outputs", False))
-        complete_visual = pve_ready
+        complete_visual = pve_ready and mesh_ready and metrics_ready
 
         return {
             "case_id": case.id,
@@ -236,34 +236,5 @@ class StatisticsService:
             "has_meshes": mesh_ready,
             "has_pve_outputs": pve_ready,
         }
-
-    def _metrics_json_path(self, workspace: CaseWorkspace | None) -> Any:
-        if workspace is None:
-            return None
-
-        expected_path = workspace.metrics_json_path
-        if expected_path.exists() and expected_path.is_file():
-            return expected_path
-
-        mesh_dir = getattr(workspace, "mesh_dir", None)
-        if mesh_dir is None or not mesh_dir.exists() or not mesh_dir.is_dir():
-            return None
-
-        json_files = sorted(
-            (path for path in mesh_dir.iterdir() if path.is_file() and path.name.lower().endswith(".json")),
-            key=lambda path: ("metrics" not in path.name.lower(), path.name.lower()),
-        )
-        return json_files[0] if json_files else None
-
-    def _has_glb_outputs(self, workspace: CaseWorkspace) -> bool:
-        if any(path.exists() and path.is_file() for path in workspace.mesh_paths.values()):
-            return True
-
-        mesh_dir = getattr(workspace, "mesh_dir", None)
-        if mesh_dir is None or not mesh_dir.exists() or not mesh_dir.is_dir():
-            return False
-
-        return any(path.is_file() and path.name.lower().endswith(".glb") for path in mesh_dir.iterdir())
-
 
 __all__ = ["StatisticsService"]

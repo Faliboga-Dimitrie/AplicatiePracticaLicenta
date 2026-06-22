@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
 import io
 from pathlib import Path
 import zipfile
 from types import SimpleNamespace
 from unittest.mock import Mock
-
-import pytest
 
 from python_scripts.access_control import DbResult, MriCaseRecord, SubjectRecord, SubjectSummaryRecord, SubjectWithCases, UserRecord
 from python_scripts.access_control.utils import UNSET
@@ -18,8 +15,6 @@ from python_scripts.api.serialization import (
     case_capabilities_to_dict,
     job_to_dict,
     mri_case_to_dict,
-    subject_summary_to_dict,
-    subject_to_dict,
     subject_with_cases_to_dict,
     workspace_to_dict,
 )
@@ -30,7 +25,7 @@ from python_scripts.api.services.public_processing import PublicProcessingServic
 from python_scripts.api.services.subjects import SubjectService
 from python_scripts.api.services.statistics import StatisticsService
 from python_scripts.project_core.artifacts import ArtifactKind, ArtifactRef
-from python_scripts.project_core.domain import MRICase, TissueSurfaces, TissueVolumes
+from python_scripts.project_core.domain import MRICase
 from python_scripts.project_core.workspace import build_case_workspace
 
 
@@ -243,9 +238,9 @@ def test_subject_artifact_and_job_serializers_are_frontend_safe():
     job = JobRecord(id="j", type="t", status=JobStatus.COMPLETED, user_id=1, case_id=5, result={"date": date(2026, 6, 2), "path": Path("x")})
 
     # Act
-    subject_payload = subject_to_dict(subject)
-    summary_payload = subject_summary_to_dict(SubjectSummaryRecord(subject, 2))
-    with_cases_payload = subject_with_cases_to_dict(SubjectWithCases(subject, (case,)))
+    subject_payload = subject.to_dict()
+    summary_payload = SubjectSummaryRecord(subject, 2).to_dict()
+    with_cases_payload = subject_with_cases_to_dict(SubjectWithCases(subject, (case,)), include_cases=True)
     artifact_payload = artifact_to_dict(bundle.artifacts[0])
     bundle_payload = case_artifacts_to_dict(bundle)
     job_payload = job_to_dict(job)

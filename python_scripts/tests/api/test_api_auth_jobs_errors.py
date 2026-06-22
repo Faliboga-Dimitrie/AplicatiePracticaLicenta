@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -20,7 +20,7 @@ from python_scripts.api.errors import (
 )
 from python_scripts.api.services.auth import AuthError, AuthService, AuthenticatedSession, TokenService
 from python_scripts.api.services.common import mark_case_status_best_effort, require_not_cancelled
-from python_scripts.api.services.jobs import JobContext, JobService, JobStatus
+from python_scripts.api.services.jobs import JobService, JobStatus
 from python_scripts.api.upload_validation import safe_nifti_upload_filename
 
 
