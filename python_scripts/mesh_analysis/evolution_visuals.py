@@ -28,6 +28,9 @@ class _ComparisonColors:
 
 
 _HEATMAP_UNCHANGED_COLOR: tuple[int, int, int, int] = (255, 214, 10, 210)
+_PVE_COMPARISON_SMOOTHING_SIGMA = 0.5
+_ICP_ALIGNMENT_MAX_POINTS = 8000
+_ICP_ALIGNMENT_MAX_ITERATIONS = 50
 
 
 def build_visual_comparison_glb(
@@ -54,7 +57,7 @@ def build_visual_comparison_glb(
         import trimesh
         from nibabel.affines import apply_affine
         from nibabel.processing import resample_from_to
-        from scipy.ndimage import map_coordinates
+        from scipy.ndimage import gaussian_filter, map_coordinates
         from scipy.spatial import cKDTree
         from skimage.measure import marching_cubes
     except ImportError as exc:
@@ -123,6 +126,7 @@ def build_visual_comparison_glb(
             marching_cubes_fn=marching_cubes,
             map_coordinates_fn=map_coordinates,
             resample_from_to_fn=resample_from_to,
+            gaussian_filter_fn=gaussian_filter,
             cKDTree_cls=cKDTree,
             template_path=Path(template_path) if template_path is not None else settings.mni_template_path,
             visual_style=style,
@@ -155,6 +159,7 @@ def build_visual_comparison_glb(
         marching_cubes_fn=marching_cubes,
         map_coordinates_fn=map_coordinates,
         resample_from_to_fn=resample_from_to,
+        gaussian_filter_fn=gaussian_filter,
         template_path=Path(template_path) if template_path is not None else settings.mni_template_path,
         visual_style=style,
     )
@@ -175,6 +180,7 @@ def _build_pve_difference_visual_glb(
     marching_cubes_fn: Any,
     map_coordinates_fn: Any,
     resample_from_to_fn: Any,
+    gaussian_filter_fn: Any,
     template_path: Path,
     visual_style: str = "binary",
 ) -> bytes:
@@ -185,8 +191,6 @@ def _build_pve_difference_visual_glb(
         include_pves=True,
     )
 
-    template_img = _load_resampling_template(template_path, nib_module=nib_module)
-    template_target = (template_img.shape[:3], template_img.affine)
     baseline_metrics = _load_metrics(baseline)
     target_metrics = _load_metrics(target)
 
@@ -194,7 +198,7 @@ def _build_pve_difference_visual_glb(
     added_geometry = False
 
     for tissue in selected_tissues:
-        baseline_img, _baseline_original_data = _load_pve_image(
+        baseline_img, baseline_data = _load_pve_image(
             baseline.pve_paths[tissue],
             nib_module=nib_module,
             numpy_module=numpy_module,
@@ -204,19 +208,24 @@ def _build_pve_difference_visual_glb(
             nib_module=nib_module,
             numpy_module=numpy_module,
         )
-        baseline_data = _resample_pve_data_to_template(
-            baseline_img,
-            target=template_target,
-            resample_from_to_fn=resample_from_to_fn,
-            numpy_module=numpy_module,
-        )
+        baseline_target = (baseline_img.shape[:3], baseline_img.affine)
         target_data = _resample_pve_data_to_template(
             target_img,
-            target=template_target,
+            target=baseline_target,
             resample_from_to_fn=resample_from_to_fn,
             numpy_module=numpy_module,
         )
-        delta_data = target_data - baseline_data
+        baseline_comparison_data = _smooth_pve_data_for_comparison(
+            baseline_data,
+            gaussian_filter_fn=gaussian_filter_fn,
+            numpy_module=numpy_module,
+        )
+        target_comparison_data = _smooth_pve_data_for_comparison(
+            target_data,
+            gaussian_filter_fn=gaussian_filter_fn,
+            numpy_module=numpy_module,
+        )
+        delta_data = target_comparison_data - baseline_comparison_data
         diff_data = numpy_module.abs(delta_data)
         normalized_data = _threshold_relative_signed(
             delta_data,
@@ -237,7 +246,7 @@ def _build_pve_difference_visual_glb(
 
         reference_mesh = _pve_data_to_mesh(
             data=reference_data,
-            affine=template_img.affine,
+            affine=baseline_img.affine,
             level=0.5,
             step_size=marching_cubes_step_size,
             tissue_name=f"{reference_label} {tissue}",
@@ -248,7 +257,7 @@ def _build_pve_difference_visual_glb(
         )
         vertex_diff = _sample_volume_at_world_vertices(
             diff_data,
-            affine=template_img.affine,
+            affine=baseline_img.affine,
             vertices=reference_mesh.vertices,
             numpy_module=numpy_module,
             map_coordinates_fn=map_coordinates_fn,
@@ -256,7 +265,7 @@ def _build_pve_difference_visual_glb(
         if visual_style == "statistical_heatmap":
             vertex_normalized = _sample_volume_at_world_vertices(
                 normalized_data,
-                affine=template_img.affine,
+                affine=baseline_img.affine,
                 vertices=reference_mesh.vertices,
                 numpy_module=numpy_module,
                 map_coordinates_fn=map_coordinates_fn,
@@ -273,7 +282,7 @@ def _build_pve_difference_visual_glb(
         if visual_style == "statistical_heatmap" and changed_mesh is not None:
             changed_vertex_normalized = _sample_volume_at_world_vertices(
                 normalized_data,
-                affine=template_img.affine,
+                affine=baseline_img.affine,
                 vertices=changed_mesh.vertices,
                 numpy_module=numpy_module,
                 map_coordinates_fn=map_coordinates_fn,
@@ -340,12 +349,29 @@ def _build_nearest_distance_visual_glb(
 
     baseline_metrics = _load_metrics(baseline)
     target_metrics = _load_metrics(target)
+    baseline_meshes = _load_meshes_for_tissues(
+        baseline,
+        selected_tissues,
+        trimesh_module=trimesh_module,
+    )
+    target_meshes = _load_meshes_for_tissues(
+        target,
+        selected_tissues,
+        trimesh_module=trimesh_module,
+    )
+    _align_target_meshes_to_baseline(
+        baseline_meshes=baseline_meshes,
+        target_meshes=target_meshes,
+        trimesh_module=trimesh_module,
+        numpy_module=numpy_module,
+    )
+
     scene = trimesh_module.Scene()
     added_geometry = False
 
     for tissue in selected_tissues:
-        baseline_mesh = _load_first_trimesh(baseline.mesh_paths[tissue], trimesh_module=trimesh_module)
-        target_mesh = _load_first_trimesh(target.mesh_paths[tissue], trimesh_module=trimesh_module)
+        baseline_mesh = baseline_meshes[tissue]
+        target_mesh = target_meshes[tissue]
         reference_label, reference_date, use_target_reference = _reference_for_volume_change(
             baseline_volume=float(baseline_metrics.volumes[tissue]),
             target_volume=float(target_metrics.volumes[tissue]),
@@ -453,6 +479,7 @@ def _build_changed_region_before_after_glb(
     marching_cubes_fn: Any,
     map_coordinates_fn: Any,
     resample_from_to_fn: Any,
+    gaussian_filter_fn: Any,
     cKDTree_cls: Any,
     template_path: Path,
     visual_style: str = "binary",
@@ -484,6 +511,7 @@ def _build_changed_region_before_after_glb(
         marching_cubes_fn=marching_cubes_fn,
         map_coordinates_fn=map_coordinates_fn,
         resample_from_to_fn=resample_from_to_fn,
+        gaussian_filter_fn=gaussian_filter_fn,
         template_path=template_path,
         visual_style=visual_style,
     )
@@ -504,6 +532,7 @@ def _build_pve_changed_region_before_after_glb(
     marching_cubes_fn: Any,
     map_coordinates_fn: Any,
     resample_from_to_fn: Any,
+    gaussian_filter_fn: Any,
     template_path: Path,
     visual_style: str = "binary",
 ) -> bytes:
@@ -514,13 +543,11 @@ def _build_pve_changed_region_before_after_glb(
         include_pves=True,
     )
 
-    template_img = _load_resampling_template(template_path, nib_module=nib_module)
-    template_target = (template_img.shape[:3], template_img.affine)
     scene = trimesh_module.Scene()
     added_geometry = False
 
     for tissue in selected_tissues:
-        baseline_img, _baseline_original_data = _load_pve_image(
+        baseline_img, baseline_data = _load_pve_image(
             baseline.pve_paths[tissue],
             nib_module=nib_module,
             numpy_module=numpy_module,
@@ -530,19 +557,24 @@ def _build_pve_changed_region_before_after_glb(
             nib_module=nib_module,
             numpy_module=numpy_module,
         )
-        baseline_data = _resample_pve_data_to_template(
-            baseline_img,
-            target=template_target,
-            resample_from_to_fn=resample_from_to_fn,
-            numpy_module=numpy_module,
-        )
+        baseline_target = (baseline_img.shape[:3], baseline_img.affine)
         target_data = _resample_pve_data_to_template(
             target_img,
-            target=template_target,
+            target=baseline_target,
             resample_from_to_fn=resample_from_to_fn,
             numpy_module=numpy_module,
         )
-        delta_data = target_data - baseline_data
+        baseline_comparison_data = _smooth_pve_data_for_comparison(
+            baseline_data,
+            gaussian_filter_fn=gaussian_filter_fn,
+            numpy_module=numpy_module,
+        )
+        target_comparison_data = _smooth_pve_data_for_comparison(
+            target_data,
+            gaussian_filter_fn=gaussian_filter_fn,
+            numpy_module=numpy_module,
+        )
+        delta_data = target_comparison_data - baseline_comparison_data
         normalized_data = _threshold_relative_signed(
             delta_data,
             threshold=pve_threshold,
@@ -557,7 +589,7 @@ def _build_pve_changed_region_before_after_glb(
 
         before_mesh = _pve_data_to_mesh_or_none(
             data=baseline_changed_data,
-            affine=template_img.affine,
+            affine=baseline_img.affine,
             level=0.5,
             step_size=marching_cubes_step_size,
             tissue_name=f"before {tissue} changed region",
@@ -568,7 +600,7 @@ def _build_pve_changed_region_before_after_glb(
         )
         after_mesh = _pve_data_to_mesh_or_none(
             data=target_changed_data,
-            affine=template_img.affine,
+            affine=baseline_img.affine,
             level=0.5,
             step_size=marching_cubes_step_size,
             tissue_name=f"after {tissue} changed region",
@@ -614,12 +646,29 @@ def _build_nearest_distance_changed_region_before_after_glb(
         include_meshes=True,
     )
 
+    baseline_meshes = _load_meshes_for_tissues(
+        baseline,
+        selected_tissues,
+        trimesh_module=trimesh_module,
+    )
+    target_meshes = _load_meshes_for_tissues(
+        target,
+        selected_tissues,
+        trimesh_module=trimesh_module,
+    )
+    _align_target_meshes_to_baseline(
+        baseline_meshes=baseline_meshes,
+        target_meshes=target_meshes,
+        trimesh_module=trimesh_module,
+        numpy_module=numpy_module,
+    )
+
     scene = trimesh_module.Scene()
     added_geometry = False
 
     for tissue in selected_tissues:
-        baseline_mesh = _load_first_trimesh(baseline.mesh_paths[tissue], trimesh_module=trimesh_module)
-        target_mesh = _load_first_trimesh(target.mesh_paths[tissue], trimesh_module=trimesh_module)
+        baseline_mesh = baseline_meshes[tissue]
+        target_mesh = target_meshes[tissue]
         baseline_vertices = numpy_module.asarray(baseline_mesh.vertices, dtype=float)
         target_vertices = numpy_module.asarray(target_mesh.vertices, dtype=float)
         if len(baseline_vertices) == 0 or len(target_vertices) == 0:
@@ -677,6 +726,122 @@ def _build_nearest_distance_changed_region_before_after_glb(
         raise ValueError("No nearest-distance changed-region before/after mesh could be built.")
     return _export_scene_to_glb_bytes(scene)
 
+
+def _load_meshes_for_tissues(
+    artifact: EvolutionMriArtifacts,
+    selected_tissues: Sequence[str],
+    *,
+    trimesh_module: Any,
+) -> dict[str, Any]:
+    return {
+        tissue: _load_first_trimesh(artifact.mesh_paths[tissue], trimesh_module=trimesh_module)
+        for tissue in selected_tissues
+    }
+
+
+def _align_target_meshes_to_baseline(
+    *,
+    baseline_meshes: Mapping[str, Any],
+    target_meshes: Mapping[str, Any],
+    trimesh_module: Any,
+    numpy_module: Any,
+) -> Any:
+    """Rigidly align target meshes to the baseline meshes in-place using ICP."""
+    transform = _estimate_rigid_icp_transform(
+        fixed_meshes=baseline_meshes,
+        moving_meshes=target_meshes,
+        trimesh_module=trimesh_module,
+        numpy_module=numpy_module,
+    )
+    for mesh in target_meshes.values():
+        if len(_geometry_vertices(mesh, numpy_module=numpy_module)) > 0:
+            mesh.apply_transform(transform)
+    return transform
+
+
+def _estimate_rigid_icp_transform(
+    *,
+    fixed_meshes: Mapping[str, Any],
+    moving_meshes: Mapping[str, Any],
+    trimesh_module: Any,
+    numpy_module: Any,
+) -> Any:
+    """Estimate a rigid transform that maps the moving/target meshes to the fixed/baseline meshes."""
+    fixed_points = _downsample_alignment_points(
+        _stack_mesh_vertices(fixed_meshes.values(), numpy_module=numpy_module),
+        numpy_module=numpy_module,
+    )
+    moving_points = _downsample_alignment_points(
+        _stack_mesh_vertices(moving_meshes.values(), numpy_module=numpy_module),
+        numpy_module=numpy_module,
+    )
+    initial = _centroid_translation_transform(
+        moving_points=moving_points,
+        fixed_points=fixed_points,
+        numpy_module=numpy_module,
+    )
+
+    if len(fixed_points) < 3 or len(moving_points) < 3:
+        return initial
+
+    registration = getattr(trimesh_module, "registration", None)
+    icp_fn = getattr(registration, "icp", None)
+    if icp_fn is None:
+        return initial
+
+    try:
+        matrix, _transformed, _cost = icp_fn(
+            moving_points,
+            fixed_points,
+            initial=initial,
+            threshold=1e-5,
+            max_iterations=_ICP_ALIGNMENT_MAX_ITERATIONS,
+            scale=False,
+            reflection=False,
+        )
+    except Exception:
+        return initial
+
+    matrix = numpy_module.asarray(matrix, dtype=float)
+    if matrix.shape != (4, 4) or not bool(numpy_module.all(numpy_module.isfinite(matrix))):
+        return initial
+    return matrix
+
+
+def _stack_mesh_vertices(meshes: Iterable[Any], *, numpy_module: Any) -> Any:
+    chunks = []
+    for mesh in meshes:
+        vertices = _geometry_vertices(mesh, numpy_module=numpy_module)
+        if len(vertices) > 0:
+            chunks.append(vertices)
+    if not chunks:
+        return numpy_module.empty((0, 3), dtype=float)
+    return numpy_module.vstack(chunks)
+
+
+def _downsample_alignment_points(points: Any, *, numpy_module: Any) -> Any:
+    points_array = numpy_module.asarray(points, dtype=float)
+    if len(points_array) <= _ICP_ALIGNMENT_MAX_POINTS:
+        return points_array
+    indices = numpy_module.linspace(0, len(points_array) - 1, _ICP_ALIGNMENT_MAX_POINTS, dtype=int)
+    return points_array[indices]
+
+
+def _centroid_translation_transform(*, moving_points: Any, fixed_points: Any, numpy_module: Any) -> Any:
+    transform = numpy_module.eye(4, dtype=float)
+    if len(moving_points) == 0 or len(fixed_points) == 0:
+        return transform
+    transform[:3, 3] = numpy_module.mean(fixed_points, axis=0) - numpy_module.mean(moving_points, axis=0)
+    return transform
+
+
+def _smooth_pve_data_for_comparison(data: Any, *, gaussian_filter_fn: Any, numpy_module: Any) -> Any:
+    smoothed = gaussian_filter_fn(
+        numpy_module.asarray(data, dtype=numpy_module.float32),
+        sigma=_PVE_COMPARISON_SMOOTHING_SIGMA,
+        mode="nearest",
+    )
+    return numpy_module.clip(numpy_module.asarray(smoothed, dtype=numpy_module.float32), 0.0, 1.0)
 
 def _pve_data_to_mesh_or_none(
     *,

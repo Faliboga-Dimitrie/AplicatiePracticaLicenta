@@ -288,8 +288,8 @@ export function Comparison3DViewer({
     setOverlapping(isOverlapping)
     const nextOpacity = isOverlapping ? 0.5 : 1
     setLayerControls({
-      unchanged: { opacity: 1 },
-      changed: { opacity: nextOpacity },
+      unchanged: { opacity: nextOpacity },
+      changed: { opacity: 1 },
     })
   }
 
