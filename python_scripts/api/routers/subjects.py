@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ...access_control.models import MriCaseRecord
+
 from ...access_control import UserRecord, SubjectWithCases
 from ...access_control.utils import UNSET
 from ..dependencies import get_current_user, get_subject_service
@@ -71,7 +73,7 @@ def list_subject_cases(
     that subject only if the user has access.
     """
     result = subjects.list_cases_for_subject(current_user, subject_id)
-    cases = unwrap_result(
+    cases: list[MriCaseRecord] = unwrap_result(
         result,
         not_found_message="Subject not found or not authorized.",
     )

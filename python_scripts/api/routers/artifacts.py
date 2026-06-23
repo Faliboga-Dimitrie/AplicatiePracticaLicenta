@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
+from ...api.services import ArtifactFile, CaseArtifactBundle
+
 from ...access_control import UserRecord
 from ..dependencies import get_artifact_service, get_current_user, get_statistics_service
 from ..errors import unwrap_result
@@ -27,7 +29,7 @@ def list_case_artifacts(
     metrics. It does not expose local filesystem paths or intermediate files.
     """
     result = artifacts.list_for_case(current_user, case_id)
-    bundle = unwrap_result(
+    bundle: CaseArtifactBundle = unwrap_result(
         result,
         not_found_message="MRI case not found or not enough permissions to view artifacts.",
     )
@@ -42,10 +44,11 @@ def get_case_metrics(
 ):
     """Return parsed mesh-analysis metrics for one authorized MRI case."""
     result = statistics.metrics_for_case(current_user, case_id)
-    return unwrap_result(
+    metrics: dict = unwrap_result(
         result,
         not_found_message="Metrics not found for this MRI case.",
     )
+    return metrics
 
 
 @router.get("/{case_id}/artifacts/{artifact_name:path}")
@@ -63,7 +66,7 @@ def get_case_artifact(
     avoids path traversal and prevents exposing arbitrary local files.
     """
     result = artifacts.get_file_for_case(current_user, case_id, artifact_name)
-    artifact = unwrap_result(
+    artifact: ArtifactFile = unwrap_result(
         result,
         not_found_message="Artifact not found for this MRI case.",
     )

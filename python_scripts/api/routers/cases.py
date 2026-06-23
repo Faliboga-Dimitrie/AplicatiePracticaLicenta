@@ -7,6 +7,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
+from ...access_control.models import MriCaseRecord
+
 from ...access_control import UserRecord
 from ...access_control.utils import UNSET
 from ..dependencies import get_case_service, get_current_user
@@ -60,7 +62,7 @@ def create_case_with_upload(
             source_raw_path=temp_path,
         )
 
-    case = unwrap_result(
+    case: MriCaseRecord = unwrap_result(
         result,
         not_found_message="Subject not found or not enough permissions to create a case.",
     )
@@ -113,7 +115,7 @@ def register_case_mri_input(
     if not result.success and result.error == CASE_MRI_BUSY_MESSAGE:
         raise_api_error(409, result.error, code="CASE_PROCESSING_IN_PROGRESS")
 
-    case = unwrap_result(
+    case: MriCaseRecord = unwrap_result(
         result,
         not_found_message="MRI case not found or not enough permissions to register a scan.",
     )
@@ -133,7 +135,7 @@ def get_case(
 ):
     """Return one MRI case by database id, but only if the user can view it."""
     result = cases.get_for_user(current_user, case_id)
-    case = unwrap_result(
+    case: MriCaseRecord = unwrap_result(
         result,
         not_found_message="MRI case not found or not authorized.",
     )
@@ -158,7 +160,7 @@ def update_case(
         status=payload.get("status", UNSET),
     )
 
-    case = unwrap_result(
+    case: MriCaseRecord = unwrap_result(
         result,
         not_found_message="MRI case not found or not enough permissions to update it.",
     )
@@ -178,7 +180,7 @@ def delete_case(
     """Delete one MRI case by database id, including its filesystem workspace."""
     result = cases.delete_for_user(current_user, case_id)
 
-    deleted_case = unwrap_result(
+    deleted_case: MriCaseRecord = unwrap_result(
         result,
         not_found_message="MRI case not found or not enough permissions to delete it.",
     )

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Response
 
+from ...api.services import JobRecord
+
 from ...access_control import UserRecord
 from ..dependencies import (
     get_current_user,
@@ -27,7 +29,7 @@ def start_processing_job(
     if not result.success and result.error == processing.ACTIVE_JOB_MESSAGE:
         raise_api_error(409, result.error, code="ACTIVE_JOB_EXISTS")
 
-    job = unwrap_result(
+    job: JobRecord = unwrap_result(
         result,
         not_found_message="MRI case not found or not enough permissions to process it.",
     )
@@ -42,10 +44,11 @@ def list_evolution_dates(
 ):
     """Return dates and readiness flags for a subject time-comparison UI."""
     result = statistics.evolution_dates_for_subject(current_user, subject_id)
-    return unwrap_result(
+    evolution_dates: dict = unwrap_result(
         result,
         not_found_message="Subject not found or not authorized.",
     )
+    return evolution_dates
 
 
 @router.get("/subjects/{subject_id}/evolution")
