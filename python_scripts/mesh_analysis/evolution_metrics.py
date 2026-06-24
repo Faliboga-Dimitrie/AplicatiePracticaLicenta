@@ -106,8 +106,6 @@ def _build_statistics(points: Sequence[JsonDict]) -> JsonDict:
                 _append_optional_float(baseline_changes, tissue_payload.get("change_from_baseline_percent"))
                 _append_optional_float(previous_changes, tissue_payload.get("change_from_previous_percent"))
 
-            # The first baseline change is always 0.0. Excluding it makes the
-            # reported average describe actual follow-up change, not baseline identity.
             baseline_changes_without_first = baseline_changes[1:] if len(baseline_changes) > 1 else []
 
             group_stats[tissue] = {
@@ -125,7 +123,7 @@ def _require_mapping(payload: Mapping[str, object], key: str) -> Mapping[str, fl
     value = payload.get(key)
     if not isinstance(value, Mapping):
         raise ValueError(f"Metrics JSON is missing an object field named '{key}'.")
-    return value  # type: ignore[return-value]
+    return value
 
 
 def _safe_ratio_percent(value: float, reference: float) -> float | None:

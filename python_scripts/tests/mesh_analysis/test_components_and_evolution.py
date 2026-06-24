@@ -24,7 +24,7 @@ from python_scripts.mesh_analysis.evolution_in_time import (
     _normalize_tissues,
     _require_float,
     _require_mapping,
-    _resample_pve_data_to_template,
+    _resample_pve_data,
     _safe_change_percent,
     _safe_ratio_percent,
     _sample_volume_at_world_vertices,
@@ -393,7 +393,7 @@ def test_evolution_image_helpers_resample_sample_and_load(monkeypatch, tmp_path)
 
     # Act
     loaded_img, data = _load_pve_image(path, nib_module=nib_module, numpy_module=np)
-    resampled = _resample_pve_data_to_template(image, target=((1, 2, 2), np.eye(4)), resample_from_to_fn=lambda img, _target, **_kwargs: img, numpy_module=np)
+    resampled = _resample_pve_data(image, target=((1, 2, 2), np.eye(4)), resample_from_to_fn=lambda img, _target, **_kwargs: img, numpy_module=np)
     sampled = _sample_volume_at_world_vertices(
         np.arange(8, dtype=float).reshape((2, 2, 2)),
         affine=np.eye(4),

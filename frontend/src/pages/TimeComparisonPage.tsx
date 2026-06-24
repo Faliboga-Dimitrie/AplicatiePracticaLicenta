@@ -45,7 +45,7 @@ function ComparisonLineChart({ report, metricGroup, tissue, scale }: { report: E
   const max = Math.max(...values)
   const range = max - min || 1
   const width = 720
-  const height = 240
+  const height = 280
   const padding = 34
   const points = values.map((value, index) => {
     const x = padding + (index / Math.max(1, values.length - 1)) * (width - padding * 2)
@@ -63,7 +63,7 @@ function ComparisonLineChart({ report, metricGroup, tissue, scale }: { report: E
         {points.map((point) => (
           <g key={point.date}>
             <circle cx={point.x} cy={point.y} r="5" className="chart-dot" />
-            <text x={point.x} y={height - 10} textAnchor="middle" className="chart-label">{point.date.slice(5)}</text>
+            <text x={point.x} y={height - 10} textAnchor="middle" className="chart-label">{point.date}</text>
             <text x={point.x} y={point.y - 12} textAnchor="middle" className="chart-value">{formatNumber(point.value, 0)}</text>
           </g>
         ))}
@@ -487,7 +487,7 @@ export function TimeComparisonPage({ subjectId, onBack }: TimeComparisonPageProp
                 isLoading={isLoadingVisual}
                 error={visualError}
                 preserveChangedSourceColors={visualStyle === 'statistical_heatmap'}
-                defaultUnchangedColor={visualStyle === 'statistical_heatmap' ? '#ffd60a' : '#508cff'}
+                defaultUnchangedColor={visualStyle === 'statistical_heatmap' ? '#50ff7f' : '#508cff'}
               />
 
               <Comparison3DViewer

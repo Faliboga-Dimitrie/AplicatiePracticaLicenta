@@ -5,6 +5,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ..project_core import CaseWorkspace
+
 from .config import DatabaseConfig
 from .database import MySqlDatabase
 from .models import AuthSessionRecord, MriCaseRecord, SubjectRecord, SubjectSummaryRecord, SubjectWithCases, UserRecord
@@ -157,9 +159,6 @@ class AccessControlService:
         except Exception as exc:
             return DbResult.fail(str(exc))
         return self.users.update_password_hash(user_id, password_hash)
-
-    def delete_user(self, user_id: int) -> DbResult[bool]:
-        return self.users.delete(user_id)
 
     def delete_user_account(self, user_id: int) -> DbResult[dict[str, Any]]:
         """Delete a user account and cascade orphaned/unmaintained subjects.
@@ -336,18 +335,6 @@ class AccessControlService:
 
     def get_subject(self, subject_id: str) -> DbResult[SubjectRecord]:
         return self.subjects.get(subject_id)
-
-    def update_subject(
-        self,
-        subject_id: str,
-        *,
-        name: str | None | object = UNSET,
-        age: int | None | object = UNSET,
-        notes: str | None | object = UNSET,
-    ) -> DbResult[bool]:
-        if _invalid_subject_age(age):
-            return DbResult.fail("Subject age cannot be negative.")
-        return self.subjects.update(subject_id, name=name, age=age, notes=notes)
 
     def update_subject_for_user(
         self,
@@ -949,7 +936,7 @@ class AccessControlService:
         subject_id: str,
         acquisition_date: date,
         source_raw_path: Path | None,
-    ) -> Any:
+    ) -> CaseWorkspace:
         if self.workspace_gateway is None:
             raise RuntimeError("create_workspace=True requires a workspace_gateway.")
         return self.workspace_gateway.create_case_workspace(

@@ -164,34 +164,6 @@ class CaseService:
             refreshed_date,
         )
 
-    def update_by_subject_date_for_user(
-        self,
-        user: UserRecord,
-        subject_id: str,
-        acquisition_date: str | date,
-        *,
-        new_acquisition_date: str | date | object = UNSET,
-        notes: str | None | object = UNSET,
-        status: str | None | object = UNSET,
-    ) -> DbResult[MriCaseRecord]:
-        current = self.get_by_subject_date(
-            user,
-            subject_id,
-            acquisition_date,
-        )
-        if not current.success:
-            return DbResult.fail(current.error or "Could not load MRI case before update.")
-        if current.data is None:
-            return DbResult.ok(None)
-
-        return self.update_for_user(
-            user,
-            current.data.id,
-            new_acquisition_date=new_acquisition_date,
-            notes=notes,
-            status=status,
-        )
-
     def delete_for_user(
         self,
         user: UserRecord,
@@ -213,24 +185,6 @@ class CaseService:
             return DbResult.ok(None)
 
         return DbResult.ok(current.data)
-
-    def delete_by_subject_date_for_user(
-        self,
-        user: UserRecord,
-        subject_id: str,
-        acquisition_date: str | date,
-    ) -> DbResult[MriCaseRecord]:
-        current = self.get_by_subject_date(
-            user,
-            subject_id,
-            acquisition_date,
-        )
-        if not current.success:
-            return DbResult.fail(current.error or "Could not load MRI case before delete.")
-        if current.data is None:
-            return DbResult.ok(None)
-
-        return self.delete_for_user(user, current.data.id)
 
     def register_mri_input_for_user(
         self,

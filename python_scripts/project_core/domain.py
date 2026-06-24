@@ -65,38 +65,6 @@ def validate_acquisition_date(value: str) -> str:
     return normalized
 
 
-def _looks_like_acquisition_date(value: str) -> bool:
-    try:
-        validate_acquisition_date(value)
-        return True
-    except ValueError:
-        return False
-
-
-def _infer_subject_and_date_from_path(path: Path) -> tuple[str | None, str | None]:
-    """
-    Infer subject/date from the standardized input layout when possible.
-
-    Supported examples:
-        input_mri/<subject_id>/<YYYY-MM-DD>/<file>.nii.gz
-        input_mri/<subject_id>/<YYYY-MM-DD>/mri/<file>.nii.gz
-    """
-    parent = path.parent
-
-    # Optional inner folder, useful if the professor wants a literal mri/ folder.
-    if parent.name.lower() == "mri":
-        date_dir = parent.parent
-        subject_dir = date_dir.parent
-    else:
-        date_dir = parent
-        subject_dir = parent.parent
-
-    if not _looks_like_acquisition_date(date_dir.name):
-        return None, None
-
-    return subject_dir.name, validate_acquisition_date(date_dir.name)
-
-
 @dataclass(frozen=True)
 class MRICase:
     """

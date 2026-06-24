@@ -19,8 +19,7 @@ class GlbExportConfig:
     """
     Configuration for the current trimesh GLB exporter.
 
-    rotate_x_degrees is visual-only and matches the orientation correction you
-    were already applying before export.
+    rotate_x_degrees is visual-only;
     scale_factor is also export-only; keep it at 1.0 if you want metric values
     to remain directly comparable to the displayed mesh dimensions.
     """

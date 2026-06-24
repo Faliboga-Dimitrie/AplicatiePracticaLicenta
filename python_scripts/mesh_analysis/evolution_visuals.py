@@ -29,7 +29,7 @@ class _ComparisonColors:
 
 _HEATMAP_UNCHANGED_COLOR: tuple[int, int, int, int] = (255, 214, 10, 210)
 _PVE_COMPARISON_SMOOTHING_SIGMA = 0.5
-_ICP_ALIGNMENT_MAX_POINTS = 8000
+_ICP_ALIGNMENT_MAX_POINTS = 18000
 _ICP_ALIGNMENT_MAX_ITERATIONS = 50
 
 
@@ -209,7 +209,7 @@ def _build_pve_difference_visual_glb(
             numpy_module=numpy_module,
         )
         baseline_target = (baseline_img.shape[:3], baseline_img.affine)
-        target_data = _resample_pve_data_to_template(
+        target_data = _resample_pve_data(
             target_img,
             target=baseline_target,
             resample_from_to_fn=resample_from_to_fn,
@@ -273,6 +273,7 @@ def _build_pve_difference_visual_glb(
             changed_mask = numpy_module.abs(vertex_normalized) > 0.0
         else:
             changed_mask = vertex_diff >= pve_threshold
+            
         unchanged_mesh, changed_mesh = _split_mesh_by_vertex_mask(
             reference_mesh,
             changed_vertex_mask=changed_mask,
@@ -558,7 +559,7 @@ def _build_pve_changed_region_before_after_glb(
             numpy_module=numpy_module,
         )
         baseline_target = (baseline_img.shape[:3], baseline_img.affine)
-        target_data = _resample_pve_data_to_template(
+        target_data = _resample_pve_data(
             target_img,
             target=baseline_target,
             resample_from_to_fn=resample_from_to_fn,
@@ -781,9 +782,6 @@ def _estimate_rigid_icp_transform(
         numpy_module=numpy_module,
     )
 
-    if len(fixed_points) < 3 or len(moving_points) < 3:
-        return initial
-
     registration = getattr(trimesh_module, "registration", None)
     icp_fn = getattr(registration, "icp", None)
     if icp_fn is None:
@@ -794,7 +792,7 @@ def _estimate_rigid_icp_transform(
             moving_points,
             fixed_points,
             initial=initial,
-            threshold=1e-5,
+            threshold=1e-3,
             max_iterations=_ICP_ALIGNMENT_MAX_ITERATIONS,
             scale=False,
             reflection=False,
@@ -1169,7 +1167,7 @@ def _load_resampling_template(
     return template_img
 
 
-def _resample_pve_data_to_template(
+def _resample_pve_data(
     img: Any,
     *,
     target: tuple[tuple[int, int, int], Any],
@@ -1314,7 +1312,7 @@ def _hex_to_rgba(color: str, *, default_alpha: int) -> tuple[int, int, int, int]
     if len(value) != 8:
         raise ValueError(f"Invalid color '{color}'. Expected #RRGGBB or #RRGGBBAA.")
     try:
-        return tuple(int(value[i:i + 2], 16) for i in range(0, 8, 2))  # type: ignore[return-value]
+        return tuple(int(value[i:i + 2], 16) for i in range(0, 8, 2))
     except ValueError as exc:
         raise ValueError(f"Invalid color '{color}'. Expected hexadecimal components.") from exc
 
@@ -1334,10 +1332,7 @@ def _apply_rgba(
         )
         geometry.visual = trimesh_module.visual.TextureVisuals(material=material)
         return
-
-    # Some loaded GLB variants expose an entities/colors collection. If that is
-    # unavailable, leaving the geometry untouched is safer than failing the whole
-    # visual comparison.
+    
     if hasattr(geometry, "entities") and hasattr(geometry, "colors"):
         color = numpy_module.array(rgba, dtype=numpy_module.uint8)
         geometry.colors = numpy_module.tile(color, (len(geometry.entities), 1))
@@ -1353,7 +1348,7 @@ __all__ = [
     "_load_first_trimesh",
     "_load_pve_image",
     "_load_resampling_template",
-    "_resample_pve_data_to_template",
+    "_resample_pve_data",
     "_sample_volume_at_world_vertices",
     "_split_mesh_by_vertex_mask",
     "_combined_geometry_center",

@@ -41,25 +41,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=normalize_error_detail(exc.detail, status_code=exc.status_code),
-            headers=exc.headers,
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        return JSONResponse(
-            status_code=422,
-            content=error_payload(
-                "Request validation failed.",
-                code="VALIDATION_ERROR",
-                details=exc.errors(),
-            ),
-        )
-
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(subjects.router, prefix="/subjects", tags=["subjects"])

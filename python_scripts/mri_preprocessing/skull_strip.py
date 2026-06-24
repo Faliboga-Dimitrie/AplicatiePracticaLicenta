@@ -10,7 +10,8 @@ import nibabel as nib
 from ..project_core.config import Settings
 from ..project_core.ports import SkullStripResult
 from ..project_core.workspace import CaseWorkspace
-
+from .input_checks import OrientationStatus, check_input_orientation
+from ..project_core import MRICase
 
 class HdBetSkullStripBackend:
     """
@@ -43,7 +44,7 @@ class HdBetSkullStripBackend:
         if existing is not None:
             return existing
 
-        self._validate_input(input_path)
+        self._validate_input(input_path, workspace)
 
         proc = subprocess.run(
             cmd,
@@ -120,6 +121,31 @@ class HdBetSkullStripBackend:
 
     def _supports_flag(self, exe: str, flag: str) -> bool:
         return flag in self._get_help_text(exe)
+    
+    def _cuda_available(self) -> bool:
+        try:
+            import torch
+        except Exception:
+            return False
+
+        try:
+            return bool(torch.cuda.is_available())
+        except Exception:
+            return False
+
+
+    def _resolve_hd_bet_device(self) -> str:
+        device = self.settings.hd_bet_device.strip().lower()
+
+        if device not in {"cuda", "cpu", "mps"}:
+            raise ValueError(
+                f"Unsupported HD-BET device '{device}'. Expected one of: cuda, cpu, mps."
+            )
+
+        if device == "cuda" and not self._cuda_available():
+            return "cpu"
+
+        return device
 
     def _build_command(
         self,
@@ -128,11 +154,7 @@ class HdBetSkullStripBackend:
         input_path: Path,
         output_path: Path,
     ) -> list[str]:
-        device = self.settings.hd_bet_device.strip().lower()
-        if device not in {"cuda", "cpu", "mps"}:
-            raise ValueError(
-                f"Unsupported HD-BET device '{device}'. Expected one of: cuda, cpu, mps."
-            )
+        device = self._resolve_hd_bet_device()
 
         cmd = [
             exe,
@@ -151,7 +173,7 @@ class HdBetSkullStripBackend:
 
         return cmd
 
-    def _validate_input(self, input_path: Path) -> None:
+    def _validate_input(self, input_path: Path, workspace: CaseWorkspace) -> None:
         if not input_path.exists():
             raise FileNotFoundError(f"HD-BET input does not exist: {input_path}")
 
@@ -159,6 +181,20 @@ class HdBetSkullStripBackend:
         if img.ndim != 3:
             raise ValueError(
                 f"HD-BET expects a 3D NIfTI image, but got ndim={img.ndim} for {input_path}"
+            )
+        
+        temp_case = MRICase(
+            subject_id=workspace.subject_id,
+            acquisition_date=workspace.acquisition_date,
+            raw_path=input_path,
+        )
+        orientation = check_input_orientation(temp_case, self.settings)
+
+        if orientation.status != OrientationStatus.ALREADY_STANDARD:
+            raise RuntimeError(
+                "HD-BET input is expected to already be in the chosen standard "
+                "orientation, but the check returned "
+                f"{orientation.status.name}: {orientation.message}"
             )
 
     def _handle_existing_outputs(

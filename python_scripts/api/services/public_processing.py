@@ -120,33 +120,6 @@ class PublicProcessingService:
         with self._lock:
             return self._outputs.get(job_id)
 
-    def process_upload_to_zip(self, file_obj: BinaryIO, filename: str | None) -> tuple[bytes, str]:
-        """
-        Synchronous compatibility path for the older /public/process endpoint.
-
-        The frontend now uses /public/process-jobs for real progress, but this
-        method is kept for direct API usage and older tests.
-        """
-        safe_filename = safe_nifti_upload_filename(filename, default="anonymous_mri.nii.gz")
-
-        with tempfile.TemporaryDirectory(prefix="mri_public_") as tmp:
-            root = Path(tmp)
-            incoming_dir = root / "incoming"
-            incoming_dir.mkdir(parents=True, exist_ok=True)
-            upload_path = incoming_dir / safe_filename
-
-            with upload_path.open("wb") as target:
-                shutil.copyfileobj(file_obj, target)
-
-            zip_bytes = self._process_staged_upload(
-                root=root,
-                upload_path=upload_path,
-                safe_filename=safe_filename,
-                progress_callback=None,
-            )
-            subject_id = self._subject_id_from_filename(safe_filename)
-            return zip_bytes, f"{subject_id}_brain_mri_outputs.zip"
-
     def _run_public_job(
         self,
         job_id: str,
@@ -298,7 +271,7 @@ class PublicProcessingService:
         with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("metrics.json", json.dumps(payload, indent=2))
 
-            for tissue, path in workspace.mesh_paths.items():
+            for _tissue, path in workspace.mesh_paths.items():
                 self._write_existing_file(archive, path, f"meshes/{path.name}")
 
         return buffer.getvalue()

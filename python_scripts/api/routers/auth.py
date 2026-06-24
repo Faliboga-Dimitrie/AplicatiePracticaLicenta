@@ -41,7 +41,7 @@ def _set_refresh_cookie(response: Response, auth: AuthService, refresh_token: st
         max_age=auth.token_service.refresh_token_max_age_seconds,
         httponly=True,
         secure=REFRESH_TOKEN_COOKIE_SECURE,
-        samesite=REFRESH_TOKEN_COOKIE_SAMESITE,  # type: ignore[arg-type]
+        samesite=REFRESH_TOKEN_COOKIE_SAMESITE,  
         path=REFRESH_TOKEN_COOKIE_PATH,
     )
 
@@ -50,7 +50,7 @@ def _clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(
         key=REFRESH_TOKEN_COOKIE,
         path=REFRESH_TOKEN_COOKIE_PATH,
-        samesite=REFRESH_TOKEN_COOKIE_SAMESITE,  # type: ignore[arg-type]
+        samesite=REFRESH_TOKEN_COOKIE_SAMESITE,  
     )
 
 

@@ -343,6 +343,10 @@ class CaseWorkspace:
     @property
     def has_fast_pve_outputs(self) -> bool:
         return all(path.exists() for path in self.fast_pve_paths.values())
+    
+    @property
+    def partial_fast_pve_outputs(self) -> list[Path]:
+        return [path for path in self.fast_pve_paths.values() if path.exists()]
 
     @property
     def missing_fast_pve_paths(self) -> list[Path]:

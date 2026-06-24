@@ -145,8 +145,6 @@ class ArtifactService:
             used_names.add(artifact.ref.name)
             artifacts.append(artifact)
 
-        # Stable public names for the outputs produced by the current pipeline.
-        # The actual filesystem filenames still include the subject id.
         for tissue, path in workspace.mesh_paths.items():
             add_if_present(
                 name=f"{tissue}_mesh.glb",
@@ -160,23 +158,6 @@ class ArtifactService:
             kind=ArtifactKind.METRICS,
             path=workspace.metrics_json_path,
         )
-
-        # Backward-compatible discovery for cases created by older versions or
-        # manually copied into the workspace. Anything downloadable must still be
-        # final user-facing output: .glb or .json from the mesh/results folder.
-        if workspace.mesh_dir.exists() and workspace.mesh_dir.is_dir():
-            for path in sorted(workspace.mesh_dir.iterdir(), key=lambda item: item.name.lower()):
-                if not path.is_file():
-                    continue
-                kind = self._artifact_kind_for_path(path)
-                if kind is None:
-                    continue
-                add_if_present(
-                    name=path.name,
-                    kind=kind,
-                    path=path,
-                    metadata=self._artifact_metadata_from_filename(path),
-                )
 
         return CaseArtifactBundle(
             case_db_id=case.id,

@@ -84,39 +84,3 @@ def download_public_processing_result(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
-
-
-@router.post("/process", response_class=Response)
-async def process_public_mri(
-    file: UploadFile = File(...),
-    public_processing: PublicProcessingService = Depends(get_public_processing_service),
-):
-    """
-    Anonymous, volatile MRI processing endpoint kept for backwards compatibility.
-
-    New frontend code uses /public/process-jobs so progress can be shown from
-    backend state instead of being estimated in the browser.
-    """
-    try:
-        await file.seek(0)
-        zip_bytes, filename = await run_in_threadpool(
-            public_processing.process_upload_to_zip,
-            file.file,
-            file.filename,
-        )
-    except ValueError as exc:
-        raise_api_error(status.HTTP_400_BAD_REQUEST, str(exc), code="INVALID_UPLOAD")
-    except Exception as exc:
-        raise_api_error(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            str(exc),
-            code="PUBLIC_PROCESSING_FAILED",
-        )
-
-    return Response(
-        content=zip_bytes,
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-        },
-    )
